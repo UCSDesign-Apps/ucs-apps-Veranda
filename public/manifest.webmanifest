@@ -1,0 +1,18 @@
+{
+  "name": "UCS Design Group — App Platform",
+  "short_name": "UCS Platform",
+  "description": "UCS Design Group PWA platform hosting TotaLuxe and other app modules.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef0f1",
+  "theme_color": "#3c4650",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

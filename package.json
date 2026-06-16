@@ -1,0 +1,16 @@
+{
+  "name": "ucs-platform",
+  "version": "1.0.0",
+  "description": "UCS Design Group PWA platform",
+  "main": "server.js",
+  "engines": { "node": ">=18.0.0" },
+  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "connect-pg-simple": "^9.0.1",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "helmet": "^7.1.0",
+    "pg": "^8.11.3"
+  }
+}

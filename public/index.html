@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#3c4650" />
+  <title>UCS Design Group — App Platform</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <style>
+    :root{
+      --brand:#3c4650; --brand-d:#2b323a; --gold:#c2a14e;
+      --cream:#efe0ca; --ink:#2b323a; --muted:#737d85; --line:#e3e6e9; --bg:#eef0f1;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
+    header{background:linear-gradient(135deg,var(--brand),var(--brand-d));color:#fff;
+      padding:48px 24px;border-bottom:3px solid var(--gold);}
+    header h1{margin:0;font-size:30px;letter-spacing:-.5px;}
+    header p{margin:8px 0 0;opacity:.85;font-size:15px;}
+    main{max-width:840px;margin:0 auto;padding:32px 24px;}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 14px;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;}
+    a.card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--line);
+      border-radius:14px;padding:22px;transition:box-shadow .15s,transform .15s;}
+    a.card:hover{box-shadow:0 10px 30px rgba(0,0,0,.10);transform:translateY(-2px);}
+    a.card .name{font-size:18px;font-weight:600;color:var(--brand-d);}
+    a.card .desc{font-size:13px;color:var(--muted);margin-top:6px;}
+    a.card .go{margin-top:14px;font-size:13px;font-weight:600;color:var(--gold);}
+    footer{max-width:840px;margin:0 auto;padding:24px;color:var(--muted);font-size:12px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>UCS Design Group</h1>
+    <p>Application platform</p>
+  </header>
+  <main>
+    <h2>App modules</h2>
+    <div class="grid">
+      <a class="card" href="/totaluxe/">
+        <div class="name">TotaLuxe</div>
+        <div class="desc">Veranda Sales Suite — quotes, configurator, pricing &amp; fitting.</div>
+        <div class="go">Open module →</div>
+      </a>
+    </div>
+  </main>
+  <footer>
+    UCS platform · <a href="/health">/health</a>
+  </footer>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/service-worker.js').catch(function (e) {
+          console.warn('SW registration failed:', e);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
