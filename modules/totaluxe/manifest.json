@@ -1,0 +1,24 @@
+{
+  "name": "TotaLuxe Sales Suite",
+  "short_name": "TotaLuxe",
+  "description": "Veranda configurator, quoting & contract tool — Total Home Improvements (NI)",
+  "start_url": "/totaluxe/",
+  "scope": "/totaluxe/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#3c4650",
+  "background_color": "#eef0f1",
+  "lang": "en-GB",
+  "icons": [
+    { "src": "/totaluxe/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/totaluxe/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Quote",
+      "short_name": "New",
+      "url": "/totaluxe/?action=new",
+      "icons": [{ "src": "/totaluxe/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
