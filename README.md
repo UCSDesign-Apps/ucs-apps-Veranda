@@ -55,15 +55,25 @@ With `DATABASE_URL` set, sessions are stored in Postgres via `connect-pg-simple`
 Build: NIXPACKS. Start: `node server.js`. Health check: `/health`.
 Attach a PostgreSQL database so `DATABASE_URL` is injected automatically.
 
-- **Project:** `ucs-apps-veranda`
-- **App service:** `totaluxe-api`
+- **Railway account / workspace:** `ucsdesign.apps@gmail.com` — "ucsdesign-apps's Projects"
+- **Project:** `VerandaApp`
+- **App service:** `TotaLuxe-api` (GitHub source: `UCSDesign-Apps/ucs-apps-Veranda`, branch `main`)
 - **Database service:** `Postgres`
-- **Live URL:** https://ucs-app-production-4a21.up.railway.app
+- **Live URL:** https://totaluxe-api-production.up.railway.app
 
-Deploy the current directory from the Railway CLI:
+### Deploying
+
+The `TotaLuxe-api` service is connected to this GitHub repo, so **deployment is
+automatic**: push to `main` and Railway builds + deploys.
 
 ```bash
-railway up --service totaluxe-api --ci
+git push origin main   # -> Railway auto-deploys
+```
+
+Manual CLI deploys are still possible (e.g. for testing an uncommitted build):
+
+```bash
+railway up --service TotaLuxe-api --ci
 ```
 
 The service name lives in Railway, not in `railway.json` (the schema has no

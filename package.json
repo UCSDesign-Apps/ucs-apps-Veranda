@@ -1,6 +1,6 @@
 {
   "name": "ucs-platform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "UCS Design Group PWA platform",
   "main": "server.js",
   "engines": { "node": ">=18.0.0" },
