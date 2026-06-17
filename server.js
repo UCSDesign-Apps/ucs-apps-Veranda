@@ -15,6 +15,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const session = require('express-session');
 const { Pool } = require('pg');
+const apiRouter = require('./routes/api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +41,11 @@ if (process.env.DATABASE_URL) {
     max: 5,
   });
   pool.on('error', (err) => console.error('[pg] idle client error:', err.message));
+  // Create the quotes table on startup (best-effort; logged on failure).
+  apiRouter
+    .ensureSchema(pool)
+    .then(() => console.log('[startup] quotes table ready'))
+    .catch((err) => console.error('[startup] quotes schema init failed:', err.message));
 } else {
   console.warn('[startup] DATABASE_URL not set — running without Postgres (sessions will use in-memory store).');
 }
@@ -90,6 +96,12 @@ if (!process.env.SESSION_SECRET) {
 }
 
 app.use(session(sessionConfig));
+
+// ---------------------------------------------------------------------------
+// API routes (server-side auth + shared quote storage). JSON body parsing is
+// scoped inside this router so it doesn't affect the static module/asset routes.
+// ---------------------------------------------------------------------------
+app.use('/api', apiRouter(pool));
 
 // ---------------------------------------------------------------------------
 // Health check (used by Railway)

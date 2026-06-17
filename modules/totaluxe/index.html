@@ -1242,6 +1242,7 @@ async function doLogin(){
   const pin=val('loginPin');
   const errEl=document.getElementById('loginErr');
   errEl.textContent='Checking…';
+  let u; /* function-scoped so it's available after the try/catch */
   try{
     /* Try server-side auth first */
     const r=await fetch('/api/auth/login',{
@@ -1251,19 +1252,18 @@ async function doLogin(){
     });
     if(r.ok){
       const d=await r.json();
-      currentUser=d.user;errEl.textContent='';
+      u=d.user; /* assign from server response */
     } else {
       /* Fallback: local PIN check (works offline / file://) */
-      const u=admin.users.find(x=>String(x.pin)===pin);
-      if(!u){errEl.textContent='Incorrect PIN';return;}
-      currentUser=u;errEl.textContent='';
+      u=admin.users.find(x=>String(x.pin)===pin);
     }
   }catch(e){
     /* Offline fallback */
-    const u=admin.users.find(x=>String(x.pin)===pin);
-    if(!u){errEl.textContent='Incorrect PIN';return;}
-    currentUser=u;errEl.textContent='';
+    u=admin.users.find(x=>String(x.pin)===pin);
   }
+  if(!u){errEl.textContent='Incorrect PIN';return;}
+  errEl.textContent='';
+  currentUser=u;
   /* set role class on body for CSS admin-only visibility */
   document.body.classList.remove('role-admin','role-sales','role-surveyor');
   document.body.classList.add('role-'+u.role);
