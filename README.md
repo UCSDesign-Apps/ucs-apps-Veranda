@@ -55,6 +55,21 @@ With `DATABASE_URL` set, sessions are stored in Postgres via `connect-pg-simple`
 Build: NIXPACKS. Start: `node server.js`. Health check: `/health`.
 Attach a PostgreSQL database so `DATABASE_URL` is injected automatically.
 
+- **Project:** `ucs-apps-veranda`
+- **App service:** `totaluxe-api`
+- **Database service:** `Postgres`
+- **Live URL:** https://ucs-app-production-4a21.up.railway.app
+
+Deploy the current directory from the Railway CLI:
+
+```bash
+railway up --service totaluxe-api --ci
+```
+
+The service name lives in Railway, not in `railway.json` (the schema has no
+service-name field — `railway.json` only configures build/deploy behaviour for
+whichever service is targeted).
+
 ## Security note
 
 Content-Security-Policy is currently **disabled** in `server.js` because the
