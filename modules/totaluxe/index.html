@@ -2590,17 +2590,31 @@ function scheduleAutoSave(){
 }
 function saveQuote(silent){
   syncFromForm();
-  const qs=getQuotes();
-  state.savedAt=new Date().toISOString();
-  state.savedBy=currentUser?currentUser.name:'';
-  if(!state.id){state.id='Q'+Date.now();_quotesCache.unshift(state);idbPut(state).catch(e=>console.warn('idb put',e));}
-  else{const ix=_quotesCache.findIndex(q=>q.id===state.id);if(ix>=0)_quotesCache[ix]=state;else _quotesCache.unshift(state);idbPut(state).catch(e=>console.warn('idb put',e));}
-  /* update indicator */
-  const ind=document.getElementById('autoSaveIndicator');
-  const ts=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  if(ind)ind.textContent='Saved '+ts;
-  if(!silent)toast('Quote saved');
-  renderQuotes();updateTop();
+  state.savedAt = new Date().toISOString();
+  state.savedBy = currentUser ? currentUser.name : '';
+  if(!state.id){
+    state.id = 'Q' + Date.now();
+    _quotesCache.unshift(state);
+  } else {
+    const ix = _quotesCache.findIndex(q => q.id === state.id);
+    if(ix >= 0) _quotesCache[ix] = state;
+    else _quotesCache.unshift(state);
+  }
+  /* Persist — API first, IndexedDB fallback */
+  fetch('/api/quotes', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(state)
+  }).then(r => { if(!r.ok) throw new Error(r.status); })
+    .catch(() => idbPut(clone(state)).catch(e => console.warn('idb fallback:', e)));
+  if(!silent){
+    renderQuotes();
+    toast('Quote saved');
+    updateTop();
+  }
+  const ind = document.getElementById('autoSaveIndicator');
+  if(ind) ind.textContent = 'Saved';
 }
 function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
   state=Object.assign(blankState(),clone(q));
