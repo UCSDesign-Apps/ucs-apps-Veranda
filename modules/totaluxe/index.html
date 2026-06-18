@@ -2468,7 +2468,10 @@ async function sendSurveyToCustomer(){
       body:JSON.stringify({
         envelope_title:`${c.cname||'Customer'} — Survey Document`,
         envelope_all_at_once_enabled:true,
-        envelope_parties:[{party_name:c.cname||'Customer',party_email:custEmail,party_role:'signer'}],
+        envelope_parties:[
+          {party_name:'TotaLuxe Contracts',party_email:'contracts@totalhomeni.co.uk',party_role:'cc'},
+          {party_name:c.cname||'Customer',party_email:custEmail,party_role:'signer'}
+        ],
         envelope_documents:[{
           document_title:`Survey — ${c.cname||'Customer'}`,
           document_file_name:`TotaLuxe-Survey-${(c.cname||'customer').replace(/\s+/g,'-')}.pdf`,
