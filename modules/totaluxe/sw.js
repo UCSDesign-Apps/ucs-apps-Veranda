@@ -1,4 +1,4 @@
-const CACHE = 'totaluxe-v1';
+const CACHE = 'totaluxe-v2';
 const SHELL = [
   '/totaluxe/',
   '/totaluxe/index.html',
