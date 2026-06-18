@@ -1302,6 +1302,8 @@ async function doLogin(){
   if(!u){errEl.textContent='Incorrect PIN';return;}
   errEl.textContent='';
   currentUser=u;
+  /* merge any admin-saved config from the server before rendering the UI */
+  await loadAdminFromServer();
   /* set role class on body for CSS admin-only visibility */
   document.body.classList.remove('role-admin','role-sales','role-surveyor');
   document.body.classList.add('role-'+u.role);
@@ -1315,8 +1317,6 @@ async function doLogin(){
   document.getElementById('topWho').textContent=u.name+' · '+u.role;
   applyPerms();
   if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; fillForm(); }
-  /* merge any admin-saved config from the server before showing the first view */
-  await loadAdminFromServer();
   showView(u.sections[0]||'quotes');
 }
 function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{});document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');}
