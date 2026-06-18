@@ -656,13 +656,14 @@ body.print-internal .internal-notes-only{display:block !important;}
           <button data-doc="survey" onclick="setDoc('survey')">Survey</button>
           <button data-doc="picking" onclick="setDoc('picking')">Picking List</button>
           <div style="flex:1"></div>
-          <button class="btn sm" id="quoteSendCustomerBtn" onclick="sendQuoteToCustomer()" style="display:none;background:#e0f0ff;color:#1155aa;border-color:#a0c8f0">📤 Send Quote</button>
+          <button class="btn sm" id="quoteSentBtn" onclick="setStatus('Quote Sent')" style="display:none">📤 Mark Quote Sent</button>
+          <button class="btn sm" id="contractSentBtn" onclick="setStatus('Contract Sent')" style="display:none">📤 Mark Contract Sent</button>
           <button class="btn sm" id="surveyCompletedBtn" onclick="completeSurvey()" style="display:none;background:#ede0ff;color:#6200aa;border-color:#c9a0f0">✓ Survey Completed</button>
-          <button class="btn sm" id="sendToCustomerBtn" onclick="sendSurveyToCustomer()" style="display:none;background:#e0f4ee;color:#1a6b3a;border-color:#a0d9bf">📤 Send to Customer</button>
-          <button class="btn sm" id="contractSentBtn" onclick="setStatus('Contract Sent')" style="display:none">📤 Contract Sent</button>
+          <button class="btn sm" id="sendToCustomerBtn" onclick="sendSurveyToCustomer()" style="display:none;background:#e0f4ee;color:#1a6b3a;border-color:#a0d9bf">📤 Send Survey</button>
+          <button class="btn sm" id="quoteSendCustomerBtn" onclick="sendQuoteToCustomer()" style="display:none;background:#e0f0ff;color:#1155aa;border-color:#a0c8f0">📤 Send Quote</button>
           <button class="btn sm" id="checkSignableBtn" onclick="checkSignableNow()" style="display:none;background:#f0f7ff;color:#1155aa;border-color:#b0cef0" title="Poll Signable now to check if all parties have signed">🔄 Check Signable</button>
-          <button class="btn primary sm" onclick="window.print()">⬇ Save / Print PDF</button>
-          <button class="btn ok sm" id="signableBtn" onclick="sendSignable()">📧 Send to Signable</button>
+          <button class="btn primary sm" onclick="window.print()">⬇ Print / PDF</button>
+          <button class="btn ok sm" id="signableBtn" onclick="sendSignable()">📧 Send Contract</button>
         </div>
         <div class="docwrap" id="docwrap"></div>
       </section>
