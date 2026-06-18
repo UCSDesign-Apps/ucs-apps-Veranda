@@ -1259,7 +1259,12 @@ async function loadAdminFromServer(){
     if(!r.ok)return; /* not authed, no DB, or no server config yet */
     const d=await r.json();
     if(d&&d.config){
-      Object.assign(admin,d.config);
+      const serverConfig=d.config;
+      /* NEVER overwrite the local users list with an empty/missing one —
+         doing so leaves the login dropdown blank and greyed out. Keep the
+         seeded USERS_SEED list when the server has no users of its own. */
+      if(!serverConfig.users||!serverConfig.users.length)delete serverConfig.users;
+      Object.assign(admin,serverConfig);
       /* keep derived pricing constants in sync with the merged matrix */
       if(admin.priceMatrix&&admin.priceMatrix._uplifts){
         ROOF_UPLIFT.ultra=admin.priceMatrix._uplifts.ultraClear||ROOF_UPLIFT.ultra;
