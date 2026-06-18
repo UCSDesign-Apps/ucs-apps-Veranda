@@ -52,6 +52,19 @@ async function ensureSchema(pool) {
     );
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS quotes_module_status_idx ON quotes (module, status);');
+
+  // Shared admin/config store — one row per module. Holds the admin object
+  // (company details, pricing matrix, image map, logos) so a change made by an
+  // admin is live for every user on their next login instead of requiring a
+  // re-downloaded HTML file.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_config (
+      module     text        PRIMARY KEY,
+      config     jsonb       NOT NULL,
+      updated_by text,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
 }
 
 function apiRouter(pool) {
@@ -70,6 +83,13 @@ function apiRouter(pool) {
 
   function requireDb(req, res, next) {
     if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    next();
+  }
+
+  function requireAdmin(req, res, next) {
+    if (!req.session || !req.session.user || req.session.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
     next();
   }
 
@@ -144,6 +164,40 @@ function apiRouter(pool) {
     try {
       const { module } = req.session.user;
       await pool.query('DELETE FROM quotes WHERE module = $1 AND id = $2', [module, req.params.id]);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---- Admin config (shared across all users in the module) ----
+  // Any authenticated user reads the live config on login; only admins write it.
+  router.get('/admin/config', requireAuth, requireDb, async (req, res, next) => {
+    try {
+      const { module } = req.session.user;
+      const result = await pool.query('SELECT config FROM admin_config WHERE module = $1', [module]);
+      res.json({ config: result.rows[0] ? result.rows[0].config : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/admin/config', requireAuth, requireAdmin, requireDb, async (req, res, next) => {
+    try {
+      const { module, name } = req.session.user;
+      const config = req.body;
+      if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        return res.status(400).json({ error: 'Config object required' });
+      }
+      await pool.query(
+        `INSERT INTO admin_config (module, config, updated_by, updated_at)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (module) DO UPDATE
+           SET config = EXCLUDED.config,
+               updated_by = EXCLUDED.updated_by,
+               updated_at = now()`,
+        [module, config, name]
+      );
       res.json({ ok: true });
     } catch (err) {
       next(err);

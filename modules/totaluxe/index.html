@@ -49,6 +49,8 @@ button{font-family:inherit;} .muted{color:var(--muted);} .hidden{display:none !i
 .topnav .brand-text small{display:block;font-size:9px;font-weight:500;opacity:.75;letter-spacing:1.2px;margin-top:1px;}
 /* nav tabs — row 1 */
 .nav{display:flex;flex-direction:row;align-items:stretch;gap:0;flex:1;overflow-x:auto;scrollbar-width:none;}
+.nav button{flex:1;min-width:0;justify-content:center;}
+@media(max-width:640px){.nav button .ic{display:block;font-size:18px;}.nav button{font-size:10px;padding:4px 2px;flex-direction:column;gap:1px;}}
 .nav::-webkit-scrollbar{display:none;}
 .nav button{display:flex;align-items:center;gap:7px;border:0;background:transparent;color:rgba(255,255,255,.8);padding:0 14px;height:68px;cursor:pointer;font-size:13.5px;text-align:center;font-weight:500;white-space:nowrap;border-bottom:3px solid transparent;transition:background .15s,color .15s;flex-shrink:0;}
 .nav button .ic{font-size:15px;opacity:.9;}
@@ -221,6 +223,7 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .badge{display:inline-block;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;}
 .badge.draft{background:#eef1f2;color:#788;} .badge.signed{background:#e3f6ee;color:#197a5b;}
 .badge.pending{background:#fff4e0;color:#9a6200;} .badge.sent{background:#e0f0ff;color:#1155aa;}
+.badge.survey{background:#ede0ff;color:#6200aa;}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:600;} .toast.show{opacity:1;}
 .view{display:none;} .view.active{display:block;}
 .qrow{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--line);border-radius:11px;margin-bottom:10px;background:#fff;cursor:pointer;}
@@ -302,13 +305,19 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .sigcard .nm{font-weight:700;padding-top:5px;text-align:center;}
 .terms{font-size:9px;line-height:1.55;column-count:1;color:#3a4448;} .terms h4{margin:11px 0 3px;font-size:10.5px;color:var(--brand-d);} .terms p{margin:0 0 5px;}
 .accr{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin:6px 0;}
-.imgph{position:relative;display:flex;align-items:center;justify-content:center;text-align:center;background:#f6f8f9;border:1.5px dashed #c3ced0;border-radius:10px;color:#9aa6aa;font-size:9.5px;cursor:pointer;overflow:hidden;}
+.imgph.no-click{cursor:default;pointer-events:none;background:#f9fafb;border-style:solid;border-color:#e0e5e7;}
+.imgph.no-click span{display:none;}text-align:center;background:#f6f8f9;border:1.5px dashed #c3ced0;border-radius:10px;color:#9aa6aa;font-size:9.5px;cursor:pointer;overflow:hidden;}
 .imgph span{padding:4px;pointer-events:none;} .imgph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;} .imgph input[type=file]{display:none;}
 .notebox{background:#fff8e8;border:1px solid #ecdca0;border-radius:9px;padding:9px 12px;font-size:10px;color:#6a5712;margin-top:6px;}
 .surveynote{background:#eafaf0;border:1px solid #9bd6b0;border-radius:9px;padding:9px 12px;font-size:10.5px;color:#1c6b46;margin:10px 0;}
 .tickwrap{} body.dm-quote .tickwrap{display:none;} body.dm-contract .tickwrap{display:none;} body.dm-quote .signblock{display:none;} body.dm-quote .contract-only{display:none;}
 .quote-only{display:none;} body.dm-quote .quote-only{display:block;}
-.survey-only{display:none;} body.dm-survey .survey-only{display:flex;}
+/* Internal notes sheet — visible on screen in survey mode, NEVER printed normally */
+.internal-notes-only{display:none;}
+body.dm-survey .internal-notes-only{display:block;}
+@media print{ .internal-notes-only{display:none !important;} }
+/* Only shown when explicitly printing for internal use */
+body.print-internal .internal-notes-only{display:block !important;}
 .picking-only{display:none;} body.dm-picking .sheet:not(.picking-only){display:none;} body.dm-picking .picking-only{display:flex;}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:200;} .modal.show{display:flex;}
 .modal .mcard{background:#fff;width:470px;max-width:92vw;border-radius:12px;overflow:hidden;box-shadow:0 14px 50px rgba(0,0,0,.4);}
@@ -647,7 +656,8 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
           <button data-doc="survey" onclick="setDoc('survey')">Survey</button>
           <button data-doc="picking" onclick="setDoc('picking')">Picking List</button>
           <div style="flex:1"></div>
-          <button class="btn sm" id="quoteSentBtn" onclick="setStatus('Quote Sent')" style="display:none">📤 Quote Sent</button>
+          <button class="btn sm" id="surveyCompletedBtn" onclick="setStatus('Survey Completed')" style="display:none;background:#ede0ff;color:#6200aa;border-color:#c9a0f0">✓ Survey Completed</button>
+          <button class="btn sm" id="sendToCustomerBtn" onclick="sendSurveyToCustomer()" style="display:none;background:#e0f4ee;color:#1a6b3a;border-color:#a0d9bf">📤 Send to Customer</button>
           <button class="btn sm" id="contractSentBtn" onclick="setStatus('Contract Sent')" style="display:none">📤 Contract Sent</button>
           <button class="btn sm" id="checkSignableBtn" onclick="checkSignableNow()" style="display:none;background:#f0f7ff;color:#1155aa;border-color:#b0cef0" title="Poll Signable now to check if all parties have signed">🔄 Check Signable</button>
           <button class="btn primary sm" onclick="window.print()">⬇ Save / Print PDF</button>
@@ -658,7 +668,7 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 
       <!-- ADMIN -->
       <section class="view" id="view-admin">
-        <h2 style="margin:0 0 4px">Admin</h2><div class="muted" style="margin-bottom:16px;font-size:13px">Settings persist locally on this device. Click Save Admin to apply.</div>
+        <h2 style="margin:0 0 4px">Admin</h2><div class="muted" style="margin-bottom:16px;font-size:13px">Click Save Admin to sync settings to the server — live for all users on their next login.</div>
         <div class="atabs">
           <button class="active" onclick="adminTab('company',this)">Company</button>
           <button onclick="adminTab('rates',this)">Mark-up &amp; Materials</button>
@@ -733,7 +743,7 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
         </div></div>
 
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
-          <button class="btn primary" onclick="saveAdmin()">💾 Save Admin &amp; Download</button>
+          <button class="btn primary" onclick="saveAdmin()">💾 Save Admin</button>
           <span class="muted" style="font-size:12px">Saves settings &amp; images into a new HTML file — replace your current file with the download.</span>
         </div>
       </section>
@@ -1193,7 +1203,7 @@ const USERS_SEED=[
 
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
-  company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"",signableRepEmail:""},
+  company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
   markup:100,vatRate:20,depPct:10,
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
@@ -1238,13 +1248,38 @@ function initLogin(){
   document.getElementById('loginUser').innerHTML=admin.users.map(u=>`<option value="${u.u}">${u.name} (${u.role})</option>`).join('');
   document.getElementById('loginHint').textContent='Demo PINs — admin 0000 · Damien 1111 · Ryan 2222 · Richard 3333 · Surveyor 4444';
 }
+/* Pull shared admin config from the server (written by an admin's Save Admin)
+   and merge it over the local defaults so every user gets the latest company
+   details, pricing and images on login. Server wins. Silent no-op if the
+   endpoint is unavailable or no config has been saved yet — local ADMIN_DEFAULT
+   is used as the fallback. */
+async function loadAdminFromServer(){
+  try{
+    const r=await fetch('/api/admin/config',{credentials:'include'});
+    if(!r.ok)return; /* not authed, no DB, or no server config yet */
+    const d=await r.json();
+    if(d&&d.config){
+      Object.assign(admin,d.config);
+      /* keep derived pricing constants in sync with the merged matrix */
+      if(admin.priceMatrix&&admin.priceMatrix._uplifts){
+        ROOF_UPLIFT.ultra=admin.priceMatrix._uplifts.ultraClear||ROOF_UPLIFT.ultra;
+        ROOF_UPLIFT.solar=admin.priceMatrix._uplifts.solarControl||ROOF_UPLIFT.solar;
+      }
+      /* re-render anything that depends on admin (guarded — some targets only
+         exist once the admin view has been opened) */
+      [renderTopnavLogo,renderImageMap,renderPriceMatrix,renderPricing,renderSurvey,initLogin]
+        .forEach(fn=>{try{fn();}catch(e){}});
+    }
+  }catch(e){
+    console.warn('Could not load server admin config — using local defaults:',e);
+  }
+}
 async function doLogin(){
   const pin=val('loginPin');
   const errEl=document.getElementById('loginErr');
   errEl.textContent='Checking…';
   let u; /* function-scoped so it's available after the try/catch */
   try{
-    /* Try server-side auth first */
     const r=await fetch('/api/auth/login',{
       method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},
@@ -1252,13 +1287,11 @@ async function doLogin(){
     });
     if(r.ok){
       const d=await r.json();
-      u=d.user; /* assign from server response */
+      u=d.user;
     } else {
-      /* Fallback: local PIN check (works offline / file://) */
       u=admin.users.find(x=>String(x.pin)===pin);
     }
   }catch(e){
-    /* Offline fallback */
     u=admin.users.find(x=>String(x.pin)===pin);
   }
   if(!u){errEl.textContent='Incorrect PIN';return;}
@@ -1277,6 +1310,8 @@ async function doLogin(){
   document.getElementById('topWho').textContent=u.name+' · '+u.role;
   applyPerms();
   if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; fillForm(); }
+  /* merge any admin-saved config from the server before showing the first view */
+  await loadAdminFromServer();
   showView(u.sections[0]||'quotes');
 }
 function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{});document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');}
@@ -1298,7 +1333,7 @@ function persistAdmin(){/* no-op: admin baked into file on Save Admin */}
 function blankState(){return{
   id:null,doc:'contract',status:'Draft',
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
-  job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",loc:"Back of house",pay:"Direct",payMethods:{}},
+  job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{}},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
   pricing:{discount:30,youpay:0},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{}
@@ -1414,11 +1449,12 @@ function val(id){const e=document.getElementById(id);return e?e.value:'';}
 function V(id,v){const e=document.getElementById(id);if(e)e.value=v;}
 function T(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
 const STATUS_CFG={
-  'Draft':      {cls:'draft',    label:'Draft'},
-  'Quote Pending': {cls:'pending', label:'Quote Pending'},
-  'Quote Sent': {cls:'sent',    label:'Quote Sent'},
-  'Contract Sent':{cls:'sent',  label:'Contract Sent'},
-  'Signed':     {cls:'signed',  label:'Contract Signed'},
+  'Draft':            {cls:'draft',    label:'Draft'},
+  'Quote Pending':    {cls:'pending',  label:'Quote Pending'},
+  'Quote Sent':       {cls:'sent',     label:'Quote Sent'},
+  'Contract Sent':    {cls:'sent',     label:'Contract Sent'},
+  'Survey Completed': {cls:'survey',   label:'Survey Completed'},
+  'Signed':           {cls:'signed',   label:'Contract Signed'},
 };
 function statusBadge(s){const c=STATUS_CFG[s]||STATUS_CFG['Draft'];return `<span class="badge ${c.cls}">${c.label}</span>`;}
 function updateTop(){document.getElementById('topRef').innerHTML=(state.job.quote?('Quote '+state.job.quote):'New quote')+(state.customer.cname?(' <small>· '+state.customer.cname+'</small>'):'')+' '+statusBadge(state.status);updateSentButtons();}
@@ -1428,9 +1464,12 @@ function updateSentButtons(){
   const qs=document.getElementById('quoteSentBtn');
   const cs=document.getElementById('contractSentBtn');
   const chk=document.getElementById('checkSignableBtn');
+  const sc=document.getElementById('surveyCompletedBtn');
+  const stc=document.getElementById('sendToCustomerBtn');
   if(qs)qs.style.display=(doc==='quote')?'':'none';
   if(cs)cs.style.display=(doc==='contract')?'':'none';
-  /* Check Signable: visible when Contract Sent and a fingerprint is stored */
+  if(sc)sc.style.display=(doc==='survey')?'':'none';
+  if(stc)stc.style.display=(doc==='survey')?'':'none';
   const hasFingerprint=!!(state.job&&state.job.signableFingerprint);
   const isContractSent=state.status==='Contract Sent';
   if(chk)chk.style.display=(hasFingerprint&&isContractSent)?'':'none';
@@ -1892,27 +1931,33 @@ function optimiseDoor(side, openingMm){
   /* Rail: next standard size at or above opening */
   const rails=[2000,3000,4000,5000,6000];
   const rail=rails.find(r=>r>=openingMm)||6000;
-  /* Optimal panel width — try to fit panels evenly, prefer 1040 */
-  let bestTracks=3,bestWidth=1040;
-  for(const pw of [1040,980,820,640]){
+  /* Panel widths available (mm) */
+  const panelWidths=[1040,980,820,640];
+  /* Find best fit: total panel coverage must exceed opening by at least
+     30mm per panel (overlap) — so: tracks × (panelWidth - 30) >= openingMm
+     Prefer fewest tracks, then widest panel */
+  let bestTracks=null,bestWidth=null;
+  for(const pw of panelWidths){
     for(let t=2;t<=7;t++){
-      if(pw*t>=openingMm*0.85 && pw*t<=openingMm*1.1){
-        bestTracks=t;bestWidth=pw;break;
+      /* each panel overlaps the next by ~30mm, so net coverage per track = pw-30
+         total net coverage = t*(pw-30) must be >= openingMm */
+      const netCoverage=t*(pw-30);
+      if(netCoverage>=openingMm){
+        if(bestTracks===null||t<bestTracks||(t===bestTracks&&pw>bestWidth)){
+          bestTracks=t;bestWidth=pw;
+        }
+        break; /* found minimum tracks for this panel width */
       }
     }
-    if(bestWidth!==1040)break;
   }
-  /* Fallback: divide opening by 1040, round to nearest int */
-  if(bestWidth===1040){
-    bestTracks=Math.max(2,Math.min(7,Math.round(openingMm/1040)));
-  }
-  /* Standard panel height — default 2100 */
-  const ph=d.pheight||2100;
-  d.rail=rail;d.tracks=bestTracks;d.pwidth=bestWidth;d.pheight=ph;
-  d.lock='Rail Lock'; /* standard for sliding sets */
+  /* Fallback if nothing fits (very large opening) */
+  if(!bestTracks){bestTracks=7;bestWidth=1040;}
+  d.rail=rail;d.tracks=bestTracks;d.pwidth=bestWidth;d.pheight=d.pheight||2100;
+  d.lock='Rail Lock';
   state.config.doors[side]=d;
   renderSides();applyConfig();
-  toast(`Optimised: ${bestTracks}-track ${bestWidth}mm panels · ${rail}mm rail`);
+  const netCover=bestTracks*(bestWidth-30);
+  toast(`Optimised: ${bestTracks}-track ${bestWidth}mm panels · ${rail}mm rail · net cover ${netCover}mm`);
 }
 function setDoor(s,f,v){if(!state.config.doors[s])state.config.doors[s]=defaultDoor();state.config.doors[s][f]=v;renderSides();applyConfig();}
 /* Auto-suggest fitting lines based on current configuration */
@@ -2318,6 +2363,9 @@ function renderImageMap(){
 function renderTopnavLogo(){
   const b=document.getElementById('topnavBrand');if(!b)return;
   const logo=admin.logoDark||admin.logo||'';
+  b.style.cursor='pointer';
+  b.onclick=()=>showView('quotes');
+  b.title='Back to Saved Quotes';
   if(logo){
     b.innerHTML=`<img class="brand-logo" src="${logo}" alt="TotaLuxe">`;
   } else {
@@ -2366,6 +2414,61 @@ function addBankImg(input){
   const f=input.files[0];if(!f)return;
   optimiseImage(f,900,900,0.82).then(data=>{admin.images.push({name:f.name,data});renderAdmin();persistAdmin();toast('Bank image added — '+fmtBytes(data.length*.75|0));});
 }
+
+/* ── Send Survey To Customer (excludes Internal Notes page) ─────────────── */
+async function sendSurveyToCustomer(){
+  const c=state.customer,j=state.job;
+  const custEmail=c.cemail||'';
+  if(!custEmail){alert('Customer email required.\n\nAdd the customer email in Customer & Job first.');return;}
+  const apiKey=admin.company.signableKey||'';
+  if(!apiKey){alert('Signable API key not configured in Admin → Company.');return;}
+  const internalSheet=document.querySelector('.internal-notes-only');
+  if(internalSheet)internalSheet.style.display='none';
+  toast('Generating survey PDF…');
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const sheets=[...document.querySelectorAll('#docwrap .sheet')].filter(s=>{
+      if(s.offsetParent===null||getComputedStyle(s).display==='none')return false;
+      if(s.dataset.internal)return false;
+      return true;
+    });
+    for(let i=0;i<sheets.length;i++){
+      const sh=sheets[i];
+      const prevT=sh.style.transform;sh.style.transform='none';
+      const canvas=await html2canvas(sh,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',width:sh.offsetWidth||794,height:sh.offsetHeight||1123});
+      sh.style.transform=prevT;
+      if(i>0)doc.addPage();
+      doc.addImage(canvas.toDataURL('image/jpeg',0.90),'JPEG',0,0,210,297);
+    }
+    const pdfB64=doc.output('datauristring').split(',')[1];
+    const REP_EMAILS={'Damien':'Damien.Mallon@totalhomeni.co.uk','Ryan':'Ryan.Ringland@totalhomeni.co.uk','Richard':'Richard.Brier@totalhomeni.co.uk'};
+    const repName=j.prep||admin.company.short||'TotaLuxe';
+    const repEmail=REP_EMAILS[repName]||admin.company.signableRepEmail||'info@totalhomeni.co.uk';
+    const creds=btoa(apiKey+':x');
+    const resp=await fetch('https://api.signable.co.uk/v1/envelopes',{
+      method:'POST',headers:{'Authorization':'Basic '+creds,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        envelope_title:`${c.cname||'Customer'} — Survey Document`,
+        envelope_all_at_once_enabled:true,
+        envelope_parties:[{party_name:c.cname||'Customer',party_email:custEmail,party_role:'signer'}],
+        envelope_documents:[{
+          document_title:`Survey — ${c.cname||'Customer'}`,
+          document_file_name:`TotaLuxe-Survey-${(c.cname||'customer').replace(/\s+/g,'-')}.pdf`,
+          document_file_content:pdfB64
+        }]
+      })
+    });
+    const data=await resp.json();
+    if(!resp.ok||data.http>=400)throw new Error(data.message||'Signable error '+resp.status);
+    toast('✓ Survey sent to '+custEmail);
+  }catch(err){
+    toast('Error: '+err.message);console.error('sendSurveyToCustomer:',err);
+  }finally{
+    if(internalSheet)internalSheet.style.display='';
+  }
+}
+
 /* ── Export App with progress modal ─────────────────────────────────────────
    Shows a live progress modal with steps and a progress bar.
    Bakes current admin (all images, settings, users) into the HTML file.
@@ -2486,9 +2589,19 @@ function saveAdmin(){const c=admin.company;
   if(val('a_signable_key'))c.signableKey=val('a_signable_key');
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
   admin.markup=+val('a_markup')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
-  /* Admin is baked into the file — export to persist */
   initLogin();renderPricing();renderSurvey();
-  exportApp();
+  /* Sync the full admin object to the server so every user picks up the latest
+     company details, pricing and images on their next login. */
+  fetch('/api/admin/config',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(admin)
+  }).then(r=>{
+    if(r.ok)toast('Admin saved — live for all users ✓');
+    else if(r.status===403)toast('Saved locally — only admins can sync to server');
+    else toast('Saved locally — server sync failed');
+  }).catch(()=>toast('Saved locally — offline'));
 }
 
 /* ── Storage layer ───────────────────────────────────────────────────────────
@@ -2590,31 +2703,21 @@ function scheduleAutoSave(){
 }
 function saveQuote(silent){
   syncFromForm();
-  state.savedAt = new Date().toISOString();
-  state.savedBy = currentUser ? currentUser.name : '';
-  if(!state.id){
-    state.id = 'Q' + Date.now();
-    _quotesCache.unshift(state);
-  } else {
-    const ix = _quotesCache.findIndex(q => q.id === state.id);
-    if(ix >= 0) _quotesCache[ix] = state;
-    else _quotesCache.unshift(state);
-  }
-  /* Persist — API first, IndexedDB fallback */
-  fetch('/api/quotes', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(state)
-  }).then(r => { if(!r.ok) throw new Error(r.status); })
-    .catch(() => idbPut(clone(state)).catch(e => console.warn('idb fallback:', e)));
-  if(!silent){
-    renderQuotes();
-    toast('Quote saved');
-    updateTop();
-  }
-  const ind = document.getElementById('autoSaveIndicator');
-  if(ind) ind.textContent = 'Saved';
+  state.savedAt=new Date().toISOString();
+  state.savedBy=currentUser?currentUser.name:'';
+  if(!state.id){state.id='Q'+Date.now();_quotesCache.unshift(state);}
+  else{const ix=_quotesCache.findIndex(q=>q.id===state.id);if(ix>=0)_quotesCache[ix]=state;else _quotesCache.unshift(state);}
+  /* Persist — API first (shared), IndexedDB fallback (offline) */
+  fetch('/api/quotes',{method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(state)})
+  .then(r=>{if(!r.ok)throw new Error(r.status);})
+  .catch(()=>idbPut(state).catch(e=>console.warn('idb fallback:',e)));
+  /* update indicator */
+  const ind=document.getElementById('autoSaveIndicator');
+  const ts=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  if(ind)ind.textContent='Saved '+ts;
+  if(!silent)toast('Quote saved');
+  renderQuotes();updateTop();
 }
 function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
   state=Object.assign(blankState(),clone(q));
@@ -2768,20 +2871,25 @@ function verandaOutlineSVG(cf){const W=cf.width,P=cf.proj;return `<svg viewBox="
 
 /* scale any over-full page DOWN so nothing clips; sparse pages already fill via .fill/.grow */
 function fitPages(){
-  const isMobile=window.innerWidth<=640;
+  const vw=window.innerWidth;
+  const isNarrow=vw<=1024;
   document.querySelectorAll('#docwrap .sheet').forEach(sh=>{
     if(sh.offsetParent===null)return;
-    if(isMobile){
-      /* on mobile: scale the sheet to fill the viewport width */
-      sh.style.transform='';sh.style.transformOrigin='top left';
-      const scale=Math.min(1,(window.innerWidth-20)/sh.offsetWidth);
-      if(scale<1){sh.style.transform='scale('+scale.toFixed(4)+')';sh.style.marginBottom=Math.round((sh.offsetHeight*(scale-1)))+'px';}
+    sh.style.transform='';sh.style.marginBottom='';sh.style.transformOrigin='top left';
+    if(isNarrow){
+      const avail=vw-20;
+      const shW=sh.offsetWidth||794;
+      const scale=Math.min(1,avail/shW);
+      if(scale<1){
+        sh.style.transform='scale('+scale.toFixed(4)+')';
+        sh.style.marginBottom=Math.round(sh.offsetHeight*(scale-1))+'px';
+      }
       return;
     }
     const pg=sh.querySelector('.pg');if(!pg)return;
     pg.style.transform='';pg.style.transformOrigin='top center';
-    const avail=pg.clientHeight,content=pg.scrollHeight;
-    if(content>avail+2){const fc=Math.max(0.55,avail/content);pg.style.transform='scale('+fc.toFixed(4)+')';}
+    const avail2=pg.clientHeight,content=pg.scrollHeight;
+    if(content>avail2+2){const fc=Math.max(0.55,avail2/content);pg.style.transform='scale('+fc.toFixed(4)+')';}
   });
 }
 let _fitT=null;
@@ -2792,7 +2900,10 @@ window.addEventListener('beforeprint',fitPages);
 const DOC_BANNER={quote:'* QUOTATION *',contract:'* OFFICIAL CONTRACT *',survey:'* SURVEY *',picking:'* PICKING LIST *'};
 const DOC_TITLE={quote:'Quotation',contract:'Official Order',survey:'Survey',picking:'Picking List'};
 function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.docs[0]||'contract';}
-  state.doc=d;document.body.className='dm-'+d;
+  state.doc=d;
+  /* Update dm- class without removing role- or other classes */
+  document.body.classList.remove('dm-quote','dm-contract','dm-survey','dm-picking');
+  document.body.classList.add('dm-'+d);
   document.querySelectorAll('.doctabs button').forEach(b=>b.classList.toggle('active',b.dataset.doc===d));
   const sb=document.getElementById('signableBtn');sb.style.display=(d==='contract')?'':'none';
   /* draw toolbar — always visible on survey, hidden otherwise */
@@ -3110,6 +3221,23 @@ function renderDocuments(){
     </div>${pfoot()}
   </section>
 
+  <!-- INTERNAL NOTES — survey only, NEVER sent to customer -->
+  <section class="sheet survey-only internal-notes-only" data-internal="true">
+    ${phead('Internal Notes — STRICTLY CONFIDENTIAL')}
+    <div class="pg" style="display:flex;flex-direction:column;gap:12px">
+      <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;color:#856404;text-align:center">
+        ⚠ INTERNAL USE ONLY — This page must NEVER be shared with the customer
+      </div>
+      <div class="sh" style="margin:0">Internal Survey Notes</div>
+      <div contenteditable="${state.doc==='survey'?'true':'false'}"
+        id="internalNotes"
+        oninput="state.job.internalNotes=this.innerText;scheduleAutoSave()"
+        style="flex:1;min-height:180mm;border:1.5px dashed #ccc;border-radius:8px;padding:14px;font-size:13px;line-height:1.7;color:#333;outline:none;background:#fffdf7"
+        placeholder="Surveyor notes for internal use only…">${esc(state.job.internalNotes||'')}</div>
+    </div>
+    ${pfoot()}
+  </section>
+
   <!-- TERMS & CONDITIONS (contract back pages) -->
   ${TERMS_PAGES.map((pg,i)=>`<section class="sheet contract-only">${phead('Terms &amp; Conditions · '+(i+1)+' of '+TERMS_PAGES.length)}<div class="pg">${i===0?'<div class="sh">Terms &amp; Conditions of Sale</div>':''}<div class="terms2">${pg}</div></div>${pfoot()}</section>`).join('')}
 
@@ -3141,7 +3269,12 @@ function renderDocuments(){
   </section>`;
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
-function ph(key,label,w,h,extra,src,tint){const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extra||'');return `<div class="imgph" data-key="${key}" style="${style}" onclick="pickImg(this)"><span>${label}</span>${src?`<img src="${src}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"></div>`;}
+function ph(key,label,w,h,extra,src,tint){
+  const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extra||'');
+  /* Only the site photo is clickable — all other image placeholders are display-only */
+  const clickable=(key==='survey_sitephoto');
+  return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
+}
 function docImg(cat,opt,label,w,hh,extra,tint){const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');const src=state.images[key]||((admin.imgmap&&admin.imgmap[cat]&&admin.imgmap[cat][opt])||'');return ph(key,label,w,hh,extra,src,tint);}
 function pickImg(box){box.querySelector('input[type=file]').click();}
 function setDocImg(input){
@@ -3281,11 +3414,15 @@ async function doSendSignable(apiKey,custName,custEmail,j){
   /* Step 2: Upload to Signable */
   setSignableStep(2,'Sending to Signable…');
   const envelopeTitle=`${esc(custName)} — Veranda Contract HQ-${j.quote||j.hq||'REF'}`;
+  /* Map prep name to company email */
+  const REP_EMAILS={'Damien':'Damien.Mallon@totalhomeni.co.uk','Ryan':'Ryan.Ringland@totalhomeni.co.uk','Richard':'Richard.Brier@totalhomeni.co.uk'};
+  const repName=j.prep||admin.company.short||'TotaLuxe';
+  const repEmail=REP_EMAILS[repName]||admin.company.signableRepEmail||'info@totalhomeni.co.uk';
   const body={
     envelope_title: envelopeTitle,
-    envelope_all_at_once_enabled: false, /* sequential — company signs first */
+    envelope_all_at_once_enabled: false,
     envelope_parties:[
-      {party_name:j.prep||admin.company.short||'TotaLuxe',party_email:admin.company.signableRepEmail||'info@totalhomeni.co.uk',party_role:'signer1'},
+      {party_name:repName,party_email:repEmail,party_role:'signer1'},
       {party_name:custName,party_email:custEmail,party_role:'signer2'}
     ],
     envelope_documents:[{
@@ -3415,11 +3552,6 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 
 /* ===== INIT ===== */
 function boot(){
-  state.fitting=[
-    {desc:'TL - Veranda 3m',price:300,qty:1},{desc:'TL - Aura Glass Doors - 3 Track',price:140,qty:1},
-    {desc:'TL - Keyframe (Aluminium)',price:150,qty:1},{desc:'TL - Half Alu / Half Glass Sidewall',price:220,qty:1},
-    {desc:'TL - Full Aluminium Sidewall',price:200,qty:1}
-  ];
   initLogin();fillForm();initConfig();renderPricing();renderSurvey();updateTop();
 }
 /* Initialise storage then boot */
