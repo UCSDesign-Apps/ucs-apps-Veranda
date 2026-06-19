@@ -3,9 +3,15 @@
   "version": "1.0.1",
   "description": "UCS Design Group PWA platform",
   "main": "server.js",
-  "engines": { "node": ">=18.0.0" },
-  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
   "dependencies": {
+    "@azure/msal-node": "^5.2.5",
     "compression": "^1.7.4",
     "connect-pg-simple": "^9.0.1",
     "express": "^4.18.2",

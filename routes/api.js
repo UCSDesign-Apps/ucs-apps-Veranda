@@ -13,12 +13,29 @@
  */
 
 const express = require('express');
+const msal = require('@azure/msal-node');
 
 // Section/doc lists mirror the client's ALL_SECTIONS / ALL_DOCS so the user
 // object returned on login drives the same UI nav as the client-side fallback.
 const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs', 'admin'];
 const ALL_DOCS = ['quote', 'contract', 'survey', 'picking'];
 const SALES_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs'];
+
+// Azure app credentials (Railway env vars) for sending PDF emails via Graph.
+const msalConfig = {
+  auth: {
+    clientId: process.env.AZURE_CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`,
+    clientSecret: process.env.AZURE_CLIENT_SECRET,
+  },
+};
+
+// Rep -> Outlook mailbox. Quotes send from the rep; surveys from contracts@.
+const REP_EMAILS = {
+  Damien: 'Damien.Mallon@totalhomeni.co.uk',
+  Ryan: 'Ryan.Ringland@totalhomeni.co.uk',
+  Richard: 'Richard.Brier@totalhomeni.co.uk',
+};
 
 // Hardcoded users per module. PINs are already visible in the client HTML — they
 // select role/identity, not real secrets (internal staff tool). Mirrors USERS_SEED.
@@ -201,6 +218,70 @@ function apiRouter(pool) {
       res.json({ ok: true });
     } catch (err) {
       next(err);
+    }
+  });
+
+  // ---- Send PDF email via Microsoft Graph (application permissions) ----
+  // Body: { type:'quote'|'survey', repName, customerName, customerEmail,
+  //         subject, body, pdfBase64, filename }
+  router.post('/send-email', requireAuth, async (req, res) => {
+    try {
+      const { type, repName, customerName, customerEmail, subject, body, pdfBase64, filename } = req.body || {};
+      if (!customerEmail || !pdfBase64) {
+        return res.status(400).json({ error: 'customerEmail and pdfBase64 required' });
+      }
+      if (!process.env.AZURE_CLIENT_ID || !process.env.AZURE_TENANT_ID || !process.env.AZURE_CLIENT_SECRET) {
+        return res.status(503).json({ error: 'Email service not configured (missing Azure credentials)' });
+      }
+
+      // Surveys send from contracts@; quotes from the rep's mailbox.
+      const fromEmail = type === 'survey'
+        ? 'contracts@totalhomeni.co.uk'
+        : (REP_EMAILS[repName] || 'info@totalhomeni.co.uk');
+      const fromName = type === 'survey' ? 'TotaLuxe Contracts' : (repName || 'TotaLuxe');
+      const replyTo = REP_EMAILS[repName] || fromEmail;
+
+      const cca = new msal.ConfidentialClientApplication(msalConfig);
+      const tokenResult = await cca.acquireTokenByClientCredential({
+        scopes: ['https://graph.microsoft.com/.default'],
+      });
+      if (!tokenResult || !tokenResult.accessToken) throw new Error('Could not acquire Azure token');
+
+      const message = {
+        subject,
+        body: { contentType: 'HTML', content: `<p>${String(body || '').replace(/\n/g, '<br>')}</p>` },
+        from: { emailAddress: { address: fromEmail, name: fromName } },
+        replyTo: [{ emailAddress: { address: replyTo, name: repName || fromName } }],
+        toRecipients: [{ emailAddress: { address: customerEmail, name: customerName || customerEmail } }],
+        attachments: [{
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: filename || 'TotaLuxe-Document.pdf',
+          contentType: 'application/pdf',
+          contentBytes: pdfBase64,
+        }],
+      };
+
+      const graphResp = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenResult.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message, saveToSentItems: true }),
+        }
+      );
+
+      if (!graphResp.ok) {
+        const errBody = await graphResp.json().catch(() => ({}));
+        throw new Error((errBody && errBody.error && errBody.error.message) || `Graph API error ${graphResp.status}`);
+      }
+
+      res.json({ ok: true, from: fromEmail, to: customerEmail });
+    } catch (err) {
+      console.error('send-email error:', err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 
