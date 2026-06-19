@@ -328,7 +328,7 @@ body.print-internal .internal-notes-only{display:block !important;}
 .modal .step{display:flex;gap:10px;padding:6px 0;color:#9aa;align-items:flex-start;} .modal .step.done{color:#197a5b;} .modal .step.done .dot{background:var(--ok);}
 .modal .dot{width:18px;height:18px;border-radius:50%;background:#ccd;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;flex:0 0 18px;margin-top:1px;}
 .modal .note{background:#fff7e0;border:1px solid #e8d48a;border-radius:7px;padding:9px 11px;font-size:11.5px;color:#5a4a12;margin-top:10px;} .modal .mf{padding:12px 18px;border-top:1px solid #eee;text-align:right;}
-@media print{ .drawlayer{display:block !important;} .no-print{display:none !important;}
+@media print{ .drawlayer{display:block !important;} .no-print{display:none !important;} .no-pdf{display:none !important;}
   .topnav,.no-print,.doctabs,.login{display:none !important;}
   .app{display:block;} .main{display:block;} .content{padding:0;max-width:none;} .docwrap{background:#fff;margin:0;padding:0;}
   /* Each sheet fills exactly one A4 page and clips to prevent overflow on fixed-height sheets */
@@ -2481,6 +2481,9 @@ async function sendSurveyToCustomer(){
   const custEmail=c.cemail||'';
   if(!custEmail){alert('Customer email required.');return;}
   toast('Generating survey PDF…');
+  /* Hide the survey extras editor panel from the PDF capture */
+  const extrasPanel=document.querySelector('.no-pdf');
+  if(extrasPanel)extrasPanel.style.visibility='hidden';
   try{
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -2520,6 +2523,9 @@ async function sendSurveyToCustomer(){
   }catch(err){
     toast('Error: '+err.message);
     console.error('sendSurveyToCustomer:',err);
+  }finally{
+    /* Restore the extras panel after capture */
+    if(extrasPanel)extrasPanel.style.visibility='';
   }
 }
 async function sendQuoteToCustomer(){
@@ -3179,7 +3185,7 @@ function renderDocuments(){
         <div class="sigcard"><div class="h">Customer Name</div><div class="nm">${c.cname||''}</div><div class="line" style="margin-top:6px"></div></div>
       </div>
       </div>
-      <div class="survey-only no-print" style="flex-direction:column;gap:6px;margin-top:auto;border-top:2px dashed var(--gold);padding-top:14px">
+      <div class="survey-only no-print no-pdf" style="flex-direction:column;gap:6px;margin-top:auto;border-top:2px dashed var(--gold);padding-top:14px">
         <div class="sh" style="margin-top:0">Add Survey Extras — on site</div>
         <div style="font-size:11px;color:#6a777c">Materials &amp; install costs added here are <b>additional to the signed contract</b>. They populate the <b>Survey Notes &amp; Additional Items</b> page and the picking list, and do not change the contract price.</div>
         <div style="font-weight:700;font-size:12px;margin-top:6px">Additional materials</div>
