@@ -222,9 +222,8 @@ function apiRouter(pool) {
   });
 
   // ---- Diagnostic: verify Azure token acquisition + Graph roles (sends nothing) ----
-  // Open (no auth) so it can be curled during setup. Returns only non-sensitive
-  // info (tenant/appid/role names). Remove or lock down once email is verified.
-  router.get('/send-email/test', async (req, res) => {
+  // Auth-required. Returns only non-sensitive info (tenant/appid/role names).
+  router.get('/send-email/test', requireAuth, async (req, res) => {
     try {
       if (!process.env.AZURE_CLIENT_ID || !process.env.AZURE_TENANT_ID || !process.env.AZURE_CLIENT_SECRET) {
         return res.status(503).json({ ok: false, error: 'Missing Azure env vars' });
