@@ -221,6 +221,25 @@ function apiRouter(pool) {
     }
   });
 
+  // ---- Diagnostic: verify Azure token acquisition + Graph roles (sends nothing) ----
+  // Open (no auth) so it can be curled during setup. Returns only non-sensitive
+  // info (tenant/appid/role names). Remove or lock down once email is verified.
+  router.get('/send-email/test', async (req, res) => {
+    try {
+      if (!process.env.AZURE_CLIENT_ID || !process.env.AZURE_TENANT_ID || !process.env.AZURE_CLIENT_SECRET) {
+        return res.status(503).json({ ok: false, error: 'Missing Azure env vars' });
+      }
+      const cca = new msal.ConfidentialClientApplication(msalConfig);
+      const r = await cca.acquireTokenByClientCredential({ scopes: ['https://graph.microsoft.com/.default'] });
+      if (!r || !r.accessToken) return res.status(500).json({ ok: false, error: 'No token returned' });
+      const p = JSON.parse(Buffer.from(r.accessToken.split('.')[1], 'base64').toString());
+      const roles = p.roles || [];
+      res.json({ ok: true, tenant: p.tid, appid: p.appid || p.azp, roles, hasMailSend: roles.includes('Mail.Send') });
+    } catch (err) {
+      res.status(500).json({ ok: false, errorCode: err.errorCode || null, error: (err.message || '').split('\n')[0] });
+    }
+  });
+
   // ---- Send PDF email via Microsoft Graph (application permissions) ----
   // Body: { type:'quote'|'survey', repName, customerName, customerEmail,
   //         subject, body, pdfBase64, filename }
