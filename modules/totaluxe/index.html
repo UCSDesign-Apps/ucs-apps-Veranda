@@ -312,6 +312,8 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .surveynote{background:#eafaf0;border:1px solid #9bd6b0;border-radius:9px;padding:9px 12px;font-size:10.5px;color:#1c6b46;margin:10px 0;}
 .tickwrap{} body.dm-quote .tickwrap{display:none;} body.dm-contract .tickwrap{display:none;} body.dm-quote .signblock{display:none;} body.dm-quote .contract-only{display:none;}
 .quote-only{display:none;} body.dm-quote .quote-only{display:block;}
+/* Survey-only content (survey extras panel, survey notes) shows only on the survey document */
+body:not(.dm-survey) .survey-only{display:none !important;}
 /* Internal notes sheet — visible on screen in survey mode, NEVER printed normally */
 .internal-notes-only{display:none;}
 body.dm-survey .internal-notes-only{display:block;}
@@ -586,7 +588,6 @@ body.print-internal .internal-notes-only{display:block !important;}
               <option>Direct</option><option>Finance</option></select>
             <select id="p_fitpick" style="flex:1;min-width:200px;padding:9px;border:1px solid #cfd8da;border-radius:8px;"></select>
             <button class="btn primary" onclick="addFitting()">＋ Add fitting line</button>
-            <button class="btn" onclick="autoFitting()" title="Suggest fitting lines based on the current configuration">⚡ Auto-populate from config</button>
           </div>
           <!-- Fitting table: unit prices and totals are admin-only -->
           <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Fitting work</th><th class="r admin-only" style="width:110px">Unit price</th><th class="r" style="width:70px">Qty</th><th class="r admin-only" style="width:110px">Total</th><th style="width:30px"></th></tr></thead><tbody id="fitRows"></tbody></table></div>
@@ -613,6 +614,25 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div style="font-size:28px;font-weight:800">£<span id="s_youpay">0.00</span></div>
           </div>
           <div id="payschedule" style="margin-top:10px"></div>
+        </div>
+        <!-- Additional materials & labour (all roles) — separate from on-site survey extras -->
+        <div class="card">
+          <h2>Additional Materials &amp; Labour</h2>
+          <div class="sub">Extra items for this job. Materials add to the order's materials cost; labour adds to the installation fee. (On-site survey extras are added on the Survey document.)</div>
+          <div style="font-weight:700;font-size:13px;margin:10px 0 4px">Additional materials</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input id="pr_mat_desc" placeholder="Material description…" style="flex:2;min-width:180px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+            <input id="pr_mat_cost" type="number" min="0" step="0.01" placeholder="Cost £" style="width:110px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+            <button class="btn primary" onclick="addPricingMaterial()">＋ Add material</button>
+          </div>
+          <div id="pricingMatList" style="font-size:12px;margin-top:8px"></div>
+          <div style="font-weight:700;font-size:13px;margin:14px 0 4px">Additional labour / install</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input id="pr_lab_desc" placeholder="Labour description…" style="flex:2;min-width:180px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+            <input id="pr_lab_cost" type="number" min="0" step="1" placeholder="Amount £" style="width:110px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+            <button class="btn primary" onclick="addPricingLabour()">＋ Add labour</button>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:6px">Labour lines appear in the Fitting &amp; Survey table above.</div>
         </div>
       </section>
 
@@ -656,8 +676,6 @@ body.print-internal .internal-notes-only{display:block !important;}
           <button data-doc="survey" onclick="setDoc('survey')">Survey</button>
           <button data-doc="picking" onclick="setDoc('picking')">Picking List</button>
           <div style="flex:1"></div>
-          <button class="btn sm" id="quoteSentBtn" onclick="setStatus('Quote Sent')" style="display:none">📤 Mark Quote Sent</button>
-          <button class="btn sm" id="contractSentBtn" onclick="setStatus('Contract Sent')" style="display:none">📤 Mark Contract Sent</button>
           <button class="btn sm" id="surveyCompletedBtn" onclick="completeSurvey()" style="display:none;background:#ede0ff;color:#6200aa;border-color:#c9a0f0">✓ Survey Completed</button>
           <button class="btn sm" id="sendToCustomerBtn" onclick="sendSurveyToCustomer()" style="display:none;background:#e0f4ee;color:#1a6b3a;border-color:#a0d9bf">📤 Send Survey</button>
           <button class="btn sm" id="quoteSendCustomerBtn" onclick="sendQuoteToCustomer()" style="display:none;background:#e0f0ff;color:#1155aa;border-color:#a0c8f0">📤 Send Quote</button>
@@ -1340,7 +1358,7 @@ function persistAdmin(){/* no-op: admin baked into file on Save Admin */}
 function blankState(){return{
   id:null,doc:'contract',status:'Draft',
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
-  job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{}},
+  job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
   pricing:{discount:30,youpay:0},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{}
@@ -2053,7 +2071,10 @@ function applyConfig(){
   T('c_cost',frameNett?('£'+frameNett.toLocaleString('en-GB',{minimumFractionDigits:2})+' nett'):'— not in price list');
   T('c_sides_cost',sidesNett?('£'+sidesNett.toLocaleString('en-GB',{minimumFractionDigits:2})+' nett'):'£0.00');
   T('c_total_cost',totalNett?('£'+totalNett.toLocaleString('en-GB',{minimumFractionDigits:2})+' nett'):'—');
-  recalc();scheduleAutoSave();
+  recalc();
+  /* Auto-populate fitting lines when config changes */
+  if(state.config.model)autoFitting();
+  scheduleAutoSave();
 }
 
 /* ===== PRICING ===== */
@@ -2066,6 +2087,26 @@ function onPayChange(){state.job.pay=val('p_pay');refreshPickers();
   renderPricing();renderSurvey();}
 function reprice(line){const f=admin.fitting.find(x=>x.desc===line.desc);if(f)line.price=payPrice(f);}
 function addFitting(){const f=admin.fitting[+val('p_fitpick')];if(!f)return;state.fitting.push({desc:f.desc,price:payPrice(f),qty:1});renderPricing();}
+/* Pricing-view extras — materials feed surveyParts (materials cost), labour feeds state.fitting (install cost). Separate from on-site survey extras. */
+function addPricingMaterial(){
+  const desc=(val('pr_mat_desc')||'').trim();const cost=+val('pr_mat_cost')||0;
+  if(!desc){toast('Enter a material description');return;}
+  state.surveyParts.push({desc,cost,qty:1});
+  V('pr_mat_desc','');V('pr_mat_cost','');
+  renderPricing();renderSurvey();renderDocuments();toast('Material added');
+}
+function addPricingLabour(){
+  const desc=(val('pr_lab_desc')||'').trim();const cost=+val('pr_lab_cost')||0;
+  if(!desc){toast('Enter a labour description');return;}
+  state.fitting.push({desc,price:cost,qty:1});
+  V('pr_lab_desc','');V('pr_lab_cost','');
+  renderPricing();toast('Labour added');
+}
+function delPricingMat(i){state.surveyParts.splice(i,1);renderPricing();renderSurvey();renderDocuments();}
+function renderPricingExtras(){
+  const el=document.getElementById('pricingMatList');if(!el)return;
+  el.innerHTML=state.surveyParts.map((p,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(p.desc)} ×${p.qty} · £${money(p.cost*p.qty)} <a onclick="delPricingMat(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional materials.</i>';
+}
 function addPart(){
   const v=val('sv_partpick');
   if(v==='__other__'){
@@ -2154,6 +2195,7 @@ function editPart(i,f,v){if(f==='del')state.surveyParts.splice(i,1);else state.s
 function renderPricing(){
   V('p_pay',state.job.pay);refreshPickers();V('p_deppct',admin.depPct);V('p_disc',state.pricing.discount);
   rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
+  renderPricingExtras();
   recalc();
 }
 function toggleOtherPart(wrapId,sel){
@@ -2426,13 +2468,13 @@ function addBankImg(input){
 
 /* ── Send Survey To Customer (excludes Internal Notes page) ─────────────── */
 async function completeSurvey(){
-  setStatus('Survey Completed');
-  /* Auto-send survey PDF to customer if email exists */
-  if(state.customer&&state.customer.cemail){
+  if(!state.job.surveySentToCustomer){
+    if(!confirm('The survey has not been sent to the customer yet.\n\nSend now and mark as completed?'))return;
     await sendSurveyToCustomer();
-  } else {
-    toast('Survey marked complete — no customer email set, PDF not sent');
   }
+  setStatus('Survey Completed');
+  saveQuote(true);
+  toast('Survey marked as completed');
 }
 async function sendSurveyToCustomer(){
   const c=state.customer,j=state.job;
@@ -2483,6 +2525,8 @@ async function sendSurveyToCustomer(){
     const data=await resp.json();
     if(!resp.ok||data.http>=400)throw new Error(data.message||'Signable error '+resp.status);
     toast('✓ Survey sent to '+custEmail);
+    state.job.surveySentToCustomer=true;
+    saveQuote(true);
   }catch(err){
     toast('Error: '+err.message);console.error('sendSurveyToCustomer:',err);
   }finally{
@@ -2535,8 +2579,9 @@ async function sendQuoteToCustomer(){
     });
     const data=await resp.json();
     if(!resp.ok||data.http>=400)throw new Error(data.message||'Signable error');
-    setStatus('Quote Sent');
     toast('✓ Quote sent to '+custEmail);
+    setStatus('Quote Sent');
+    saveQuote(true);
   }catch(err){
     toast('Error: '+err.message);
     console.error('sendQuoteToCustomer:',err);
@@ -3116,7 +3161,7 @@ function renderDocuments(){
           <div class="li"><span class="k">Roof / Glazing</span><span class="v">${cf.roof}</span></div>
           <div class="li"><span class="k">Gutter</span><span class="v">${cf.gutter}</span></div>
           <div class="li"><span class="k">Post</span><span class="v">${cf.post}</span></div>
-          <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div></div>
+          ${state.doc==='survey'?`<div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>`:''}</div>
       </div>`}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
@@ -3207,7 +3252,7 @@ function renderDocuments(){
 
   <!-- PAYMENT SCHEDULE (expanded; order summary removed) -->
   <section class="sheet">${phead('Payment Schedule')}
-    <div class="pg"><div class="fill">
+    <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
       <div class="sh">Order Breakdown &amp; Payment Schedule</div>
       <div class="pricebox"><div><div class="lbl">Total Price — You Pay <span style="font-weight:400;opacity:.85">(incl VAT &amp; installation)</span></div></div>
         <div class="big">£${money(calc.youpay)}</div></div>
@@ -3228,7 +3273,7 @@ function renderDocuments(){
       </div>
       <div class="contract-only">
         <div class="notebox" style="background:#fdecec;border-color:#f1b4b4;color:#a33;text-align:center;font-weight:700">Please read carefully before signing — your order will be manufactured to the final specifications above. This document forms part of a legally binding contract.</div>
-        <div class="sigrow signblock">
+        <div class="sigrow signblock" style="margin-top:auto;flex-shrink:0">
           <div class="sigcard"><div class="h">Customer Name — Print</div><div class="nm">${c.cname||''}</div><div class="line" style="margin-top:6px"></div></div>
           <div class="sigcard" data-signable="{signature:signer2:Customer+Signature}" style="min-height:70px"><div class="h">Customer Signature</div></div>
           <div class="sigcard"><div class="h">${state.doc==='survey'?'Surveyor':'Representative'} Name — Print</div>${state.doc==='survey'?surveyorField('fit'):`<div class="nm">${esc(j.prep||'')}</div><div class="line" style="margin-top:6px"></div>`}</div>
