@@ -2507,7 +2507,7 @@ async function sendSurveyToCustomer(){
         customerName:c.cname||'',
         customerEmail:custEmail,
         subject:`Your TotaLuxe Veranda Survey — ${j.quote||''}`,
-        body:`Dear ${c.cname||''},\n\nPlease find attached a copy of your veranda survey.\n\nKind regards,\nTotaLuxe Contracts`,
+        body:`Dear ${c.cname||''},\n\nPlease find attached a copy of your veranda survey.\n\nKind regards,\nTotaLuxe`,
         pdfBase64,
         filename:`TotaLuxe-Survey-${(c.cname||'customer').replace(/\s+/g,'-')}.pdf`
       })

@@ -254,9 +254,9 @@ function apiRouter(pool) {
 
       // Surveys send from contracts@; quotes from the rep's mailbox.
       const fromEmail = type === 'survey'
-        ? 'contracts@totalhomeni.co.uk'
+        ? 'office@totalhomeni.co.uk'
         : (REP_EMAILS[repName] || 'info@totalhomeni.co.uk');
-      const fromName = type === 'survey' ? 'TotaLuxe Contracts' : (repName || 'TotaLuxe');
+      const fromName = type === 'survey' ? 'TotaLuxe' : (repName || 'TotaLuxe');
       const replyTo = REP_EMAILS[repName] || fromEmail;
 
       const cca = new msal.ConfidentialClientApplication(msalConfig);
