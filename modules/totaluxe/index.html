@@ -755,6 +755,9 @@ body.print-internal .internal-notes-only{display:block !important;}
         </div></div>
 
         <div class="apane" id="ap-imgmap"><div class="card">
+          <div class="sub" style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 14px;margin-bottom:12px">
+            ✓ Images save automatically when uploaded — no need to click Save Admin separately for images.
+          </div>
           <div class="sub">Assign a product image to each option. Documents pull the right image automatically from the configuration (e.g. a White veranda shows the white finish, gutter &amp; post). Finish swatches fall back to the RAL colour if no image is set.</div>
           <div id="imgMapWrap"></div>
         </div></div>
@@ -2289,7 +2292,9 @@ function renderPaySchedule(sched,total){
 }
 
 /* ===== ADMIN UI ===== */
-function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));document.getElementById('ap-'+t).classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));const pane=document.getElementById('ap-'+t);if(pane)pane.classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
+  /* Ensure the image map is (re)rendered when switching to the Product Images tab */
+  if(t==='imgmap')renderImageMap();}
 function liveRates(){admin.markup=+val('a_markup')||0;}
 function renderAdmin(){
   const c=admin.company;
@@ -2482,11 +2487,28 @@ function optimiseImage(file,maxW=900,maxH=900,quality=0.82){
 function fmtBytes(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(0)+'KB';return(b/1048576).toFixed(1)+'MB';}
 function setLogo(which,input){
   const f=input.files[0];if(!f)return;
-  optimiseImage(f,400,200,0.88).then(data=>{admin[which]=data;renderImageMap();renderTopnavLogo();persistAdmin();toast('Logo saved ('+fmtBytes(data.length*.75|0)+')');});
+  optimiseImage(f,400,200,0.88).then(data=>{
+    admin[which]=data;renderImageMap();renderTopnavLogo();
+    /* Auto-save to server immediately — don't wait for Save Admin */
+    fetch('/api/admin/config',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(admin)}).then(r=>{
+      if(r.ok)toast('Logo saved — live for all users ✓ ('+fmtBytes(data.length*.75|0)+')');
+      else if(r.status===403)toast('Logo saved locally — only admins can sync to server');
+      else toast('Logo saved locally — server sync failed');
+    }).catch(()=>toast('Logo saved locally — offline'));
+  });
 }
 function setMapImg(cat,opt,input){
   const f=input.files[0];if(!f)return;
-  optimiseImage(f,900,900,0.82).then(data=>{if(!admin.imgmap[cat])admin.imgmap[cat]={};admin.imgmap[cat][opt]=data;renderImageMap();persistAdmin();toast('Image saved — '+fmtBytes(data.length*.75|0));});
+  optimiseImage(f,900,900,0.82).then(data=>{
+    if(!admin.imgmap[cat])admin.imgmap[cat]={};
+    admin.imgmap[cat][opt]=data;renderImageMap();
+    /* Auto-save to server immediately — don't wait for Save Admin */
+    fetch('/api/admin/config',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(admin)}).then(r=>{
+      if(r.ok)toast('Image saved — live for all users ✓ ('+fmtBytes(data.length*.75|0)+')');
+      else if(r.status===403)toast('Image saved locally — only admins can sync to server');
+      else toast('Image saved locally — server sync failed');
+    }).catch(()=>toast('Image saved locally — offline'));
+  });
 }
 function togglePerm(i,kind,key,on){const arr=admin.users[i][kind];const ix=arr.indexOf(key);if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);}
 function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
