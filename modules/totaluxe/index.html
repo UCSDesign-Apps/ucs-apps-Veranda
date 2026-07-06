@@ -1320,8 +1320,11 @@ async function loadAdminFromServer(){
         ROOF_UPLIFT.solar=admin.priceMatrix._uplifts.solarControl||ROOF_UPLIFT.solar;
       }
       /* re-render anything that depends on admin (guarded — some targets only
-         exist once the admin view has been opened) */
-      [renderTopnavLogo,renderImageMap,renderPriceMatrix,renderPricing,renderSurvey,initLogin]
+         exist once the admin view has been opened). Includes the configurator
+         chips and document sheets so the freshly-merged image map paints
+         immediately, not just on the next chip interaction. */
+      [renderTopnavLogo,renderImageMap,renderPriceMatrix,renderPricing,renderSurvey,initLogin,
+       renderModelGrid,renderColourChips,renderDocuments]
         .forEach(fn=>{try{fn();}catch(e){}});
     }
   }catch(e){
@@ -3432,7 +3435,15 @@ function ph(key,label,w,h,extra,src,tint){
   const clickable=(key==='survey_sitephoto');
   return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
-function docImg(cat,opt,label,w,hh,extra,tint){const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');const src=state.images[key]||((admin.imgmap&&admin.imgmap[cat]&&admin.imgmap[cat][opt])||'');return ph(key,label,w,hh,extra,src,tint);}
+function docImg(cat,opt,label,w,hh,extra,tint){
+  const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');
+  const stateImg=state.images[key];
+  const adminImg=(admin.imgmap&&admin.imgmap[cat]&&admin.imgmap[cat][opt])||'';
+  /* Per-quote override only wins if it holds a real image (data URI ≫100 chars);
+     an empty/stale marker falls through to the shared admin.imgmap. */
+  const src=(stateImg&&stateImg.length>100)?stateImg:adminImg;
+  return ph(key,label,w,hh,extra,src,tint);
+}
 function pickImg(box){box.querySelector('input[type=file]').click();}
 function setDocImg(input){
   const f=input.files[0];if(!f)return;
