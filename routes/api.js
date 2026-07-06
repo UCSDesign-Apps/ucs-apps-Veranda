@@ -193,6 +193,14 @@ function apiRouter(pool) {
     try {
       const { module } = req.session.user;
       const result = await pool.query('SELECT config FROM admin_config WHERE module = $1', [module]);
+      // TEMP DEBUG: trace image load — remove once image persistence is confirmed.
+      console.log(`[admin/config] GET module=${module} — found=${!!result.rows[0]}`);
+      if (result.rows[0]) {
+        const cfg = result.rows[0].config;
+        const imgCount = cfg && cfg.imgmap ? Object.keys(cfg.imgmap).reduce((n, cat) =>
+          n + Object.values(cfg.imgmap[cat] || {}).filter(Boolean).length, 0) : 0;
+        console.log(`[admin/config] GET returning imgCount=${imgCount}`);
+      }
       res.json({ config: result.rows[0] ? result.rows[0].config : null });
     } catch (err) {
       next(err);
@@ -206,6 +214,12 @@ function apiRouter(pool) {
       if (!config || typeof config !== 'object' || Array.isArray(config)) {
         return res.status(400).json({ error: 'Config object required' });
       }
+      // TEMP DEBUG: trace image save — remove once image persistence is confirmed.
+      const payloadKB = Math.round(JSON.stringify(config).length / 1024);
+      const imgmapCats = config.imgmap ? Object.keys(config.imgmap) : [];
+      const imgCount = imgmapCats.reduce((n, cat) =>
+        n + Object.values(config.imgmap[cat] || {}).filter(Boolean).length, 0);
+      console.log(`[admin/config] POST module=${module} user=${name} payload=${payloadKB}KB imgCats=${imgmapCats.length} imgs=${imgCount}`);
       await pool.query(
         `INSERT INTO admin_config (module, config, updated_by, updated_at)
          VALUES ($1, $2, $3, now())
@@ -215,8 +229,10 @@ function apiRouter(pool) {
                updated_at = now()`,
         [module, config, name]
       );
-      res.json({ ok: true });
+      console.log(`[admin/config] POST saved OK for module=${module} (${payloadKB}KB, ${imgCount} imgs)`);
+      res.json({ ok: true, payloadKB, imgCount });
     } catch (err) {
+      console.error(`[admin/config] POST error:`, err.message);
       next(err);
     }
   });
