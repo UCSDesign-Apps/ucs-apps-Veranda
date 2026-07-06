@@ -1370,6 +1370,17 @@ async function doLogin(){
   applyPerms();
   if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; fillForm(); }
   showView(u.sections[0]||'quotes');
+  /* Paint the configurator chips LAST — after the server image map is merged and
+     the view is shown — so uploaded product images appear immediately rather than
+     waiting for the first chip interaction. renderModelGrid lists every model
+     regardless of selection; the option chips early-return until a model is picked. */
+  try{
+    if(typeof renderModelGrid==='function')renderModelGrid();
+    if(typeof renderColourChips==='function')renderColourChips();
+    if(typeof renderRoofChips==='function')renderRoofChips();
+    if(typeof renderGutterChips==='function')renderGutterChips();
+    if(typeof renderPostChips==='function')renderPostChips();
+  }catch(e){}
 }
 function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{});document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');}
 function can(sec){return currentUser&&currentUser.sections.includes(sec);}
