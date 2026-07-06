@@ -230,7 +230,7 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .qrow:hover{border-color:var(--brand);} .qrow .qref{font-weight:700;} .qrow .qmeta{color:var(--muted);font-size:13px;} .qrow .sp{flex:1;}
 .qprepbadge{width:38px;height:38px;border-radius:50%;background:var(--brand);color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-.5px;}
 .empty{text-align:center;color:var(--muted);padding:50px 0;}
-.doctabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.doctabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;position:sticky;top:56px;z-index:30;background:var(--bg);padding:8px 0 10px;box-shadow:0 2px 6px rgba(0,0,0,.06);}
 .doctabs button{border:1px solid var(--line);background:#fff;color:var(--muted);padding:8px 15px;border-radius:8px;font-weight:600;font-size:13.5px;cursor:pointer;}
 .doctabs button.active{background:var(--brand);color:#fff;border-color:var(--brand);}
 .atabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}
@@ -3205,11 +3205,11 @@ function renderDocuments(){
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('survey_sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
       </div>`:`
-      <div class="grow" style="min-height:220px;display:flex;flex-direction:column;gap:10px">
-        <div class="gimg" style="height:200px;border-radius:10px;border:1px solid var(--line);flex-shrink:0">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;padding:8px 4px">
+      <div class="grow" style="min-height:340px;display:flex;flex-direction:column;gap:8px">
+        <div class="gimg" style="flex:1;min-height:260px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px;flex-shrink:0">
           <div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda</span></div>
-          <div class="li"><span class="k">Frame size (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
+          <div class="li"><span class="k">Frame (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
           <div class="li"><span class="k">Mounting</span><span class="v">${cf.mount}</span></div>
           <div class="li"><span class="k">Colour / Finish</span><span class="v">${ralLabel(cf.colour)}</span></div>
           <div class="li"><span class="k">Roof / Glazing</span><span class="v">${cf.roof}</span></div>
