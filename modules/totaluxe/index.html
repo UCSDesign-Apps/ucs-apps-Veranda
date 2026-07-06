@@ -1280,7 +1280,7 @@ function initLogin(){
    is used as the fallback. */
 async function loadAdminFromServer(){
   try{
-    const r=await fetch('/api/admin/config',{credentials:'include'});
+    const r=await fetch('/api/admin/config?_='+Date.now(),{credentials:'include',headers:{'Cache-Control':'no-cache'}});
     if(!r.ok)return; /* not authed, no DB, or no server config yet */
     const d=await r.json();
     if(d&&d.config){
@@ -2858,6 +2858,7 @@ function scheduleAutoSave(){
   },2000);
 }
 function saveQuote(silent){
+  if(!currentUser)return; /* not logged in yet — don't create phantom quotes */
   syncFromForm();
   state.savedAt=new Date().toISOString();
   state.savedBy=currentUser?currentUser.name:'';
@@ -2892,6 +2893,7 @@ function quickStatus(id,s){
 function deleteQuote(id,ev){ev.stopPropagation();if(!confirm('Delete this quote?'))return;_quotesCache=_quotesCache.filter(q=>q.id!==id);fetch('/api/quotes/'+id,{method:'DELETE',credentials:'include'}).catch(()=>idbDelete(id).catch(e=>console.warn('idb delete error',e)));renderQuotes();}
 function newQuote(){if(currentUser.signedOnly)return;state=blankState();if(currentUser.role==='sales')state.job.prep=currentUser.name;fillForm();initConfig();renderPricing();renderSurvey();updateTop();showView('customer');toast('New quote started');}
 function renderQuotes(){
+  if(!currentUser)return; /* not logged in yet — nothing to render */
   let qs=getQuotes();
   if(currentUser.signedOnly)qs=qs.filter(q=>q.status==='Signed');
   const el=document.getElementById('quotesList');

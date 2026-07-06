@@ -111,17 +111,30 @@ function apiRouter(pool) {
   }
 
   // ---- Auth ----
-  router.post('/auth/login', (req, res) => {
-    const { pin, module } = req.body || {};
-    const mod = module || 'totaluxe';
-    const list = USERS[mod];
-    if (!list) return res.status(400).json({ error: 'Unknown module' });
+  router.post('/auth/login', async (req, res, next) => {
+    try {
+      const { pin, module } = req.body || {};
+      const mod = module || 'totaluxe';
+      const list = USERS[mod];
+      if (!list) return res.status(400).json({ error: 'Unknown module' });
 
-    const user = list.find((entry) => entry.pin === String(pin));
-    if (!user) return res.status(401).json({ error: 'Incorrect PIN' });
+      const user = list.find((entry) => entry.pin === String(pin));
+      if (!user) return res.status(401).json({ error: 'Incorrect PIN' });
 
-    req.session.user = { ...publicUser(user), module: mod };
-    res.json({ user: req.session.user });
+      req.session.user = { ...publicUser(user), module: mod };
+      // Explicitly persist the session to the store BEFORE responding, so the
+      // Set-Cookie references a session row that already exists — avoids a race
+      // where the next request arrives before an async store write commits.
+      await new Promise((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+      // TEMP DEBUG: trace session creation — remove once auth is confirmed.
+      console.log('[auth/login] session saved, id=', req.session.id, 'user=', req.session.user.name);
+      res.json({ user: req.session.user });
+    } catch (err) {
+      console.error('[auth/login] error:', err.message);
+      next(err);
+    }
   });
 
   router.post('/auth/logout', (req, res) => {
@@ -201,6 +214,10 @@ function apiRouter(pool) {
           n + Object.values(cfg.imgmap[cat] || {}).filter(Boolean).length, 0) : 0;
         console.log(`[admin/config] GET returning imgCount=${imgCount}`);
       }
+      // Never let the browser serve a cached/304 config — admins expect the
+      // freshest image map immediately after another admin saves.
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.set('Pragma', 'no-cache');
       res.json({ config: result.rows[0] ? result.rows[0].config : null });
     } catch (err) {
       next(err);
