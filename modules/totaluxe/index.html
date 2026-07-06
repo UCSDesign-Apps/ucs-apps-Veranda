@@ -253,6 +253,8 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .grow{flex:1 1 auto;min-height:0;}
 .gimg{display:flex;overflow:hidden;}
 .gimg .imgph{width:100%;height:100%;}
+.gimg img{width:100%;height:100%;object-fit:cover;border-radius:inherit;}
+.gimg .imgph img{width:100%;height:100%;object-fit:cover;}
 .mt.tall td,.mt.tall th{padding-top:13px;padding-bottom:13px;}
 .phead{background:var(--brand);color:#fff;padding:11mm 16mm 8mm;display:flex;justify-content:space-between;align-items:flex-start;}
 .phead .wm{font-size:25px;font-weight:800;letter-spacing:-.5px;line-height:1;}
@@ -2383,12 +2385,17 @@ function renderPriceMatrix(){
   });
 }
 function renderImageMap(){
+  const uniq=a=>[...new Set(a)];
+  const allColours=uniq(Object.values(MODELS).flatMap(m=>m.colours||[]));
+  const allGutters=uniq(Object.values(MODELS).flatMap(m=>m.gutters||[]));
+  const allPosts=uniq(Object.values(MODELS).flatMap(m=>m.posts||[]));
+  const allRoofs=uniq(Object.values(MODELS).flatMap(m=>m.roofs||[]));
   const cats=[['model','Veranda render — by model',Object.keys(MODELS)],
-    ['finish','Finish / RAL — by colour',DOC_COLOURS],['gutter','Gutter — by colour',DOC_COLOURS],
-    ['gutterStyle','Gutter — by style',['Classic','Round','Straight','Integrated']],
+    ['finish','Finish / RAL — by colour',allColours.length?allColours:DOC_COLOURS],['gutter','Gutter — by colour',DOC_COLOURS],
+    ['gutterStyle','Gutter — by style',allGutters.length?allGutters:['Classic','Round','Straight','Integrated']],
     ['post','Post — by colour',DOC_COLOURS],
-    ['postStyle','Post — by style',['Round BP','Round no BP','Square BP','Square no BP','Square','Square 110mm','Square 150mm','Half-round 110mm','2 Piece Post']],
-    ['roof','Glazing — by roof type',DOC_ROOFS],
+    ['postStyle','Post — by style',allPosts.length?allPosts:['Round BP','Round no BP','Square BP','Square no BP','Square','Square 110mm','Square 150mm','Half-round 110mm','2 Piece Post']],
+    ['roof','Glazing — by roof type',allRoofs.length?allRoofs:DOC_ROOFS],
     ['side','Side infill — by option',SIDE_OPTIONS.filter(o=>o!=='None')],
     ['siderender','Side render — by side (Sides &amp; Infills page)',['front','left','right','back']],
     ['component','Picking-list component images',COMP_TYPES],
@@ -3141,7 +3148,7 @@ function renderDocuments(){
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('survey_sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
       </div>`:`
       <div class="grow" style="min-height:200px;display:grid;grid-template-columns:300px 1fr;gap:22px;align-items:stretch">
-        <div class="gimg" style="border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
+        <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
         <div class="dl" style="align-self:center"><div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda ${cw}</span></div>
           <div class="li"><span class="k">Mounting</span><span class="v">${cf.mount}</span></div>
           <div class="li"><span class="k">Frame size (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
@@ -3154,8 +3161,8 @@ function renderDocuments(){
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
-        ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutter',cf.colour,cw,64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
-        ${confirmRow('Post',cf.post+' '+cw,docImg('post',cf.colour,cw,64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
+        ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto'),true)}
+        ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto'),true)}
         ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',64,40,'margin:0 auto'),false)}
       </tbody></table>
     </div></div>${pfoot()}
