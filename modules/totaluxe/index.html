@@ -3206,7 +3206,7 @@ function renderDocuments(){
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('survey_sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
       </div>`:`
       <div class="grow" style="min-height:340px;display:flex;flex-direction:column;gap:8px">
-        <div class="gimg" style="flex:1;min-height:260px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
+        <div class="gimg" style="height:260px;border-radius:10px;border:1px solid var(--line);flex-shrink:0">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px;flex-shrink:0">
           <div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda</span></div>
           <div class="li"><span class="k">Frame (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
@@ -3446,13 +3446,11 @@ function ph(key,label,w,h,extra,src,tint){
   const extraStr=extra||'';
   const fitMatch=extraStr.match(/object-fit:\s*([\w-]+)/);
   const imgFit=fitMatch?fitMatch[1]:'cover';
-  const bgMatch=extraStr.match(/background:\s*([^;]+)/);
-  const imgBg=bgMatch?bgMatch[1]:'';
-  /* object-fit / background are routed to the <img>; strip them from the container style */
-  const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(imgBg&&!src?`background:${imgBg};`:'')+(extraStr.replace(/object-fit:[^;]+;?/g,'').replace(/background:[^;]+;?/g,'')||'');
+  /* Only object-fit is routed to the <img>; background stays on the container */
+  const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extraStr.replace(/object-fit:[^;]+;?/g,'')||'');
   /* Only the site photo is clickable — all other image placeholders are display-only */
   const clickable=(key==='survey_sitephoto');
-  return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}${imgBg?';background:'+imgBg:''}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
+  return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
 function docImg(cat,opt,label,w,hh,extra,tint){
   const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');
