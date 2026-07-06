@@ -2501,9 +2501,7 @@ async function sendSurveyToCustomer(){
     });
     for(let i=0;i<sheets.length;i++){
       const sh=sheets[i];
-      const prevT=sh.style.transform;sh.style.transform='none';
-      const canvas=await html2canvas(sh,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',width:sh.offsetWidth||794,height:sh.offsetHeight||1123});
-      sh.style.transform=prevT;
+      const {canvas}=await captureSheetForPDF(sh);
       if(i>0)doc.addPage();
       doc.addImage(canvas.toDataURL('image/jpeg',0.90),'JPEG',0,0,210,297);
     }
@@ -2550,9 +2548,7 @@ async function sendQuoteToCustomer(){
     });
     for(let i=0;i<sheets.length;i++){
       const sh=sheets[i];
-      const prevT=sh.style.transform;sh.style.transform='none';
-      const canvas=await html2canvas(sh,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',width:sh.offsetWidth||794,height:sh.offsetHeight||1123});
-      sh.style.transform=prevT;
+      const {canvas}=await captureSheetForPDF(sh);
       if(i>0)doc.addPage();
       doc.addImage(canvas.toDataURL('image/jpeg',0.90),'JPEG',0,0,210,297);
     }
@@ -2986,24 +2982,23 @@ function verandaOutlineSVG(cf){const W=cf.width,P=cf.proj;return `<svg viewBox="
 /* scale any over-full page DOWN so nothing clips; sparse pages already fill via .fill/.grow */
 function fitPages(){
   const vw=window.innerWidth;
-  const isNarrow=vw<=1024;
   document.querySelectorAll('#docwrap .sheet').forEach(sh=>{
     if(sh.offsetParent===null)return;
     sh.style.transform='';sh.style.marginBottom='';sh.style.transformOrigin='top left';
-    if(isNarrow){
-      const avail=vw-20;
-      const shW=sh.offsetWidth||794;
-      const scale=Math.min(1,avail/shW);
+    const pg=sh.querySelector('.pg');if(!pg)return;
+    pg.style.transform='';pg.style.transformOrigin='top center';
+    if(vw<=640){
+      /* Mobile: scale whole sheet to fit viewport (matches CSS width:100% override) */
+      const scale=Math.min(1,(vw-20)/(sh.offsetWidth||794));
       if(scale<1){
         sh.style.transform='scale('+scale.toFixed(4)+')';
         sh.style.marginBottom=Math.round(sh.offsetHeight*(scale-1))+'px';
       }
-      return;
+    }else{
+      /* Tablet/desktop: only scale inner .pg if content overflows */
+      const avail=pg.clientHeight,content=pg.scrollHeight;
+      if(content>avail+2){const fc=Math.max(0.55,avail/content);pg.style.transform='scale('+fc.toFixed(4)+')';}
     }
-    const pg=sh.querySelector('.pg');if(!pg)return;
-    pg.style.transform='';pg.style.transformOrigin='top center';
-    const avail2=pg.clientHeight,content=pg.scrollHeight;
-    if(content>avail2+2){const fc=Math.max(0.55,avail2/content);pg.style.transform='scale('+fc.toFixed(4)+')';}
   });
 }
 let _fitT=null;
@@ -3582,6 +3577,50 @@ function signableError(msg){
   toast('Signable error: '+msg);
   console.error('Signable error:',msg);
 }
+/* Shared sheet→canvas capture for all PDF exports.
+   Resets both the sheet transform AND the inner .pg scale that fitPages() applies,
+   forces fixed A4 print dimensions (794×1123px = 210×297mm @96dpi) with overflow
+   hidden so html2canvas sees exactly the print layout, then restores everything. */
+async function captureSheetForPDF(sh){
+  const pg=sh.querySelector('.pg');
+  const prev={
+    shTransform:sh.style.transform, shMargin:sh.style.marginBottom,
+    pgTransform:pg?pg.style.transform:'', pgOrigin:pg?pg.style.transformOrigin:'',
+    width:sh.style.width, minHeight:sh.style.minHeight, maxHeight:sh.style.maxHeight, overflow:sh.style.overflow
+  };
+  /* Fix 1 — reset sheet + inner .pg transforms */
+  sh.style.transform='none'; sh.style.marginBottom='0';
+  if(pg){ pg.style.transform='none'; pg.style.transformOrigin='top left'; }
+  /* Fix 2 — force A4 print dimensions */
+  sh.style.width='794px'; sh.style.minHeight='1123px'; sh.style.maxHeight='1123px'; sh.style.overflow='hidden';
+  try{
+    /* Measure signable cards in the SAME (forced, unscaled) coordinate system as the
+       capture, so the invisible Signable overlay tags land exactly on the boxes. */
+    const shRect=sh.getBoundingClientRect();
+    const signableCards=[];
+    sh.querySelectorAll('[data-signable]').forEach(card=>{
+      const cr=card.getBoundingClientRect();
+      signableCards.push({
+        tag:card.getAttribute('data-signable'),
+        x:((cr.left-shRect.left)/shRect.width)*210,
+        y:((cr.top-shRect.top)/shRect.height)*297,
+        w:(cr.width/shRect.width)*210,
+        h:(cr.height/shRect.height)*297
+      });
+    });
+    /* Fix 3 — capture at fixed A4 pixels, desktop window width */
+    const canvas=await html2canvas(sh,{
+      scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',
+      width:794,height:1123,windowWidth:1200,windowHeight:1123,
+      scrollX:0,scrollY:-window.scrollY,x:0,y:0
+    });
+    return {canvas,signableCards};
+  }finally{
+    sh.style.transform=prev.shTransform; sh.style.marginBottom=prev.shMargin;
+    if(pg){ pg.style.transform=prev.pgTransform; pg.style.transformOrigin=prev.pgOrigin; }
+    sh.style.width=prev.width; sh.style.minHeight=prev.minHeight; sh.style.maxHeight=prev.maxHeight; sh.style.overflow=prev.overflow;
+  }
+}
 async function contractToPDF(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -3596,37 +3635,9 @@ async function contractToPDF(){
     const sh=sheets[i];
     setSignableStep(1,`Rendering page ${i+1} of ${sheets.length}…`);
 
-    /* Snapshot signable card positions BEFORE transform removal */
-    const shRect=sh.getBoundingClientRect();
-    const signableCards=[];
-    sh.querySelectorAll('[data-signable]').forEach(card=>{
-      const cr=card.getBoundingClientRect();
-      /* Position relative to sheet, as fraction of sheet size */
-      const relX=(cr.left-shRect.left)/shRect.width;
-      const relY=(cr.top-shRect.top)/shRect.height;
-      const relW=cr.width/shRect.width;
-      const relH=cr.height/shRect.height;
-      signableCards.push({
-        tag:card.getAttribute('data-signable'),
-        x:relX*pdfW, y:relY*pdfH,
-        w:relW*pdfW, h:relH*pdfH
-      });
-    });
-
-    /* Capture sheet as image */
-    const prevTransform=sh.style.transform;
-    const prevMarginBottom=sh.style.marginBottom;
-    sh.style.transform='none';
-    sh.style.marginBottom='0';
-    const shW=sh.offsetWidth||794;
-    const shH=sh.offsetHeight||1123;
-    const canvas=await html2canvas(sh,{
-      scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',
-      width:shW,height:shH,windowWidth:shW,windowHeight:shH,
-      scrollX:0,scrollY:-window.scrollY,x:0,y:0
-    });
-    sh.style.transform=prevTransform;
-    sh.style.marginBottom=prevMarginBottom;
+    /* Capture at fixed A4 print dimensions; signable card positions are measured
+       inside the helper in the same coordinate system as the canvas. */
+    const {canvas,signableCards}=await captureSheetForPDF(sh);
 
     if(i>0)doc.addPage();
     doc.addImage(canvas.toDataURL('image/jpeg',0.90),'JPEG',0,0,pdfW,pdfH);
