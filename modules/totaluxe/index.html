@@ -3175,10 +3175,10 @@ function renderDocuments(){
           <div class="t" style="font-size:11px;margin-top:14px">Prepared by</div><div class="b" style="font-size:15px">${j.prep||'—'}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:10px;margin-top:auto;flex:1;min-height:60mm;max-height:100mm;overflow:hidden">
-        ${docImg('lifestyle','1','LIFESTYLE IMAGE',0,0,'width:100%;height:100%')}
+        ${docImg('lifestyle','1','LIFESTYLE IMAGE',0,0,'width:100%;height:100%;object-fit:contain;background:#f0f2f3')}
         <div style="display:grid;grid-template-rows:1fr 1fr;gap:10px;min-height:0">
-          ${docImg('lifestyle','2','',0,0,'width:100%;height:100%')}
-          ${docImg('lifestyle','3','',0,0,'width:100%;height:100%')}
+          ${docImg('lifestyle','2','',0,0,'width:100%;height:100%;object-fit:contain;background:#f0f2f3')}
+          ${docImg('lifestyle','3','',0,0,'width:100%;height:100%;object-fit:contain;background:#f0f2f3')}
         </div>
       </div>
     </div>
@@ -3205,16 +3205,17 @@ function renderDocuments(){
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('survey_sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
       </div>`:`
-      <div class="grow" style="min-height:200px;display:grid;grid-template-columns:300px 1fr;gap:22px;align-items:stretch">
-        <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
-        <div class="dl" style="align-self:center"><div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda ${cw}</span></div>
-          <div class="li"><span class="k">Mounting</span><span class="v">${cf.mount}</span></div>
+      <div class="grow" style="min-height:220px;display:flex;flex-direction:column;gap:10px">
+        <div class="gimg" style="height:200px;border-radius:10px;border:1px solid var(--line);flex-shrink:0">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;padding:8px 4px">
+          <div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda</span></div>
           <div class="li"><span class="k">Frame size (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
+          <div class="li"><span class="k">Mounting</span><span class="v">${cf.mount}</span></div>
           <div class="li"><span class="k">Colour / Finish</span><span class="v">${ralLabel(cf.colour)}</span></div>
           <div class="li"><span class="k">Roof / Glazing</span><span class="v">${cf.roof}</span></div>
-          <div class="li"><span class="k">Gutter</span><span class="v">${cf.gutter}</span></div>
-          <div class="li"><span class="k">Post</span><span class="v">${cf.post}</span></div>
-          ${state.doc==='survey'?`<div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>`:''}</div>
+          <div class="li"><span class="k">Gutter / Post</span><span class="v">${cf.gutter} · ${cf.post}</span></div>
+          ${state.doc==='survey'?`<div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>`:''}
+        </div>
       </div>`}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
@@ -3284,7 +3285,7 @@ function renderDocuments(){
         <div style="font-family:var(--serif);font-size:30px;font-weight:700;color:var(--brand-d)">Your Veranda or Glass Room</div>
         <div style="color:var(--gold);letter-spacing:3px;text-transform:uppercase;font-size:12px;margin-top:2px">Outdoor living, all year round</div>
       </div>
-      <div style="flex:1.4;display:grid;grid-template-columns:1fr;margin-top:4px;min-height:44mm;max-height:72mm;overflow:hidden">${docImg('lifestyle','1','LIFESTYLE IMAGE',0,0,'width:100%;height:100%;border-radius:10px')}</div>
+      <div style="flex:1.4;display:grid;grid-template-columns:1fr;margin-top:4px;min-height:44mm;max-height:72mm;overflow:hidden">${docImg('lifestyle','1','LIFESTYLE IMAGE',0,0,'width:100%;height:100%;border-radius:10px;object-fit:contain;background:#f0f2f3')}</div>
       <p style="margin:12px 0">A veranda is a stylish, roofed structure that extends your home outdoors — a comfortable space to relax, dine and entertain in all seasons. Enhance it with glass sliding doors or aluminium side panels to create a beautiful, fully enclosed glass room.</p>
       <div class="chips" style="grid-template-columns:1fr 1fr 1fr">
         <div class="chip"><div class="ct" style="display:block">Structure &amp; Design</div><div class="cs">A durable aluminium frame with a polycarbonate or glass roof — strength and longevity, with plenty of natural light for a bright, welcoming space.</div></div>
@@ -3292,8 +3293,8 @@ function renderDocuments(){
         <div class="chip"><div class="ct" style="display:block">Weather Resistance</div><div class="cs">Weatherproof with a built-in drainage system that manages rainwater. Designed to be weatherproof but not fully waterproof; some ingress can occur in certain conditions and does not imply a fault.</div></div>
       </div>
       <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;min-height:36mm;max-height:52mm;overflow:hidden">
-        ${docImg('lifestyle','4','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px')}
-        ${docImg('lifestyle','5','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px')}
+        ${docImg('lifestyle','4','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px;object-fit:contain;background:#f0f2f3')}
+        ${docImg('lifestyle','5','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px;object-fit:contain;background:#f0f2f3')}
       </div>
       <div style="background:linear-gradient(135deg,var(--gold),var(--gold-d));color:#fff;border-radius:14px;padding:16px 22px;margin-top:16px;display:flex;justify-content:space-between;align-items:center">
         <div><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.95">Today's Special Offer</div>
@@ -3442,10 +3443,16 @@ function renderDocuments(){
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
 function ph(key,label,w,h,extra,src,tint){
-  const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extra||'');
+  const extraStr=extra||'';
+  const fitMatch=extraStr.match(/object-fit:\s*([\w-]+)/);
+  const imgFit=fitMatch?fitMatch[1]:'cover';
+  const bgMatch=extraStr.match(/background:\s*([^;]+)/);
+  const imgBg=bgMatch?bgMatch[1]:'';
+  /* object-fit / background are routed to the <img>; strip them from the container style */
+  const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(imgBg&&!src?`background:${imgBg};`:'')+(extraStr.replace(/object-fit:[^;]+;?/g,'').replace(/background:[^;]+;?/g,'')||'');
   /* Only the site photo is clickable — all other image placeholders are display-only */
   const clickable=(key==='survey_sitephoto');
-  return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
+  return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}${imgBg?';background:'+imgBg:''}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
 function docImg(cat,opt,label,w,hh,extra,tint){
   const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');
