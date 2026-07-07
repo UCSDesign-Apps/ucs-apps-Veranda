@@ -705,7 +705,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="totbar"><span>Materials (incl. VAT)</span><span>£<span id="ct_materials">0.00</span></span></div>
           <div class="totbar"><span>Installation / Fitting</span><span>£<span id="ct_fitting">0.00</span></span></div>
           <div class="totbar" id="ct_row_sv" style="display:none"><span>Survey Extras (parts + labour)</span><span>£<span id="ct_svtotal">0.00</span></span></div>
-          <div class="totbar" id="ct_row_addcosts" style="display:none"><span>Additional Costs</span><span>£<span id="ct_addcosts">0.00</span></span></div>
+          <div class="totbar" id="ct_row_addcosts" style="display:none"><span>Additional Costs</span><span>£<span id="ct_addcosts_total">0.00</span></span></div>
           <div class="totbar big" style="border-top:2px solid var(--line);padding-top:10px;margin-top:6px"><span>Total Contract Value (inc. VAT)</span><span>£<span id="ct_total_contract">0.00</span></span></div>
           <div class="totbar" style="margin-top:10px;color:#555"><span>Less: Installation / Fitting</span><span>−£<span id="ct_less_fitting">0.00</span></span></div>
           <div class="totbar" style="color:#555"><span>Less: VAT (20% of materials)</span><span>−£<span id="ct_less_vat">0.00</span></span></div>
@@ -2327,95 +2327,91 @@ function renderPricing(){
   recalc();
 }
 function renderCostings(){
-  const c=state._calc;
-  if(!c){recalc();}
-  const calc=state._calc;
+  const c=state._calc; if(!c){recalc();} const calc=state._calc;
   const d=calc.discount;
-  const fitting=calc.fitting;
   const materials=calc.materials;
   const svTotal=calc.svTotal||0;
   const addCosts=Array.isArray(state.pricing.additionalCosts)?state.pricing.additionalCosts:[];
   const addCostsTotal=Math.round(addCosts.reduce((s,x)=>s+(+x.cost||0),0)*100)/100;
+  const fittingContract=calc.fitting;
+  const svLabour=calc.svLabour||0;
+  const svParts=calc.svParts||0;
   const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
-  const netContractValue=Math.round((totalContract-fitting-vatOnMaterials)*100)/100;
-  /* Additional costs can lift the effective discount band used for commission. */
-  const effectiveDiscount=addCostsTotal>0
-    ?Math.round((1-(netContractValue/(totalContract||1)))*100)
-    :d;
+  const netContractValue=Math.round((totalContract-fittingContract-vatOnMaterials)*100)/100;
+  const effectiveDiscount=addCostsTotal>0?Math.round((1-(netContractValue/(totalContract||1)))*100):d;
   const displayDiscount=Math.max(d,effectiveDiscount);
-  const specialOffer=state.pricing.specialOffer||false;
-  const managerApproval=state.pricing.managerApproval||false;
-  /* Special Offer shifts the discount band down one tier:
-     >40 → 40 (bonus only), 35–40 → 35 (commission + bonus). */
+  const bandShifted=addCostsTotal>0&&displayDiscount>d;
+  const specialOffer=!!state.pricing.specialOffer;
+  const managerApproval=!!state.pricing.managerApproval;
   let effectiveBand=displayDiscount;
-  if(specialOffer){
-    if(displayDiscount>40)effectiveBand=40;
-    else if(displayDiscount>35)effectiveBand=35;
-  }
-  let commissionRate=0,commissionLabel='Nil',bonusEligible=false;
+  if(specialOffer){if(displayDiscount>40)effectiveBand=40;else if(displayDiscount>35)effectiveBand=35;}
+  let commissionRate=0,commissionLabel='Nil',bonusEligible=false,bandLabel='';
   if(managerApproval){
-    /* Manager Approval overrides everything: no commission, no bonus. */
     commissionRate=0;commissionLabel='Nil';bonusEligible=false;
-  }else if(effectiveBand<=35){commissionRate=4;commissionLabel='4%';bonusEligible=true;}
-  else if(effectiveBand<=40){commissionRate=0;commissionLabel='Nil';bonusEligible=true;}
-  else{commissionRate=0;commissionLabel='Nil';bonusEligible=false;}
+    bandLabel='<span style="color:#ed1c2d;font-weight:700">🔒 Manager Approval — No Commission / No Bonus</span>';
+  }else if(effectiveBand<=35){
+    commissionRate=4;commissionLabel='4%';bonusEligible=true;
+    bandLabel=specialOffer&&displayDiscount>35
+      ?'<span style="color:#856404;font-weight:700">🏷 Special Offer ('+displayDiscount+'% → 35%)</span>'
+      :'<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';
+  }else if(effectiveBand<=40){
+    commissionRate=0;commissionLabel='Nil';bonusEligible=true;
+    bandLabel=specialOffer&&displayDiscount>40
+      ?'<span style="color:#856404;font-weight:700">🏷 Special Offer ('+displayDiscount+'% → 40%)</span>'
+      :'<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';
+  }else{
+    commissionRate=0;commissionLabel='Nil';bonusEligible=false;
+    bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';
+  }
   const commissionValue=commissionRate>0?Math.round((netContractValue*commissionRate/100)*100)/100:0;
-  T('ct_materials',money(materials));T('ct_fitting',money(fitting));
-  T('ct_svtotal',money(svTotal));T('ct_total_contract',money(totalContract));
-  T('ct_less_fitting',money(fitting));T('ct_less_vat',money(vatOnMaterials));
-  T('ct_net_value',money(netContractValue));T('ct_band',displayDiscount+'%');
-  T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
-  (function(){
-    const bonusEl=document.getElementById('ct_bonus_label');
-    if(bonusEl)bonusEl.innerHTML=bonusEligible
-      ?'<span style="color:#1a6b3a;font-size:15px">✅ Yes — included in bonus</span>'
-      :'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>';
-  })();
-  let bandLabel='';
-  if(managerApproval){bandLabel='<span style="color:#ed1c2d;font-weight:700">🔒 Manager Approval — No Commission / No Bonus</span>';}
-  else if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer ('+displayDiscount+'% → '+effectiveBand+'%)</span>';}
-  else if(displayDiscount<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
-  else if(displayDiscount<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
-  else{bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';}
-  (function(){const bel=document.getElementById('ct_band_label');if(bel)bel.innerHTML=bandLabel;})();
-  const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
-  const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
-  const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
-  const maCb=document.getElementById('ct_manager_approval');if(maCb)maCb.checked=managerApproval;
-  /* Additional costs row in the breakdown card */
-  T('ct_addcosts',money(addCostsTotal));
-  const acRow=document.getElementById('ct_row_addcosts');if(acRow)acRow.style.display=addCostsTotal>0?'':'none';
-  /* Per-component COST breakdown — cost prices, ex-VAT, ex-markup (internal only) */
   const hesc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const money2=v=>(v<0?'−£'+money(-v):'£'+money(v));
   const cf=state.config;
   const baseCost=basePrice(cf.model,cf.width,cf.proj,cf.roof)||0;
   const relSides=(cf.mount==='Free Standing')?['front','left','right','back']:['front','left','right'];
-  const brk=[['Veranda base (frame + roof)',Math.round(baseCost*100)/100]];
-  let costTotal=baseCost;
+  const sideNames={front:'Front',left:'Left',right:'Right',back:'Back'};
+  let brkHTML='';
+  let materialCostTotal=baseCost;
+  brkHTML+=`<tr><td>${hesc(displayName(cf.model)||cf.model)} (${cf.width||'—'}×${cf.proj||'—'}mm)</td><td class="r">${money2(baseCost)}</td></tr>`;
   relSides.forEach(s=>{
-    const opt=cf.sides?cf.sides[s]:'None';
+    const opt=(cf.sides&&cf.sides[s])||'None';
     if(!opt||opt==='None')return;
     const fake=Object.assign({},cf,{sides:Object.assign({},cf.sides)});
     relSides.forEach(s2=>{if(s2!==s)fake.sides[s2]='None';});
-    const sideCost=sidesCost(fake)||0;  /* ex-VAT, ex-markup — no mu applied */
-    costTotal+=sideCost;
-    brk.push([(SIDE_LBL[s]||s)+' side — '+opt,Math.round(sideCost*100)/100]);
+    const sc=sidesCost(fake)||0;
+    materialCostTotal+=sc;
+    brkHTML+=`<tr><td>${sideNames[s]} side — ${hesc(opt)}</td><td class="r">${money2(sc)}</td></tr>`;
   });
-  brk.push(['Installation / Fitting',fitting]);costTotal+=fitting;
-  if(svTotal>0){brk.push(['Survey extras (parts + labour)',svTotal]);costTotal+=svTotal;}
-  addCosts.forEach(x=>{const v=+x.cost||0;brk.push([x.desc||'Additional cost',v]);costTotal+=v;});
-  costTotal=Math.round(costTotal*100)/100;
-  let brkHTML=brk.map(r=>`<tr><td>${hesc(r[0])}</td><td class="r">${money2(r[1])}</td></tr>`).join('');
-  if(addCostsTotal>0&&displayDiscount>d)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px"><td colspan="2">⚠ Additional costs shifted band from ${d}% to ${displayDiscount}%</td></tr>`;
-  brkHTML+=`<tr style="font-weight:800"><td>Total Cost (ex-VAT, ex-markup)</td><td class="r">£${money(costTotal)}</td></tr>`;
-  const brkEl=document.getElementById('ct_breakdown_rows');
-  if(brkEl)brkEl.innerHTML=brkHTML;
+  brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Materials subtotal (ex-VAT, ex-markup)</td><td class="r">${money2(Math.round(materialCostTotal*100)/100)}</td></tr>`;
+  brkHTML+=`<tr><td>Installation &amp; Fitting</td><td class="r">${money2(fittingContract)}</td></tr>`;
+  if(svParts>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — parts</td><td class="r">${money2(svParts)}</td></tr>`;
+  if(svLabour>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — labour</td><td class="r">${money2(svLabour)}</td></tr>`;
+  addCosts.forEach(x=>{const v=+x.cost||0;brkHTML+=`<tr style="color:#666"><td>${hesc(x.desc||'Additional cost')}</td><td class="r">${money2(v)}</td></tr>`;});
+  if(bandShifted)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px;font-style:italic"><td colspan="2">⚠ Additional costs have shifted the effective band from ${d}% to ${displayDiscount}%</td></tr>`;
+  const costTotal=Math.round((materialCostTotal+fittingContract+svTotal+addCostsTotal)*100)/100;
+  brkHTML+=`<tr style="font-weight:800;border-top:2px solid var(--line)"><td>Total Cost (ex-VAT, ex-markup)</td><td class="r">${money2(costTotal)}</td></tr>`;
+  const brkEl=document.getElementById('ct_breakdown_rows');if(brkEl)brkEl.innerHTML=brkHTML;
   const listEl=document.getElementById('ct_addcost_list');
   if(listEl)listEl.innerHTML=addCosts.length
-    ?addCosts.map((x,i)=>`<div class="totbar"><span>${hesc(x.desc||'Additional cost')}</span><span>£${money(+x.cost||0)} <button class="btn sm danger" onclick="removeCostingExtra(${i})" style="margin-left:8px">✕</button></span></div>`).join('')
-    :'<div class="muted">No additional costs added.</div>';
+    ?addCosts.map((x,i)=>`<div class="totbar"><span>${hesc(x.desc||'Additional cost')}</span><span>£${money(+x.cost||0)}&nbsp;<button class="btn sm" onclick="removeCostingExtra(${i})" style="padding:2px 8px;font-size:11px;color:#ed1c2d;border-color:#ed1c2d">✕</button></span></div>`).join('')
+    :'<div class="muted" style="font-size:12px">No additional costs added.</div>';
+  T('ct_materials',money(materials));T('ct_fitting',money(fittingContract));
+  T('ct_svtotal',money(svTotal));T('ct_addcosts_total',money(addCostsTotal));
+  T('ct_total_contract',money(totalContract));T('ct_less_fitting',money(fittingContract));
+  T('ct_less_vat',money(vatOnMaterials));T('ct_net_value',money(netContractValue));
+  T('ct_band',displayDiscount+'%'+(bandShifted?' ⚠ (was '+d+'%)':''));
+  T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
+  const bonusEl=document.getElementById('ct_bonus_label');
+  if(bonusEl)bonusEl.innerHTML=bonusEligible
+    ?'<span style="color:#1a6b3a;font-size:15px">✅ Yes — included in bonus</span>'
+    :'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>';
+  const bel=document.getElementById('ct_band_label');if(bel)bel.innerHTML=bandLabel;
+  const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
+  const acRow=document.getElementById('ct_row_addcosts');if(acRow)acRow.style.display=addCostsTotal>0?'':'none';
+  const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
+  const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
+  const maCb=document.getElementById('ct_manager_approval');if(maCb)maCb.checked=managerApproval;
 }
 function toggleSpecialOffer(){
   const cb=document.getElementById('ct_special_offer');
