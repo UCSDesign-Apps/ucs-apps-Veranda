@@ -722,12 +722,21 @@ body.print-internal .internal-notes-only{display:block !important;}
               <div style="font-size:16px;font-weight:700" id="ct_band_label">—</div>
             </div>
           </div>
-          <div id="ct_special_offer_row" style="display:none;background:#fff8e1;border:1.5px solid #ffc107;border-radius:10px;padding:12px 16px;margin-bottom:16px">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
-              <input type="checkbox" id="ct_special_offer" onchange="toggleSpecialOffer()" style="width:18px;height:18px">
-              <span>🏷 Special Offer Override — treat as 40% band for commission purposes</span>
-            </label>
-            <div class="muted" style="margin-top:4px;margin-left:28px">Tick when a special offer justifies the higher discount.</div>
+          <div style="display:grid;gap:10px;margin-bottom:16px">
+            <div id="ct_special_offer_row" style="background:#fff8e1;border:1.5px solid #ffc107;border-radius:10px;padding:12px 16px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
+                <input type="checkbox" id="ct_special_offer" onchange="toggleSpecialOffer()" style="width:18px;height:18px">
+                <span>🏷 Special Offer Override</span>
+              </label>
+              <div class="muted" style="margin-top:4px;margin-left:28px">Shifts band down one tier: 45% treated as 40% (bonus only), 40% treated as 35% (commission + bonus).</div>
+            </div>
+            <div id="ct_manager_approval_row" style="background:#fdecea;border:1.5px solid #ed1c2d;border-radius:10px;padding:12px 16px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
+                <input type="checkbox" id="ct_manager_approval" onchange="toggleManagerApproval()" style="width:18px;height:18px">
+                <span>🔒 Manager Approval — No Commission / No Bonus</span>
+              </label>
+              <div class="muted" style="margin-top:4px;margin-left:28px">Overrides all bands: this job earns no commission and is excluded from bonus.</div>
+            </div>
           </div>
           <div id="ct_commission_panel">
             <div class="totbar big" style="margin-bottom:4px"><span>Commission Rate</span><span id="ct_commission_rate" style="font-weight:700">—</span></div>
@@ -1461,7 +1470,7 @@ function blankState(){return{
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
-  pricing:{discount:30,youpay:0,specialOffer:false},
+  pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{}
 };}
 let state=blankState();
@@ -2312,11 +2321,21 @@ function renderCostings(){
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fitting-vatOnMaterials)*100)/100;
   const specialOffer=state.pricing.specialOffer||false;
-  const effectiveBand=specialOffer?40:d;
-  let commissionRate=0,commissionLabel='',bonusEligible=false,showSpecialOfferRow=false;
-  if(effectiveBand<=35){commissionRate=4;commissionLabel='4%';bonusEligible=true;}
+  const managerApproval=state.pricing.managerApproval||false;
+  /* Special Offer shifts the discount band down one tier:
+     >40 → 40 (bonus only), 35–40 → 35 (commission + bonus). */
+  let effectiveBand=d;
+  if(specialOffer){
+    if(d>40)effectiveBand=40;
+    else if(d>35)effectiveBand=35;
+  }
+  let commissionRate=0,commissionLabel='Nil',bonusEligible=false;
+  if(managerApproval){
+    /* Manager Approval overrides everything: no commission, no bonus. */
+    commissionRate=0;commissionLabel='Nil';bonusEligible=false;
+  }else if(effectiveBand<=35){commissionRate=4;commissionLabel='4%';bonusEligible=true;}
   else if(effectiveBand<=40){commissionRate=0;commissionLabel='Nil';bonusEligible=true;}
-  else{commissionRate=0;commissionLabel='Nil';bonusEligible=false;showSpecialOfferRow=true;}
+  else{commissionRate=0;commissionLabel='Nil';bonusEligible=false;}
   const commissionValue=commissionRate>0?Math.round((netContractValue*commissionRate/100)*100)/100:0;
   T('ct_materials',money(materials));T('ct_fitting',money(fitting));
   T('ct_svtotal',money(svTotal));T('ct_total_contract',money(totalContract));
@@ -2330,21 +2349,30 @@ function renderCostings(){
       :'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>';
   })();
   let bandLabel='';
-  if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer (treated as 40%)</span>';}
+  if(managerApproval){bandLabel='<span style="color:#ed1c2d;font-weight:700">🔒 Manager Approval — No Commission / No Bonus</span>';}
+  else if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer ('+d+'% → '+effectiveBand+'%)</span>';}
   else if(d<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
   else if(d<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
   else{bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';}
   (function(){const bel=document.getElementById('ct_band_label');if(bel)bel.innerHTML=bandLabel;})();
   const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
   const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
-  const soRow=document.getElementById('ct_special_offer_row');if(soRow)soRow.style.display=(showSpecialOfferRow||specialOffer)?'':'none';
   const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
+  const maCb=document.getElementById('ct_manager_approval');if(maCb)maCb.checked=managerApproval;
 }
 function toggleSpecialOffer(){
   const cb=document.getElementById('ct_special_offer');
   state.pricing.specialOffer=cb?cb.checked:false;
+  if(state.pricing.specialOffer)state.pricing.managerApproval=false;
   renderCostings();saveQuote(true);
   toast(state.pricing.specialOffer?'Special Offer override applied':'Special Offer override removed');
+}
+function toggleManagerApproval(){
+  const cb=document.getElementById('ct_manager_approval');
+  state.pricing.managerApproval=cb?cb.checked:false;
+  if(state.pricing.managerApproval)state.pricing.specialOffer=false;
+  renderCostings();saveQuote(true);
+  toast(state.pricing.managerApproval?'Manager Approval applied — no commission/bonus':'Manager Approval removed');
 }
 function toggleOtherPart(wrapId,sel){
   const wrap=document.getElementById(wrapId);
