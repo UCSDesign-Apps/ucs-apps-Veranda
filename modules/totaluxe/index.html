@@ -705,10 +705,27 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="totbar"><span>Materials (incl. VAT)</span><span>£<span id="ct_materials">0.00</span></span></div>
           <div class="totbar"><span>Installation / Fitting</span><span>£<span id="ct_fitting">0.00</span></span></div>
           <div class="totbar" id="ct_row_sv" style="display:none"><span>Survey Extras (parts + labour)</span><span>£<span id="ct_svtotal">0.00</span></span></div>
+          <div class="totbar" id="ct_row_addcosts" style="display:none"><span>Additional Costs</span><span>£<span id="ct_addcosts">0.00</span></span></div>
           <div class="totbar big" style="border-top:2px solid var(--line);padding-top:10px;margin-top:6px"><span>Total Contract Value (inc. VAT)</span><span>£<span id="ct_total_contract">0.00</span></span></div>
           <div class="totbar" style="margin-top:10px;color:#555"><span>Less: Installation / Fitting</span><span>−£<span id="ct_less_fitting">0.00</span></span></div>
           <div class="totbar" style="color:#555"><span>Less: VAT (20% of materials)</span><span>−£<span id="ct_less_vat">0.00</span></span></div>
           <div class="totbar big" style="background:var(--brand);color:#fff;border-radius:10px;padding:12px 16px;margin-top:8px"><span>Net Contract Value</span><span>£<span id="ct_net_value">0.00</span></span></div>
+        </div>
+        <div class="card">
+          <h2>Price Breakdown</h2>
+          <table class="tbl"><thead><tr><th>Component</th><th class="r">Amount</th></tr></thead>
+          <tbody id="ct_breakdown_rows"></tbody></table>
+          <div class="muted" style="margin-top:6px">Condensed per-component breakdown reconciling to the Total Contract Value.</div>
+        </div>
+        <div class="card">
+          <h2>Additional Costs</h2>
+          <div class="sub">Extra internal costs added to the contract value (not shown on customer documents).</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+            <input id="ct_addcost_desc" placeholder="Description" style="flex:1;min-width:160px;border:1px solid #d7dee0;border-radius:6px;padding:8px 10px;font:inherit">
+            <input id="ct_addcost_amount" type="number" step="0.01" placeholder="£ amount" style="width:120px;border:1px solid #d7dee0;border-radius:6px;padding:8px 10px;font:inherit;text-align:right">
+            <button class="btn primary" onclick="addCostingExtra()">Add</button>
+          </div>
+          <div id="ct_addcost_list"></div>
         </div>
         <div class="card">
           <h2>Discount Band &amp; Commission</h2>
@@ -1470,7 +1487,7 @@ function blankState(){return{
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
-  pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false},
+  pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false,additionalCosts:[]},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{}
 };}
 let state=blankState();
@@ -2317,7 +2334,9 @@ function renderCostings(){
   const fitting=calc.fitting;
   const materials=calc.materials;
   const svTotal=calc.svTotal||0;
-  const totalContract=Math.round((calc.youpay+svTotal)*100)/100;
+  const addCosts=Array.isArray(state.pricing.additionalCosts)?state.pricing.additionalCosts:[];
+  const addCostsTotal=Math.round(addCosts.reduce((s,x)=>s+(+x.cost||0),0)*100)/100;
+  const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fitting-vatOnMaterials)*100)/100;
   const specialOffer=state.pricing.specialOffer||false;
@@ -2359,6 +2378,34 @@ function renderCostings(){
   const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
   const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
   const maCb=document.getElementById('ct_manager_approval');if(maCb)maCb.checked=managerApproval;
+  /* Additional costs row in the breakdown card */
+  T('ct_addcosts',money(addCostsTotal));
+  const acRow=document.getElementById('ct_row_addcosts');if(acRow)acRow.style.display=addCostsTotal>0?'':'none';
+  /* Condensed per-component price breakdown (reconciles to Total Contract Value) */
+  const hesc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const money2=v=>(v<0?'−£'+money(-v):'£'+money(v));
+  const markup=1+(+admin.markup||0)/100;
+  const cf=state.config;
+  const baseSell=Math.round(((basePrice(cf.model,cf.width,cf.proj,cf.roof)||0)*markup)*100)/100;
+  const relSides=(cf.mount==='Free Standing')?['front','left','right','back']:['front','left','right'];
+  const brk=[['Veranda base (frame + roof)',baseSell]];
+  relSides.forEach(s=>{
+    const opt=cf.sides?cf.sides[s]:'None';
+    if(!opt||opt==='None')return;
+    const tmp=Object.assign({},cf,{sides:Object.assign({front:'None',left:'None',right:'None',back:'None'},{[s]:opt})});
+    brk.push([(SIDE_LBL[s]||s)+' side — '+opt,Math.round(sidesCost(tmp)*markup*100)/100]);
+  });
+  if(calc.matDiscAmt>0)brk.push(['Materials discount ('+d+'%)',-calc.matDiscAmt]);
+  brk.push(['Installation / Fitting',fitting]);
+  if(svTotal>0)brk.push(['Survey extras (parts + labour)',svTotal]);
+  addCosts.forEach(x=>brk.push([x.desc||'Additional cost',+x.cost||0]));
+  const brkEl=document.getElementById('ct_breakdown_rows');
+  if(brkEl)brkEl.innerHTML=brk.map(r=>`<tr><td>${hesc(r[0])}</td><td class="r">${money2(r[1])}</td></tr>`).join('')
+    +`<tr style="font-weight:800"><td>Total Contract Value</td><td class="r">£${money(totalContract)}</td></tr>`;
+  const listEl=document.getElementById('ct_addcost_list');
+  if(listEl)listEl.innerHTML=addCosts.length
+    ?addCosts.map((x,i)=>`<div class="totbar"><span>${hesc(x.desc||'Additional cost')}</span><span>£${money(+x.cost||0)} <button class="btn sm danger" onclick="removeCostingExtra(${i})" style="margin-left:8px">✕</button></span></div>`).join('')
+    :'<div class="muted">No additional costs added.</div>';
 }
 function toggleSpecialOffer(){
   const cb=document.getElementById('ct_special_offer');
@@ -2373,6 +2420,24 @@ function toggleManagerApproval(){
   if(state.pricing.managerApproval)state.pricing.specialOffer=false;
   renderCostings();saveQuote(true);
   toast(state.pricing.managerApproval?'Manager Approval applied — no commission/bonus':'Manager Approval removed');
+}
+function addCostingExtra(){
+  const descEl=document.getElementById('ct_addcost_desc');
+  const amtEl=document.getElementById('ct_addcost_amount');
+  const desc=descEl?descEl.value.trim():'';
+  const amount=amtEl?(+amtEl.value||0):0;
+  if(!desc||!amount){toast('Enter a description and amount');return;}
+  if(!Array.isArray(state.pricing.additionalCosts))state.pricing.additionalCosts=[];
+  state.pricing.additionalCosts.push({desc,cost:Math.round(amount*100)/100});
+  if(descEl)descEl.value='';if(amtEl)amtEl.value='';
+  renderCostings();saveQuote(true);
+  toast('Additional cost added');
+}
+function removeCostingExtra(i){
+  if(!Array.isArray(state.pricing.additionalCosts))return;
+  state.pricing.additionalCosts.splice(i,1);
+  renderCostings();saveQuote(true);
+  toast('Additional cost removed');
 }
 function toggleOtherPart(wrapId,sel){
   const wrap=document.getElementById(wrapId);
