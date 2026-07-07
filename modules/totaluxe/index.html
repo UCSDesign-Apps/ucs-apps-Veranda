@@ -731,14 +731,21 @@ body.print-internal .internal-notes-only{display:block !important;}
           <h2>Discount Band &amp; Commission</h2>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
             <div style="background:#f4f6f7;border-radius:10px;padding:14px 16px">
-              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Discount Band Used</div>
-              <div style="font-size:32px;font-weight:800;color:var(--brand)" id="ct_band">—%</div>
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Sold At Band</div>
+              <div style="font-size:28px;font-weight:800;color:var(--brand)" id="ct_band_sold">—%</div>
+              <div style="font-size:11px;color:#888;margin-top:2px">Selected discount</div>
+            </div>
+            <div style="background:#f4f6f7;border-radius:10px;padding:14px 16px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Costed At Band</div>
+              <div style="font-size:28px;font-weight:800" id="ct_band_costed">—%</div>
+              <div style="font-size:11px;color:#888;margin-top:2px">Actual effective band</div>
             </div>
             <div style="background:#f4f6f7;border-radius:10px;padding:14px 16px">
               <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Band Category</div>
               <div style="font-size:16px;font-weight:700" id="ct_band_label">—</div>
             </div>
           </div>
+          <div id="ct_band_warning" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;color:#856404;margin-bottom:10px"></div>
           <div style="display:grid;gap:10px;margin-bottom:16px">
             <div id="ct_special_offer_row" style="background:#fff8e1;border:1.5px solid #ffc107;border-radius:10px;padding:12px 16px">
               <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
@@ -2339,10 +2346,13 @@ function renderCostings(){
   const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fittingContract-vatOnMaterials)*100)/100;
-  /* Band is always the materials discount selected — fitting and additional costs
-     are fixed costs excluded from band calculation */
-  const displayDiscount=d;
-  const bandShifted=false;
+  const soldAtBand=d;
+  const _mCostExVat=(basePrice(state.config.model,state.config.width,state.config.proj,state.config.roof)||0)+sidesCost(state.config);
+  const _listIncVat=Math.round(_mCostExVat*2.5*1.2*100)/100;
+  const _revenueExFitting=Math.round((calc.matNet*1.2+svTotal+addCostsTotal)*100)/100;
+  const costedAtBand=_listIncVat>0?Math.max(0,Math.round((1-(_revenueExFitting/_listIncVat))*100)):soldAtBand;
+  const displayDiscount=soldAtBand;
+  const bandShifted=costedAtBand!==soldAtBand;
   const specialOffer=!!state.pricing.specialOffer;
   const managerApproval=!!state.pricing.managerApproval;
   let effectiveBand=displayDiscount;
@@ -2389,7 +2399,7 @@ function renderCostings(){
   if(svParts>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — parts</td><td class="r">${money2(svParts)}</td></tr>`;
   if(svLabour>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — labour</td><td class="r">${money2(svLabour)}</td></tr>`;
   addCosts.forEach(x=>{const v=+x.cost||0;brkHTML+=`<tr style="color:#666"><td>${hesc(x.desc||'Additional cost')}</td><td class="r">${money2(v)}</td></tr>`;});
-  if(bandShifted)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px;font-style:italic"><td colspan="2">⚠ Additional costs have shifted the effective band from ${d}% to ${displayDiscount}%</td></tr>`;
+  if(bandShifted)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px;font-style:italic"><td colspan="2">⚠ Sold at ${soldAtBand}% — costed at ${costedAtBand}% (effective band including all costs)</td></tr>`;
   const costTotal=Math.round((materialCostTotal+fittingContract+svTotal+addCostsTotal)*100)/100;
   brkHTML+=`<tr style="font-weight:800;border-top:2px solid var(--line)"><td>Total Cost (ex-VAT, ex-markup)</td><td class="r">${money2(costTotal)}</td></tr>`;
   const brkEl=document.getElementById('ct_breakdown_rows');if(brkEl)brkEl.innerHTML=brkHTML;
@@ -2401,7 +2411,19 @@ function renderCostings(){
   T('ct_svtotal',money(svTotal));T('ct_addcosts_total',money(addCostsTotal));
   T('ct_total_contract',money(totalContract));T('ct_less_fitting',money(fittingContract));
   T('ct_less_vat',money(vatOnMaterials));T('ct_net_value',money(netContractValue));
-  T('ct_band',displayDiscount+'%'+(bandShifted?' ⚠ (was '+d+'%)':''));
+  T('ct_band_sold',soldAtBand+'%');
+  T('ct_band_costed',costedAtBand+'%');
+  (function(){
+    const cel=document.getElementById('ct_band_costed');
+    if(cel)cel.style.color=costedAtBand<=35?'#1a6b3a':costedAtBand<=40?'#9a6200':'#ed1c2d';
+    const wel=document.getElementById('ct_band_warning');
+    if(wel){
+      if(bandShifted){
+        wel.textContent='⚠ Sold at '+soldAtBand+'% — costed at '+costedAtBand+'% (actual effective band including all costs)';
+        wel.style.display='';
+      } else { wel.style.display='none'; }
+    }
+  })();
   T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
   const bonusEl=document.getElementById('ct_bonus_label');
   if(bonusEl)bonusEl.innerHTML=bonusEligible
