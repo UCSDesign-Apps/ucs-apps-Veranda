@@ -17,7 +17,7 @@ const msal = require('@azure/msal-node');
 
 // Section/doc lists mirror the client's ALL_SECTIONS / ALL_DOCS so the user
 // object returned on login drives the same UI nav as the client-side fallback.
-const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs', 'admin'];
+const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs', 'costings', 'admin'];
 const ALL_DOCS = ['quote', 'contract', 'survey', 'picking'];
 const SALES_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs'];
 
@@ -122,6 +122,27 @@ function apiRouter(pool) {
       if (!user) return res.status(401).json({ error: 'Incorrect PIN' });
 
       req.session.user = { ...publicUser(user), module: mod };
+      // Per-user permission overrides: admins grant/revoke sections & docs via
+      // Admin → Users, which is persisted into admin_config. Apply the saved
+      // entry for this user so permission changes take effect without a deploy.
+      // The 'admin' role always keeps its full hardcoded access — never let a
+      // stale saved config lock an administrator out of a section.
+      if (user.role !== 'admin' && pool) {
+        try {
+          const cfg = await pool.query('SELECT config FROM admin_config WHERE module = $1', [mod]);
+          const savedUsers = cfg.rows[0] && cfg.rows[0].config && cfg.rows[0].config.users;
+          if (Array.isArray(savedUsers)) {
+            const match = savedUsers.find((su) => su && su.u === user.u);
+            if (match) {
+              if (Array.isArray(match.sections)) req.session.user.sections = match.sections;
+              if (Array.isArray(match.docs)) req.session.user.docs = match.docs;
+              if (typeof match.signedOnly === 'boolean') req.session.user.signedOnly = match.signedOnly;
+            }
+          }
+        } catch (e) {
+          console.warn('[auth/login] per-user permission merge skipped:', e.message);
+        }
+      }
       // Explicitly persist the session to the store BEFORE responding, so the
       // Set-Cookie references a session row that already exists — avoids a race
       // where the next request arrives before an async store write commits.
