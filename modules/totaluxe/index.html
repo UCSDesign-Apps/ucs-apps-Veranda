@@ -2323,13 +2323,18 @@ function renderCostings(){
   T('ct_less_fitting',money(fitting));T('ct_less_vat',money(vatOnMaterials));
   T('ct_net_value',money(netContractValue));T('ct_band',d+'%');
   T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
-  T('ct_bonus_label',bonusEligible?'<span style="color:#1a6b3a;font-size:15px">✅ Yes — included in bonus</span>':'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>');
+  (function(){
+    const bonusEl=document.getElementById('ct_bonus_label');
+    if(bonusEl)bonusEl.innerHTML=bonusEligible
+      ?'<span style="color:#1a6b3a;font-size:15px">✅ Yes — included in bonus</span>'
+      :'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>';
+  })();
   let bandLabel='';
   if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer (treated as 40%)</span>';}
   else if(d<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
   else if(d<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
   else{bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';}
-  T('ct_band_label',bandLabel);
+  (function(){const bel=document.getElementById('ct_band_label');if(bel)bel.innerHTML=bandLabel;})();
   const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
   const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
   const soRow=document.getElementById('ct_special_offer_row');if(soRow)soRow.style.display=(showSpecialOfferRow||specialOffer)?'':'none';
