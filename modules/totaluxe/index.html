@@ -1313,7 +1313,7 @@ const USERS_SEED=[
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
-  markup:100,vatRate:20,depPct:10,
+  markup:150,vatRate:20,depPct:10,
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
   fitting:JSON.parse(JSON.stringify(FITTING_SEED)),
@@ -2339,9 +2339,10 @@ function renderCostings(){
   const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fittingContract-vatOnMaterials)*100)/100;
-  const effectiveDiscount=addCostsTotal>0?Math.round((1-(netContractValue/(totalContract||1)))*100):d;
-  const displayDiscount=Math.max(d,effectiveDiscount);
-  const bandShifted=addCostsTotal>0&&displayDiscount>d;
+  /* Band is always the materials discount selected — fitting and additional costs
+     are fixed costs excluded from band calculation */
+  const displayDiscount=d;
+  const bandShifted=false;
   const specialOffer=!!state.pricing.specialOffer;
   const managerApproval=!!state.pricing.managerApproval;
   let effectiveBand=displayDiscount;
