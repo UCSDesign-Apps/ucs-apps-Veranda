@@ -712,10 +712,10 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="totbar big" style="background:var(--brand);color:#fff;border-radius:10px;padding:12px 16px;margin-top:8px"><span>Net Contract Value</span><span>£<span id="ct_net_value">0.00</span></span></div>
         </div>
         <div class="card">
-          <h2>Price Breakdown</h2>
+          <h2>Costs Breakdown</h2>
           <table class="tbl"><thead><tr><th>Component</th><th class="r">Amount</th></tr></thead>
           <tbody id="ct_breakdown_rows"></tbody></table>
-          <div class="muted" style="margin-top:6px">Condensed per-component breakdown reconciling to the Total Contract Value.</div>
+          <div class="muted" style="margin-top:6px">Cost prices only (ex-VAT, ex-markup). For internal use.</div>
         </div>
         <div class="card">
           <h2>Additional Costs</h2>
@@ -2339,14 +2339,19 @@ function renderCostings(){
   const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fitting-vatOnMaterials)*100)/100;
+  /* Additional costs can lift the effective discount band used for commission. */
+  const effectiveDiscount=addCostsTotal>0
+    ?Math.round((1-(netContractValue/(totalContract||1)))*100)
+    :d;
+  const displayDiscount=Math.max(d,effectiveDiscount);
   const specialOffer=state.pricing.specialOffer||false;
   const managerApproval=state.pricing.managerApproval||false;
   /* Special Offer shifts the discount band down one tier:
      >40 → 40 (bonus only), 35–40 → 35 (commission + bonus). */
-  let effectiveBand=d;
+  let effectiveBand=displayDiscount;
   if(specialOffer){
-    if(d>40)effectiveBand=40;
-    else if(d>35)effectiveBand=35;
+    if(displayDiscount>40)effectiveBand=40;
+    else if(displayDiscount>35)effectiveBand=35;
   }
   let commissionRate=0,commissionLabel='Nil',bonusEligible=false;
   if(managerApproval){
@@ -2359,7 +2364,7 @@ function renderCostings(){
   T('ct_materials',money(materials));T('ct_fitting',money(fitting));
   T('ct_svtotal',money(svTotal));T('ct_total_contract',money(totalContract));
   T('ct_less_fitting',money(fitting));T('ct_less_vat',money(vatOnMaterials));
-  T('ct_net_value',money(netContractValue));T('ct_band',d+'%');
+  T('ct_net_value',money(netContractValue));T('ct_band',displayDiscount+'%');
   T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
   (function(){
     const bonusEl=document.getElementById('ct_bonus_label');
@@ -2369,9 +2374,9 @@ function renderCostings(){
   })();
   let bandLabel='';
   if(managerApproval){bandLabel='<span style="color:#ed1c2d;font-weight:700">🔒 Manager Approval — No Commission / No Bonus</span>';}
-  else if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer ('+d+'% → '+effectiveBand+'%)</span>';}
-  else if(d<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
-  else if(d<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
+  else if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer ('+displayDiscount+'% → '+effectiveBand+'%)</span>';}
+  else if(displayDiscount<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
+  else if(displayDiscount<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
   else{bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';}
   (function(){const bel=document.getElementById('ct_band_label');if(bel)bel.innerHTML=bandLabel;})();
   const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
@@ -2381,27 +2386,32 @@ function renderCostings(){
   /* Additional costs row in the breakdown card */
   T('ct_addcosts',money(addCostsTotal));
   const acRow=document.getElementById('ct_row_addcosts');if(acRow)acRow.style.display=addCostsTotal>0?'':'none';
-  /* Condensed per-component price breakdown (reconciles to Total Contract Value) */
+  /* Per-component COST breakdown — cost prices, ex-VAT, ex-markup (internal only) */
   const hesc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const money2=v=>(v<0?'−£'+money(-v):'£'+money(v));
-  const markup=1+(+admin.markup||0)/100;
   const cf=state.config;
-  const baseSell=Math.round(((basePrice(cf.model,cf.width,cf.proj,cf.roof)||0)*markup)*100)/100;
+  const baseCost=basePrice(cf.model,cf.width,cf.proj,cf.roof)||0;
   const relSides=(cf.mount==='Free Standing')?['front','left','right','back']:['front','left','right'];
-  const brk=[['Veranda base (frame + roof)',baseSell]];
+  const brk=[['Veranda base (frame + roof)',Math.round(baseCost*100)/100]];
+  let costTotal=baseCost;
   relSides.forEach(s=>{
     const opt=cf.sides?cf.sides[s]:'None';
     if(!opt||opt==='None')return;
-    const tmp=Object.assign({},cf,{sides:Object.assign({front:'None',left:'None',right:'None',back:'None'},{[s]:opt})});
-    brk.push([(SIDE_LBL[s]||s)+' side — '+opt,Math.round(sidesCost(tmp)*markup*100)/100]);
+    const fake=Object.assign({},cf,{sides:Object.assign({},cf.sides)});
+    relSides.forEach(s2=>{if(s2!==s)fake.sides[s2]='None';});
+    const sideCost=sidesCost(fake)||0;  /* ex-VAT, ex-markup — no mu applied */
+    costTotal+=sideCost;
+    brk.push([(SIDE_LBL[s]||s)+' side — '+opt,Math.round(sideCost*100)/100]);
   });
-  if(calc.matDiscAmt>0)brk.push(['Materials discount ('+d+'%)',-calc.matDiscAmt]);
-  brk.push(['Installation / Fitting',fitting]);
-  if(svTotal>0)brk.push(['Survey extras (parts + labour)',svTotal]);
-  addCosts.forEach(x=>brk.push([x.desc||'Additional cost',+x.cost||0]));
+  brk.push(['Installation / Fitting',fitting]);costTotal+=fitting;
+  if(svTotal>0){brk.push(['Survey extras (parts + labour)',svTotal]);costTotal+=svTotal;}
+  addCosts.forEach(x=>{const v=+x.cost||0;brk.push([x.desc||'Additional cost',v]);costTotal+=v;});
+  costTotal=Math.round(costTotal*100)/100;
+  let brkHTML=brk.map(r=>`<tr><td>${hesc(r[0])}</td><td class="r">${money2(r[1])}</td></tr>`).join('');
+  if(addCostsTotal>0&&displayDiscount>d)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px"><td colspan="2">⚠ Additional costs shifted band from ${d}% to ${displayDiscount}%</td></tr>`;
+  brkHTML+=`<tr style="font-weight:800"><td>Total Cost (ex-VAT, ex-markup)</td><td class="r">£${money(costTotal)}</td></tr>`;
   const brkEl=document.getElementById('ct_breakdown_rows');
-  if(brkEl)brkEl.innerHTML=brk.map(r=>`<tr><td>${hesc(r[0])}</td><td class="r">${money2(r[1])}</td></tr>`).join('')
-    +`<tr style="font-weight:800"><td>Total Contract Value</td><td class="r">£${money(totalContract)}</td></tr>`;
+  if(brkEl)brkEl.innerHTML=brkHTML;
   const listEl=document.getElementById('ct_addcost_list');
   if(listEl)listEl.innerHTML=addCosts.length
     ?addCosts.map((x,i)=>`<div class="totbar"><span>${hesc(x.desc||'Additional cost')}</span><span>£${money(+x.cost||0)} <button class="btn sm danger" onclick="removeCostingExtra(${i})" style="margin-left:8px">✕</button></span></div>`).join('')
