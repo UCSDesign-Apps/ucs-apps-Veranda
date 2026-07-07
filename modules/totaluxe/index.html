@@ -397,6 +397,8 @@ body.print-internal .internal-notes-only{display:block !important;}
         <button data-view="pricing" data-label="Pricing"><span class="ic">£</span> Pricing &amp; Fitting</button>
         <button data-view="docs" data-label="Docs"><span class="ic">📄</span> Documents</button>
         <div class="sep"></div>
+        <button data-view="costings" data-label="Costings"><span class="ic">£</span> Costings</button>
+        <div class="sep"></div>
         <button data-view="admin" data-label="Admin"><span class="ic">🛠</span> Admin</button>
       </nav>
     </div>
@@ -687,6 +689,61 @@ body.print-internal .internal-notes-only{display:block !important;}
           <button class="btn ok sm" id="signableBtn" onclick="sendSignable()">📧 Send Contract</button>
         </div>
         <div class="docwrap" id="docwrap"></div>
+      </section>
+
+      <!-- COSTINGS — permission-gated internal view -->
+      <section class="view" id="view-costings">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+            <h2 style="margin:0">Job Costings</h2>
+            <span style="background:#ed1c2d;color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.5px">INTERNAL — CONFIDENTIAL</span>
+          </div>
+          <div class="sub">Commission and margin analysis. Not shown to customers.</div>
+        </div>
+        <div class="card">
+          <h2>Contract Value Breakdown</h2>
+          <div class="totbar"><span>Materials (incl. VAT)</span><span>£<span id="ct_materials">0.00</span></span></div>
+          <div class="totbar"><span>Installation / Fitting</span><span>£<span id="ct_fitting">0.00</span></span></div>
+          <div class="totbar" id="ct_row_sv" style="display:none"><span>Survey Extras (parts + labour)</span><span>£<span id="ct_svtotal">0.00</span></span></div>
+          <div class="totbar big" style="border-top:2px solid var(--line);padding-top:10px;margin-top:6px"><span>Total Contract Value (inc. VAT)</span><span>£<span id="ct_total_contract">0.00</span></span></div>
+          <div class="totbar" style="margin-top:10px;color:#555"><span>Less: Installation / Fitting</span><span>−£<span id="ct_less_fitting">0.00</span></span></div>
+          <div class="totbar" style="color:#555"><span>Less: VAT (20% of materials)</span><span>−£<span id="ct_less_vat">0.00</span></span></div>
+          <div class="totbar big" style="background:var(--brand);color:#fff;border-radius:10px;padding:12px 16px;margin-top:8px"><span>Net Contract Value</span><span>£<span id="ct_net_value">0.00</span></span></div>
+        </div>
+        <div class="card">
+          <h2>Discount Band &amp; Commission</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+            <div style="background:#f4f6f7;border-radius:10px;padding:14px 16px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Discount Band Used</div>
+              <div style="font-size:32px;font-weight:800;color:var(--brand)" id="ct_band">—%</div>
+            </div>
+            <div style="background:#f4f6f7;border-radius:10px;padding:14px 16px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:4px">Band Category</div>
+              <div style="font-size:16px;font-weight:700" id="ct_band_label">—</div>
+            </div>
+          </div>
+          <div id="ct_special_offer_row" style="display:none;background:#fff8e1;border:1.5px solid #ffc107;border-radius:10px;padding:12px 16px;margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
+              <input type="checkbox" id="ct_special_offer" onchange="toggleSpecialOffer()" style="width:18px;height:18px">
+              <span>🏷 Special Offer Override — treat as 40% band for commission purposes</span>
+            </label>
+            <div class="muted" style="margin-top:4px;margin-left:28px">Tick when a special offer justifies the higher discount.</div>
+          </div>
+          <div id="ct_commission_panel">
+            <div class="totbar big" style="margin-bottom:4px"><span>Commission Rate</span><span id="ct_commission_rate" style="font-weight:700">—</span></div>
+            <div class="totbar big" id="ct_commission_value_row" style="display:none"><span>Commission Value</span><span style="font-size:20px;font-weight:800;color:#1a6b3a">£<span id="ct_commission_value">0.00</span></span></div>
+            <div class="totbar" id="ct_bonus_row"><span>Included in Bonus?</span><span id="ct_bonus_label" style="font-weight:700">—</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Commission Reference</h2>
+          <table class="tbl"><thead><tr><th>Discount Band</th><th>Commission</th><th>Bonus Eligible</th></tr></thead>
+          <tbody>
+            <tr><td>35% or below</td><td>4% of Net Contract Value</td><td>✅ Yes</td></tr>
+            <tr><td>35% – 40%</td><td>Nil</td><td>✅ Yes</td></tr>
+            <tr><td>Above 40%</td><td>Nil</td><td>❌ No (unless Special Offer Override)</td></tr>
+          </tbody></table>
+        </div>
       </section>
 
       <!-- ADMIN -->
@@ -1217,7 +1274,7 @@ const FITTING_SEED=[
 ].map(r=>({desc:r[0],direct:r[1],finance:r[2]}));
 const PARTS_SEED=["Extra Post — Round (Baseplate)","Extra Post — Square (Baseplate)","Extra Polycarbonate Sheet","Extra Glass Roof Panel","In-Between Beam (extra)","Aura Glass Door Panel 1040x2100","Side Wall Infill — Aluminium","Side Wall Infill — Glass","LED Lighting Kit","Infrared Heater","Gutter Extension 1m","Downpipe (extra)","Lead Flashing Roll","Foundation Block"].map(d=>({desc:d,cost:0}));
 
-const ALL_SECTIONS=['quotes','customer','build','pricing','docs','admin'];
+const ALL_SECTIONS=['quotes','customer','build','pricing','docs','costings','admin'];
 const ALL_DOCS=['quote','contract','survey','picking'];
 const USERS_SEED=[
  {u:'admin',pin:'0000',name:'Administrator',role:'admin',sections:ALL_SECTIONS.slice(),docs:ALL_DOCS.slice(),signedOnly:false},
@@ -1404,7 +1461,7 @@ function blankState(){return{
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
-  pricing:{discount:30,youpay:0},
+  pricing:{discount:30,youpay:0,specialOffer:false},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{}
 };}
 let state=blankState();
@@ -1444,6 +1501,7 @@ function showView(v,btn){
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
   (btn||document.querySelector(`#nav [data-view="${v}"]`)).classList.add('active');
+  if(v==='costings')renderCostings();
   /* hide draw toolbar when leaving docs — it only belongs on survey doc */
   const bar=document.getElementById('drawBar');
   if(v!=='docs'){
@@ -2241,6 +2299,47 @@ function renderPricing(){
   rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
   renderPricingExtras();
   recalc();
+}
+function renderCostings(){
+  const c=state._calc;
+  if(!c){recalc();}
+  const calc=state._calc;
+  const d=calc.discount;
+  const fitting=calc.fitting;
+  const materials=calc.materials;
+  const svTotal=calc.svTotal||0;
+  const totalContract=Math.round((calc.youpay+svTotal)*100)/100;
+  const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
+  const netContractValue=Math.round((totalContract-fitting-vatOnMaterials)*100)/100;
+  const specialOffer=state.pricing.specialOffer||false;
+  const effectiveBand=specialOffer?40:d;
+  let commissionRate=0,commissionLabel='',bonusEligible=false,showSpecialOfferRow=false;
+  if(effectiveBand<=35){commissionRate=4;commissionLabel='4%';bonusEligible=true;}
+  else if(effectiveBand<=40){commissionRate=0;commissionLabel='Nil';bonusEligible=true;}
+  else{commissionRate=0;commissionLabel='Nil';bonusEligible=false;showSpecialOfferRow=true;}
+  const commissionValue=commissionRate>0?Math.round((netContractValue*commissionRate/100)*100)/100:0;
+  T('ct_materials',money(materials));T('ct_fitting',money(fitting));
+  T('ct_svtotal',money(svTotal));T('ct_total_contract',money(totalContract));
+  T('ct_less_fitting',money(fitting));T('ct_less_vat',money(vatOnMaterials));
+  T('ct_net_value',money(netContractValue));T('ct_band',d+'%');
+  T('ct_commission_rate',commissionLabel);T('ct_commission_value',money(commissionValue));
+  T('ct_bonus_label',bonusEligible?'<span style="color:#1a6b3a;font-size:15px">✅ Yes — included in bonus</span>':'<span style="color:#ed1c2d;font-size:15px">❌ No — excluded from bonus</span>');
+  let bandLabel='';
+  if(specialOffer){bandLabel='<span style="color:#856404;font-weight:700">🏷 Special Offer (treated as 40%)</span>';}
+  else if(d<=35){bandLabel='<span style="color:#1a6b3a;font-weight:700">Standard — Commission &amp; Bonus</span>';}
+  else if(d<=40){bandLabel='<span style="color:#9a6200;font-weight:700">Mid-range — Bonus Only</span>';}
+  else{bandLabel='<span style="color:#ed1c2d;font-weight:700">High Discount — No Commission / No Bonus</span>';}
+  T('ct_band_label',bandLabel);
+  const svRow=document.getElementById('ct_row_sv');if(svRow)svRow.style.display=svTotal>0?'':'none';
+  const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
+  const soRow=document.getElementById('ct_special_offer_row');if(soRow)soRow.style.display=(showSpecialOfferRow||specialOffer)?'':'none';
+  const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
+}
+function toggleSpecialOffer(){
+  const cb=document.getElementById('ct_special_offer');
+  state.pricing.specialOffer=cb?cb.checked:false;
+  renderCostings();saveQuote(true);
+  toast(state.pricing.specialOffer?'Special Offer override applied':'Special Offer override removed');
 }
 function toggleOtherPart(wrapId,sel){
   const wrap=document.getElementById(wrapId);
