@@ -604,11 +604,12 @@ body.print-internal .internal-notes-only{display:block !important;}
           <!-- Materials, fitting breakdown and discount: admin only -->
           <div class="admin-only">
             <div class="totbar"><span>Materials (incl VAT)</span><span>£<span id="s_mat">0.00</span></span></div>
+            <div class="totbar" id="row_decking" style="display:none"><span>Composite Decking (incl VAT)</span><span>£<span id="s_decking">0.00</span></span></div>
             <div class="totbar"><span>Fitting &amp; Survey</span><span>£<span id="s_fit">0.00</span></span></div>
             <div class="totbar" id="row_ext" style="display:none"><span>Job Extras (survey parts)</span><span>£<span id="s_ext">0.00</span></span></div>
             <div class="totbar big"><span>Order Total (full price)</span><span>£<span id="s_tot">0.00</span></span></div>
             <div class="grid g3" style="margin-top:14px">
-              <div class="field"><label>Discount on materials</label>
+              <div class="field"><label>Discount on materials &amp; decking</label>
                 <select id="p_disc" onchange="recalc()"><option value="30">30%</option><option value="31">31%</option><option value="32">32%</option><option value="33">33%</option><option value="34">34%</option><option value="35">35%</option><option value="36">36%</option><option value="37">37%</option><option value="38">38%</option><option value="39">39%</option><option value="40">40%</option><option value="41">41%</option><option value="42">42%</option><option value="43">43%</option><option value="44">44%</option><option value="45">45%</option></select></div>
               <div></div><div></div>
             </div>
@@ -678,7 +679,7 @@ body.print-internal .internal-notes-only{display:block !important;}
       <section class="view" id="view-decking">
         <div class="card">
           <h2 style="margin:0">Composite Decking</h2>
-          <div class="sub">Optional decking package. Boards, edging and fixings are added to the Picking List and the internal Costings breakdown.</div>
+          <div class="sub">Optional decking package, charged to the customer. Prices shown include VAT, before the offer discount applied on the Pricing page. Boards, edging and fixings also flow to the Picking List.</div>
           <label style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;margin-top:12px;padding:11px 13px;background:#f6f7f8;border:1px solid var(--line);border-radius:10px;cursor:pointer">
             <input type="checkbox" id="dk_enable" onchange="deckingToggle(this.checked)"> Include Composite Decking
           </label>
@@ -708,7 +709,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="card">
             <div class="opt-lbl">Edge Boards &amp; Fixings</div>
             <div class="tbl-wrap"><table class="tbl">
-              <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="r" style="width:100px">Price</th><th class="c" style="width:130px">Qty</th><th class="r" style="width:110px">Total</th></tr></thead>
+              <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="r" style="width:110px">Price (inc VAT)</th><th class="c" style="width:130px">Qty</th><th class="r" style="width:110px">Total</th></tr></thead>
               <tbody id="dk_extras"></tbody>
             </table></div>
           </div>
@@ -868,11 +869,13 @@ body.print-internal .internal-notes-only{display:block !important;}
         </div></div></div>
 
         <div class="apane" id="ap-rates"><div class="card">
-          <div class="grid g3">
+          <div class="grid g4">
             <div class="field"><label>Default mark-up %</label><input id="a_markup" class="num" oninput="liveRates()"></div>
+            <div class="field"><label>Decking mark-up %</label><input id="a_deckingmarkup" class="num" oninput="liveRates()"></div>
             <div class="field"><label>VAT rate %</label><input id="a_vatrate" class="num"></div>
             <div class="field"><label>Deposit %</label><input id="a_deppct" class="num"></div>
           </div>
+          <p class="muted" style="font-size:12.5px;margin-top:10px">The <b>decking mark-up</b> is applied to the trade prices in the Decking tab to give the customer price. It is independent of the veranda mark-up.</p>
           <p class="muted" style="font-size:12.5px;margin-top:10px">Materials sell price is driven automatically by the <b>Deponti 2026 price list</b> (editable in the Price Matrix tab). Payment is fixed at 25% deposit + staged payments (50/25 under £7,000; 25/25/25 over £7,000), so the deposit % is no longer applied.</p>
         </div></div>
 
@@ -1442,7 +1445,7 @@ const USERS_SEED=[
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
-  markup:150,vatRate:20,depPct:10,
+  markup:150,deckingMarkup:150,vatRate:20,depPct:10,
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
   fitting:JSON.parse(JSON.stringify(FITTING_SEED)),
@@ -1464,6 +1467,7 @@ function loadAdmin(){
     if(!m.baseCosts)m.baseCosts=clone(ADMIN_DEFAULT.baseCosts);
     if(!m.imgmap)m.imgmap=clone(ADMIN_DEFAULT.imgmap);
     if(!m.decking||!m.decking.length)m.decking=clone(DECKING_SEED);
+    if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
@@ -2467,6 +2471,11 @@ function deckingState(){
   if(!Array.isArray(state.decking.items))state.decking.items=[];
   return state.decking;
 }
+/* Catalogue prices are TRADE COST. The customer price is cost x the decking
+   mark-up, and (like materialsSell) is treated as VAT-inclusive.
+   Reps only ever see sell prices; cost stays in Admin and Costings. */
+function deckingMarkupMult(){return 1+(+((admin&&admin.deckingMarkup)!=null?admin.deckingMarkup:150)||0)/100;}
+function deckSellPrice(cost){return Math.round((+cost||0)*deckingMarkupMult()*100)/100;}
 function deckingToggle(on){
   const d=deckingState();d.enabled=!!on;
   const cfg=document.getElementById('dk_cfg');if(cfg)cfg.style.display=on?'':'none';
@@ -2502,7 +2511,7 @@ function deckingRenderColours(){
     const sel=d.colour===p.name;
     return `<label class="imgcard" style="cursor:pointer;border-width:${sel?'2px':'1px'};border-color:${sel?'var(--brand)':'var(--line)'}" onclick="deckingSetColour('${p.code}')">
       <div style="height:64px;background:${src?'#fff':bg};display:flex;align-items:center;justify-content:center;overflow:hidden">${src?`<img src="${src}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
-      <div class="nm">${esc(p.name)}<br><span style="color:#8a969a">£${money(p.price)}</span></div>
+      <div class="nm">${esc(p.name)}<br><span style="color:#8a969a">£${money(deckSellPrice(p.price))}</span></div>
     </label>`;
   }).join('');
 }
@@ -2522,11 +2531,12 @@ function deckingRenderExtras(){
   w.innerHTML=extras.map(p=>{
     const it=d.items.find(i=>i.code===p.code);
     const qty=it?it.qty:0;
-    const tot=Math.round(qty*p.price*100)/100;
+    const sell=deckSellPrice(p.price);
+    const tot=Math.round(qty*sell*100)/100;
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${p.code}</td>
       <td>${esc(p.name)} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
-      <td class="r">£${money(p.price)}</td>
+      <td class="r">£${money(sell)}</td>
       <td class="c"><input class="num" type="number" min="0" step="1" value="${qty}" style="width:80px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)"></td>
       <td class="r">${qty?'£'+money(tot):'—'}</td>
     </tr>`;
@@ -2544,10 +2554,10 @@ function deckingCalc(){
   const runningM=areaM2>0?Math.ceil(areaM2/boardW):0;
   const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M):0;
   const board=d.colour?deckingBoards(d.type).find(p=>p.name===d.colour):null;
-  const boardCost=board?Math.round(lengths*board.price*100)/100:0;
-  const extrasCost=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?p.price*i.qty:0);},0);
-  const res={areaM2,runningM,lengths,board,boardCost,extrasCost:Math.round(extrasCost*100)/100};
-  res.total=Math.round((res.boardCost+res.extrasCost)*100)/100;
+  const boardSell=board?Math.round(lengths*deckSellPrice(board.price)*100)/100:0;
+  const extrasSell=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?deckSellPrice(p.price)*i.qty:0);},0);
+  const res={areaM2,runningM,lengths,board,boardSell,extrasSell:Math.round(extrasSell*100)/100};
+  res.total=Math.round((res.boardSell+res.extrasSell)*100)/100;
 
   const s=document.getElementById('dk_summary');
   if(s){
@@ -2564,31 +2574,40 @@ function deckingCalc(){
     if(!areaM2){m.innerHTML='<div style="color:#8a969a;font-size:12px">Nothing to summarise yet.</div>';}
     else if(!board){m.innerHTML='<div style="color:#8a969a;font-size:12px">Select a board colour to price the deck.</div>';}
     else{
-      const rows=[`<tr><td style="font-family:monospace;font-size:11px">${board.code}</td><td>${d.type} Board — ${esc(board.name)}</td><td class="c">${lengths}</td><td class="r">£${money(res.boardCost)}</td></tr>`]
+      const rows=[`<tr><td style="font-family:monospace;font-size:11px">${board.code}</td><td>${d.type} Board — ${esc(board.name)}</td><td class="c">${lengths}</td><td class="r">£${money(res.boardSell)}</td></tr>`]
         .concat(d.items.map(i=>{const p=deckingProduct(i.code);if(!p)return '';
-          return `<tr><td style="font-family:monospace;font-size:11px">${p.code}</td><td>${esc(p.name)}</td><td class="c">${i.qty}</td><td class="r">£${money(p.price*i.qty)}</td></tr>`;}));
+          return `<tr><td style="font-family:monospace;font-size:11px">${p.code}</td><td>${esc(p.name)}</td><td class="c">${i.qty}</td><td class="r">£${money(deckSellPrice(p.price)*i.qty)}</td></tr>`;}));
+      const isAdmin=currentUser&&currentUser.role==='admin';
+      const costNote=isAdmin?`<div style="font-size:10.5px;color:#8a969a;margin-top:4px">Trade cost £${money(deckingCostTotal())} · mark-up ${(+admin.deckingMarkup||0)}% <span style="color:#c2a14e">(admin only)</span></div>`:'';
       m.innerHTML=`<div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="c" style="width:70px">Qty</th><th class="r" style="width:110px">Total</th></tr></thead>
+        <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="c" style="width:70px">Qty</th><th class="r" style="width:110px">Price</th></tr></thead>
         <tbody>${rows.join('')}</tbody>
-        <tfoot><tr><td colspan="3" class="r"><b>Decking total (ex-VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
+        <tfoot><tr><td colspan="3" class="r"><b>Decking total (incl VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
       </table></div>
-      <div style="font-size:10.5px;color:#8a969a;margin-top:6px">Board quantities assume ${BOARD_LENGTH_M}m lengths at ${BOARD_WIDTH_MM[d.type]}mm cover width. Confirm on site before ordering.</div>`;
+      <div style="font-size:10.5px;color:#8a969a;margin-top:6px">Board quantities assume ${BOARD_LENGTH_M}m lengths at ${BOARD_WIDTH_MM[d.type]}mm cover width. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
     }
   }
+  /* decking is part of the contract price — keep youpay, deposit and finance in step */
+  recalc();
   return res;
 }
-function deckingCostTotal(){
+/* board lengths + extras, priced with `unit` (identity = trade cost, deckSellPrice = customer) */
+function deckingTotal(unit){
   const d=deckingState();
   if(!d.enabled)return 0;
-  const areaM2=(d.width/1000)*(d.length/1000);
+  const areaM2=Math.round((d.width/1000)*(d.length/1000)*100)/100;
   const boardW=(BOARD_WIDTH_MM[d.type]||BOARD_WIDTH_MM.HD)/1000;
-  const runningM=areaM2>0?Math.ceil(Math.round(areaM2*100)/100/boardW):0;
+  const runningM=areaM2>0?Math.ceil(areaM2/boardW):0;
   const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M):0;
   const board=d.colour?deckingBoards(d.type).find(p=>p.name===d.colour):null;
-  const boardCost=board?lengths*board.price:0;
-  const extrasCost=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?p.price*i.qty:0);},0);
-  return Math.round((boardCost+extrasCost)*100)/100;
+  const boards=board?lengths*unit(board.price):0;
+  const extras=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?unit(p.price)*i.qty:0);},0);
+  return Math.round((boards+extras)*100)/100;
 }
+/* trade cost — Costings cost side and Admin only */
+function deckingCostTotal(){return deckingTotal(c=>c);}
+/* customer price, VAT-inclusive — Pricing, documents, deposit and finance */
+function deckingSellTotal(){return deckingTotal(deckSellPrice);}
 /* [code, description, qty] rows for the Picking List */
 function deckingPickingRows(){
   const d=deckingState();
@@ -2622,18 +2641,20 @@ function renderCostings(){
   const fittingContract=calc.fitting;
   const svLabour=calc.svLabour||0;
   const svParts=calc.svParts||0;
-  const deckingCost=deckingCostTotal();
-  const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal+deckingCost)*100)/100;
+  const deckingCost=deckingCostTotal();   // trade cost — cost side only
+  const deckingSell=calc.decking||0;      // customer price, already inside calc.youpay
+  const totalContract=Math.round((calc.youpay+svTotal+addCostsTotal)*100)/100;
   const vatOnMaterials=Math.round((calc.matNet/6)*100)/100;
   const netContractValue=Math.round((totalContract-fittingContract-vatOnMaterials)*100)/100;
   const soldAtBand=d;
   const _mCostExVat=(basePrice(state.config.model,state.config.width,state.config.proj,state.config.roof)||0)+sidesCost(state.config);
   const _listIncVat=Math.round(_mCostExVat*2.5*1.2*100)/100;
-  /* decking sits on BOTH sides of the band ratio: it is revenue and it is list.
-     Adding it to _effectiveList alone would understate revenue and inflate the
-     apparent discount band, tripping bandShifted / manager approval spuriously. */
-  const _revenueExFitting=Math.round((calc.matNet*1.2+svTotal+deckingCost)*100)/100;
-  const _effectiveList=Math.round((_listIncVat+addCostsTotal+deckingCost)*100)/100;
+  /* Decking is discounted alongside materials, so calc.matNet already carries its
+     net value. Its list value therefore has to join _effectiveList too — put it on
+     one side only and the band drifts away from the discount actually given. */
+  const _deckingListIncVat=Math.round(deckingSell*1.2*100)/100;
+  const _revenueExFitting=Math.round((calc.matNet*1.2+svTotal)*100)/100;
+  const _effectiveList=Math.round((_listIncVat+_deckingListIncVat+addCostsTotal)*100)/100;
   const costedAtBand=_effectiveList>0?Math.max(0,Math.round((1-(_revenueExFitting/_effectiveList))*100)):soldAtBand;
   const displayDiscount=soldAtBand;
   const bandShifted=costedAtBand!==soldAtBand;
@@ -2689,12 +2710,13 @@ function renderCostings(){
   }
   if(deckingCost>0){
     const _dk=deckingState();
-    brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Composite Decking</td><td class="r"></td></tr>`;
+    brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Composite Decking — trade cost</td><td class="r"></td></tr>`;
     deckingPickingRows().forEach(r=>{
       const p=deckingProduct(r[1]);
       brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(r[0])} × ${r[2]}</td><td class="r">${money2(p?Math.round(p.price*r[2]*100)/100:0)}</td></tr>`;
     });
     brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Decking subtotal (${_dk.type} · ${_dk.width}×${_dk.length}mm)</td><td class="r">${money2(deckingCost)}</td></tr>`;
+    brkHTML+=`<tr style="color:#666;font-size:11px"><td>&nbsp;&nbsp;Sold to customer at ${(+admin.deckingMarkup||0)}% mark-up — £${money(deckingSell)} incl VAT (before offer discount)</td><td class="r"></td></tr>`;
   }
   if(bandShifted)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px;font-style:italic"><td colspan="2">⚠ Sold at ${soldAtBand}% — costed at ${costedAtBand}% (effective band including all costs)</td></tr>`;
   const costTotal=Math.round((materialCostTotal+fittingContract+svTotal+addCostsTotal+deckingCost)*100)/100;
@@ -2706,8 +2728,8 @@ function renderCostings(){
     :'<div class="muted" style="font-size:12px">No additional costs added.</div>';
   T('ct_materials',money(materials));T('ct_fitting',money(fittingContract));
   T('ct_svtotal',money(svTotal));T('ct_addcosts_total',money(addCostsTotal));
-  T('ct_decking',money(deckingCost));
-  (function(){const r=document.getElementById('ct_row_decking');if(r)r.style.display=deckingCost>0?'':'none';})();
+  T('ct_decking',money(deckingSell));
+  (function(){const r=document.getElementById('ct_row_decking');if(r)r.style.display=deckingSell>0?'':'none';})();
   T('ct_total_contract',money(totalContract));T('ct_less_fitting',money(fittingContract));
   T('ct_less_vat',money(vatOnMaterials));T('ct_net_value',money(netContractValue));
   T('ct_band_sold',soldAtBand+'%');
@@ -2799,20 +2821,24 @@ function recalc(){
   state.pricing.discount=dp?(+dp.value||30):(state.pricing.discount||30);
   const d=state.pricing.discount;
   const materials=materialsSell();
-  const matDiscAmt=Math.round(materials*(d/100)*100)/100;       // discount applies to materials only
-  const matNet=materials-matDiscAmt;
+  const decking=deckingSellTotal();                                // customer price, inc VAT (0 when not enabled)
+  const discountable=Math.round((materials+decking)*100)/100;      // decking is discounted alongside materials
+  const matDiscAmt=Math.round(discountable*(d/100)*100)/100;
+  const matNet=Math.round((discountable-matDiscAmt)*100)/100;
   const fitting=sum(state.fitting,'price');                       // ORIGINAL contract fitting only
   // Survey additions are kept SEPARATE — they never alter the contract totals
   const svParts=sum(state.surveyParts,'cost');
   const svLabour=sum(state.surveyLabour,'price');
   const svTotal=Math.round((svParts+svLabour)*100)/100;
-  const orderTotal=materials+fitting;                            // contract full list price (no survey extras)
+  const orderTotal=Math.round((materials+decking+fitting)*100)/100; // contract full list price (no survey extras)
   const youpay=Math.round((matNet+fitting)*100)/100;             // contract today's price (no survey extras)
   state.pricing.youpay=youpay;
   const sched=paymentSchedule(youpay);
   const deposit=sched.deposit;
   const balance=youpay-deposit;
   T('p_fittot',money(fitting));T('s_mat',money(materials));T('s_fit',money(fitting));
+  T('s_decking',money(decking));
+  (function(){const r=document.getElementById('row_decking');if(r)r.style.display=decking>0?'':'none';})();
   const re=document.getElementById('row_ext');if(re){re.style.display='none';}
   T('s_tot',money(orderTotal));T('s_youpay',money(youpay));
   /* discount note: admin only — reveals markup strategy */
@@ -2822,7 +2848,7 @@ function recalc(){
   T('c_sku',state.config&&state.config.sku?state.config.sku:'—');
   /* c_cost / c_sides_cost / c_total_cost elements removed from DOM — T() handles null safely */
   renderPaySchedule(sched,youpay);
-  state._calc={materials,matDiscAmt,matNet,fitting,svParts,svLabour,svTotal,orderTotal,youpay,deposit,balance,sched,discount:d,finance:financeCalc(youpay)};
+  state._calc={materials,decking,discountable,matDiscAmt,matNet,fitting,svParts,svLabour,svTotal,orderTotal,youpay,deposit,balance,sched,discount:d,finance:financeCalc(youpay)};
 }
 function renderPaySchedule(sched,total){
   const el=document.getElementById('payschedule');if(!el)return;
@@ -2835,11 +2861,11 @@ function renderPaySchedule(sched,total){
 function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));const pane=document.getElementById('ap-'+t);if(pane)pane.classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
   /* Ensure the image map is (re)rendered when switching to the Product Images tab */
   if(t==='imgmap')renderImageMap();}
-function liveRates(){admin.markup=+val('a_markup')||0;}
+function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;}
 function renderAdmin(){
   const c=admin.company;
   V('a_coname',c.name);V('a_coshort',c.short);V('a_cono',c.cono);V('a_vat',c.vat);V('a_addr1',c.addr1);V('a_addr2',c.addr2);V('a_town',c.town);V('a_post',c.post);V('a_tel',c.tel);V('a_fax',c.fax);V('a_group',c.group);V('a_signable_key',c.signableKey||'');V('a_signable_rep',c.signableRepEmail||'');
-  V('a_markup',admin.markup);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
+  V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
   // fitting
   const fb=document.getElementById('adminFitRows');fb.innerHTML='';
   admin.fitting.forEach((f,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(f.desc)}" oninput="admin.fitting[${i}].desc=this.value"></td><td class="r"><input class="num" value="${f.direct}" oninput="admin.fitting[${i}].direct=+this.value||0"></td><td class="r"><input class="num" value="${f.finance}" oninput="admin.fitting[${i}].finance=+this.value||0"></td><td><button class="chiprm" onclick="admin.fitting.splice(${i},1);renderAdmin()">×</button></td>`;fb.appendChild(tr);});
@@ -3370,7 +3396,7 @@ function saveAdmin(){const c=admin.company;
   c.name=val('a_coname');c.short=val('a_coshort');c.cono=val('a_cono');c.vat=val('a_vat');c.addr1=val('a_addr1');c.addr2=val('a_addr2');c.town=val('a_town');c.post=val('a_post');c.tel=val('a_tel');c.fax=val('a_fax');c.group=val('a_group');
   if(val('a_signable_key'))c.signableKey=val('a_signable_key');
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
-  admin.markup=+val('a_markup')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
+  admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
   initLogin();renderPricing();renderSurvey();
   /* Sync the full admin object to the server so every user picks up the latest
      company details, pricing and images on their next login. */
@@ -3768,6 +3794,20 @@ function renderDocuments(){
      <tbody>${sidewallMerged.map((r,i)=>`<tr><td class="c">S${i+1}</td><td>${r[0]}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
   const dkRows=deckingPickingRows();
   const dk=deckingState();
+  /* customer-facing decking blocks — only rendered when decking is actually sold,
+     so quotes without it look exactly as they did before */
+  const dkSell=(state._calc&&state._calc.decking)||0;
+  const dkArea=Math.round((dk.width/1000)*(dk.length/1000)*100)/100;
+  const dkBoard=dk.enabled&&dk.colour?deckingBoards(dk.type).find(p=>p.name===dk.colour):null;
+  const deckingOrderBlock=(dk.enabled&&dkSell>0)
+    ? `<div class="sh">Order Breakdown</div>
+       <table class="mt"><tbody>
+         <tr><td>Veranda materials <span style="color:#6a777c">(incl VAT)</span></td><td class="r">£${money(calc.materials)}</td></tr>
+         <tr><td>Composite decking — ${esc(dk.type)}${dkBoard?' · '+esc(dkBoard.name):''} <span style="color:#6a777c">(${dkArea}m², incl VAT)</span></td><td class="r">£${money(dkSell)}</td></tr>
+         <tr><td>Installation &amp; fitting</td><td class="r">£${money(calc.fitting)}</td></tr>
+         <tr style="color:var(--brand)"><td>Special offer — ${calc.discount}% off materials &amp; decking</td><td class="r">−£${money(calc.matDiscAmt)}</td></tr>
+       </tbody><tfoot><tr><td class="r"><b>Total — You Pay</b></td><td class="r"><b>£${money(calc.youpay)}</b></td></tr></tfoot></table>`
+    : '';
   const deckingBlock=dkRows.length?`<div class="sh" style="margin-top:14px">Composite Decking <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">(${dk.type} · ${dk.width} × ${dk.length} mm)</span></div>
      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:175px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead>
      <tbody>${dkRows.map((r,i)=>`<tr><td class="c">D${i+1}</td><td>${esc(r[0])}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
@@ -3777,6 +3817,10 @@ function renderDocuments(){
      <tbody>${doorMerged.map((r,i)=>`<tr><td class="c">D${i+1}</td><td>${r[0]}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
 
   const confirmRow=(name,detail,imgHTML,on)=>`<tr><td><b>${name}</b></td><td>${detail}</td><td class="c">${imgHTML}</td><td class="c tickwrap"><span class="ck${on?' on':''}" onclick="this.classList.toggle('on')"></span></td></tr>`;
+  /* must come after confirmRow — it is a const, so referencing it earlier hits the TDZ */
+  const deckingSpecRow=(dk.enabled&&dkSell>0&&dkBoard)
+    ? confirmRow('Composite Decking',`${esc(dk.type)} — ${esc(dkBoard.name)} · ${dk.width} × ${dk.length} mm (${dkArea}m²)`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
+    : '';
 
   const html=`
   <!-- COVER -->
@@ -3842,6 +3886,7 @@ function renderDocuments(){
         ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto'),true)}
         ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto'),true)}
         ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',64,40,'margin:0 auto'),false)}
+        ${deckingSpecRow}
       </tbody></table>
     </div></div>${pfoot()}
   </section>
@@ -3917,7 +3962,7 @@ function renderDocuments(){
       </div>
       <div style="background:linear-gradient(135deg,var(--gold),var(--gold-d));color:#fff;border-radius:14px;padding:16px 22px;margin-top:16px;display:flex;justify-content:space-between;align-items:center">
         <div><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.95">Today's Special Offer</div>
-          <div style="font-size:24px;font-weight:800">${calc.discount}% off materials</div></div>
+          <div style="font-size:24px;font-weight:800">${calc.discount}% off materials${dkSell>0?' &amp; decking':''}</div></div>
         <div style="text-align:right;font-size:11px;opacity:.95">Valid until<br><b style="font-size:14px">${j.valid}</b></div>
       </div>
     </div></div>${pfoot()}
@@ -3927,6 +3972,7 @@ function renderDocuments(){
   <section class="sheet">${phead('Payment Schedule')}
     <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
       <div class="sh">Order Breakdown &amp; Payment Schedule</div>
+      ${deckingOrderBlock}
       <div class="pricebox"><div><div class="lbl">Total Price — You Pay <span style="font-weight:400;opacity:.85">(incl VAT &amp; installation)</span></div></div>
         <div class="big">£${money(calc.youpay)}</div></div>
       <div class="grow" style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
