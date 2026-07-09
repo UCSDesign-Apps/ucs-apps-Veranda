@@ -17,9 +17,11 @@ const msal = require('@azure/msal-node');
 
 // Section/doc lists mirror the client's ALL_SECTIONS / ALL_DOCS so the user
 // object returned on login drives the same UI nav as the client-side fallback.
-const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs', 'costings', 'admin'];
+// KEEP IN SYNC with modules/totaluxe/index.html — the login response wins over
+// the client's USERS_SEED, so a section missing here is hidden for everyone.
+const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'decking', 'docs', 'costings', 'admin'];
 const ALL_DOCS = ['quote', 'contract', 'survey', 'picking'];
-const SALES_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'docs'];
+const SALES_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'decking', 'docs'];
 
 // Azure app credentials (Railway env vars) for sending PDF emails via Graph.
 const msalConfig = {
@@ -82,6 +84,46 @@ async function ensureSchema(pool) {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+
+  await backfillDeckingSection(pool);
+}
+
+// The Decking section shipped after admin configs were already saved. A saved
+// config's per-user `sections` array overrides the defaults at login, so those
+// stale arrays would hide Decking from every non-admin however the code reads.
+// Grant it once to users who already quote (they hold 'pricing'), then set a
+// flag so this never runs again — otherwise an admin who revokes Decking would
+// find it silently restored on the next boot.
+async function backfillDeckingSection(pool) {
+  try {
+    const { rows } = await pool.query('SELECT module, config FROM admin_config');
+    for (const row of rows) {
+      const cfg = row.config;
+      if (!cfg || typeof cfg !== 'object') continue;
+      if (cfg._migrations && cfg._migrations.deckingSection) continue;
+
+      const granted = [];
+      if (Array.isArray(cfg.users)) {
+        for (const u of cfg.users) {
+          if (!u || !Array.isArray(u.sections)) continue;
+          if (u.sections.includes('decking')) continue;
+          if (u.role === 'admin' || u.sections.includes('pricing')) {
+            u.sections.push('decking');
+            granted.push(u.u);
+          }
+        }
+      }
+      cfg._migrations = Object.assign({}, cfg._migrations, { deckingSection: true });
+      await pool.query('UPDATE admin_config SET config = $2 WHERE module = $1', [row.module, cfg]);
+      console.log(
+        `[migration] decking section — module=${row.module} granted to: ${granted.join(', ') || '(none)'}`
+      );
+    }
+  } catch (e) {
+    // Never block boot on a migration; the server defaults still grant Decking
+    // to anyone without a saved per-user override.
+    console.warn('[migration] decking section backfill skipped:', e.message);
+  }
 }
 
 function apiRouter(pool) {
