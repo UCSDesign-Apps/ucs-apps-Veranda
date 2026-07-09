@@ -237,6 +237,26 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .atabs button{border:0;background:none;padding:10px 14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:14px;}
 .atabs button.active{color:var(--brand);border-bottom-color:var(--brand);}
 .apane{display:none;} .apane.active{display:block;}
+/* ── Decking calculator ─────────────────────────────────────────────────── */
+.dk-step{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800;color:var(--brand-d);margin-bottom:2px;}
+.dk-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;font-size:13px;font-weight:800;flex-shrink:0;}
+.dk-shapes{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px;}
+.dk-shape{border:1.5px solid var(--line);border-radius:12px;padding:10px 8px 8px;text-align:center;cursor:pointer;background:#fbfcfc;transition:border-color .15s,background .15s;}
+.dk-shape:hover{border-color:var(--brand);}
+.dk-shape.sel{border-color:var(--brand);border-width:2px;background:#f2f8f9;}
+.dk-shape svg{width:100%;height:62px;display:block;}
+.dk-shape .nm{font-size:12px;font-weight:700;color:var(--brand-d);margin-top:6px;line-height:1.25;}
+.dk-dimwrap{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;}
+@media(max-width:820px){.dk-dimwrap{grid-template-columns:1fr;} }
+.dk-dimfields{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:560px){.dk-dimfields{grid-template-columns:1fr;} }
+.dk-dimfields .field label{display:block;}
+.dk-dimfields .hint{font-size:10.5px;color:#8a969a;font-weight:400;margin-top:2px;line-height:1.35;}
+.dk-let{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;background:var(--brand);color:#fff;font-size:10.5px;font-weight:800;margin-right:6px;}
+.dk-diagram{border:1px solid var(--line);border-radius:12px;background:#fbfcfc;padding:10px;}
+.dk-diagram svg{width:100%;height:auto;display:block;}
+.dk-auto{font-size:9.5px;font-weight:700;color:#c2a14e;letter-spacing:.4px;}
+.dk-warn{background:#fdecec;border:1px solid #f1b4b4;color:#a33;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600;}
 .imgbank{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;}
 .imgcard{border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center;font-size:11px;}
 .imgcard img{width:100%;height:80px;object-fit:cover;display:block;background:#f3f3f3;} .imgcard .nm{padding:5px;color:var(--muted);}
@@ -686,37 +706,45 @@ body.print-internal .internal-notes-only{display:block !important;}
         </div>
 
         <div id="dk_cfg" style="display:none">
+          <!-- STEP 1 — SHAPE -->
           <div class="card">
-            <div class="opt-group">
-              <div class="opt-lbl">Board Type</div>
-              <div class="chip-row" id="dk_types"></div>
-            </div>
-            <div class="opt-group" style="margin-bottom:0">
-              <div class="opt-lbl">Board Colour</div>
-              <div class="imgbank" id="dk_colours"></div>
-            </div>
+            <div class="dk-step"><span class="dk-num">1</span> Deck Shape</div>
+            <div class="sub" style="margin-bottom:10px">Pick the shape that matches the deck footprint. The dimensions you need appear in Step 2.</div>
+            <div class="dk-shapes" id="dk_shapes"></div>
           </div>
 
+          <!-- STEP 2 — DIMENSIONS -->
           <div class="card">
-            <div class="opt-lbl">Deck Size</div>
-            <div class="grid g4">
-              <div class="field"><label>Width (mm)</label><input type="number" min="0" step="10" id="dk_width" oninput="deckingCalc()"></div>
-              <div class="field"><label>Length (mm)</label><input type="number" min="0" step="10" id="dk_length" oninput="deckingCalc()"></div>
+            <div class="dk-step"><span class="dk-num">2</span> Dimensions</div>
+            <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram.</div>
+            <div class="dk-dimwrap">
+              <div class="dk-dimfields" id="dk_dims"></div>
+              <div class="dk-diagram" id="dk_diagram"></div>
             </div>
-            <div id="dk_summary" style="margin-top:6px"></div>
+            <div id="dk_summary" style="margin-top:12px"></div>
           </div>
 
+          <!-- STEP 3 — BOARD TYPE -->
           <div class="card">
-            <div class="opt-lbl">Edge Boards &amp; Fixings</div>
+            <div class="dk-step"><span class="dk-num">3</span> Board Type</div>
+            <div class="chip-row" id="dk_types" style="margin-top:8px"></div>
+          </div>
+
+          <!-- STEP 4 — COLOUR -->
+          <div class="card">
+            <div class="dk-step"><span class="dk-num">4</span> Board Colour</div>
+            <div class="imgbank" id="dk_colours" style="margin-top:10px"></div>
+          </div>
+
+          <!-- STEP 5 — MATERIALS -->
+          <div class="card">
+            <div class="dk-step"><span class="dk-num">5</span> Materials Summary</div>
+            <div class="sub" style="margin-bottom:10px">Boards and clip quantities are calculated automatically. Edge boards and any other extras are entered by hand — type over an auto quantity to pin it.</div>
             <div class="tbl-wrap"><table class="tbl">
-              <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="r" style="width:110px">Price (inc VAT)</th><th class="c" style="width:130px">Qty</th><th class="r" style="width:110px">Total</th></tr></thead>
+              <thead><tr><th style="width:110px">Code</th><th>Item</th><th class="r" style="width:110px">Price (inc VAT)</th><th class="c" style="width:150px">Qty</th><th class="r" style="width:110px">Total</th></tr></thead>
               <tbody id="dk_extras"></tbody>
             </table></div>
-          </div>
-
-          <div class="card">
-            <div class="opt-lbl">Materials Summary</div>
-            <div id="dk_materials"></div>
+            <div id="dk_materials" style="margin-top:14px"></div>
           </div>
         </div>
       </section>
@@ -897,7 +925,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="sub">Decking catalogue. <b>HD</b> and <b>Embossed</b> rows appear as selectable board colours; every other category appears as a qty-based extra. Prices are ex-VAT, per unit.</div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th style="width:120px">Code</th><th style="width:120px">Category</th><th>Name</th><th class="r" style="width:100px">Price £</th><th style="width:90px">Unit</th><th style="width:30px"></th></tr></thead>
+            <thead><tr><th style="width:120px">Code</th><th style="width:120px">Category</th><th>Name</th><th class="r" style="width:100px">Price £</th><th style="width:90px">Unit</th><th class="r" style="width:100px">Auto /m²</th><th style="width:30px"></th></tr></thead>
             <tbody id="adminDeckRows"></tbody>
           </table></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -906,7 +934,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <button class="btn sm" onclick="adminDeckExportCSV()">⬇ Export CSV</button>
             <button class="btn sm" onclick="adminDeckReset()" style="color:#ed1c2d;border-color:#ed1c2d">↺ Reset to seed</button>
           </div>
-          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit</code> — a header row is optional. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.</div>
+          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit,perM2</code> — a header row is optional, and <code>perM2</code> may be omitted. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.<br><b>Auto /m²</b>: quantity per m² of deck, calculated automatically in the Decking calculator (clips are 1.5 per m², scaled up for the narrower Embossed board). Leave blank for items the rep enters by hand.</div>
         </div></div>
 
         <div class="apane" id="ap-users"><div class="card">
@@ -1018,6 +1046,64 @@ function displayName(model){return DISPLAY_NAME[model]||model;}
 ─────────────────────────────────────────────────────────────────────────────── */
 const BOARD_WIDTH_MM={HD:142,Embossed:138};
 const BOARD_LENGTH_M=3.6;
+const DECKING_WASTE=1.05;   /* 5% cutting wastage on board lengths */
+
+/* Deck footprints. points() returns the outline in millimetres (origin top-left,
+   y increasing downwards) so one function drives both the area and the diagram —
+   they can never disagree. L-Left and L-Right are exact mirrors of each other. */
+const DECK_SHAPES={
+  rect:{
+    label:'Square / Rectangle',
+    fields:[['a','Width (A)','Left to right measurement'],
+            ['b','Length (B)','Front to back measurement']],
+    points:({a,b})=>[[0,0],[a,0],[a,b],[0,b]]
+  },
+  lleft:{
+    label:'L-shape (Left)',
+    note:'Notch cut from the bottom-right corner',
+    fields:[['a','Total width (A)','Full left to right'],
+            ['b','Total length (B)','Full front to back'],
+            ['c','Notch width (C)','Width of the cut-out section (right side)'],
+            ['d','Notch length (D)','Depth of the cut-out section']],
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b-d],[a-c,b-d],[a-c,b],[0,b]]
+  },
+  lright:{
+    label:'L-shape (Right)',
+    note:'Notch cut from the bottom-left corner',
+    fields:[['a','Total width (A)','Full left to right'],
+            ['b','Total length (B)','Full front to back'],
+            ['c','Notch width (C)','Width of the cut-out section (left side)'],
+            ['d','Notch length (D)','Depth of the cut-out section']],
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[c,b],[c,b-d],[0,b-d]]
+  },
+  tshape:{
+    label:'T-shape',
+    note:'Wide top section with a stem below',
+    fields:[['a','Top section width (A)','The wide part, left to right'],
+            ['b','Top section length (B)','Depth of the wide part'],
+            ['c','Stem width (C)','Width of the stem / middle section'],
+            ['d','Stem length (D)','Depth of the stem section']],
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b+d],[(a-c)/2,b+d],[(a-c)/2,b],[0,b]]
+  },
+  ushape:{
+    label:'U-shape',
+    note:'Gap cut into the front edge',
+    fields:[['a','Total width (A)','Full left to right'],
+            ['b','Total length (B)','Full front to back'],
+            ['c','Gap width (C)','Width of the open gap'],
+            ['d','Gap length (D)','Depth of the gap, measured from the front']],
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b-d],[(a-c)/2,b-d],[(a-c)/2,b],[0,b]]
+  }
+};
+const DECK_SHAPE_KEYS=Object.keys(DECK_SHAPES);
+/* Schematic outlines for the Step 1 tiles — fixed proportions, not to scale */
+const DECK_SHAPE_ICON={
+  rect:'10,10 90,10 90,70 10,70',
+  lleft:'10,10 90,10 90,45 55,45 55,70 10,70',
+  lright:'10,10 90,10 90,70 45,70 45,45 10,45',
+  tshape:'10,10 90,10 90,40 62,40 62,70 38,70 38,40 10,40',
+  ushape:'10,10 90,10 90,70 65,70 65,35 35,35 35,70 10,70'
+};
 
 /* PLACEHOLDER PRICING — NOT THE REAL TOTALUXE PRICE LIST.
    The 2025/26 decking price list was not available when this was written, so the
@@ -1049,7 +1135,12 @@ const DECKING_SEED=[
   {code:'TL0611385',cat:'Edge',name:'Edge Board — Silver Birch',price:17.50,unit:'length'},
   /* Fixings & substructure */
   {code:'TL0611400',cat:'Fixing',name:'Starter Clip (pack of 50)',price:14.00,unit:'pack'},
-  {code:'TL0611401',cat:'Fixing',name:'Mid Clip — Stainless (pack of 100)',price:23.50,unit:'pack'},
+  /* perM2 drives the automatic quantity: 1.5 bags per m² of deck (HD), scaled up
+     for Embossed because its narrower board needs more runs. A "bag" is 20 clips,
+     i.e. ~30 clips/m² — the pack of 100 this placeholder originally carried would
+     have auto-ordered 1,800 clips for a 12m² deck. Set perM2 on the real product
+     when the master catalogue lands; leave it blank for manually-entered items. */
+  {code:'TL0611401',cat:'Fixing',name:'Mid Clip — Stainless (bag of 20)',price:12.50,unit:'bag',perM2:1.5},
   {code:'TL0611402',cat:'Fixing',name:'End Clip (pack of 50)',price:13.75,unit:'pack'},
   {code:'TL0611403',cat:'Fixing',name:'Fascia Screw — Colour Matched (pack of 100)',price:12.00,unit:'pack'},
   {code:'TL0611404',cat:'Fixing',name:'Composite Joist 40×60mm × 3.6m',price:18.90,unit:'length'},
@@ -1624,7 +1715,7 @@ function blankState(){return{
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
   pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false,additionalCosts:[]},
   fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
-  decking:{enabled:false,type:'HD',colour:'',width:0,length:0,items:[]}
+  decking:{enabled:false,shape:'rect',dims:{a:0,b:0,c:0,d:0},type:'HD',colour:'',width:0,length:0,items:[]}
 };}
 let state=blankState();
 function today(){return new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -2467,9 +2558,78 @@ function renderPricing(){
 const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Antique Oak':'#a4794b','Chocolate':'#4e352a','Silver Birch':'#b9b2a6'};
 
 function deckingState(){
-  if(!state.decking)state.decking={enabled:false,type:'HD',colour:'',width:0,length:0,items:[]};
-  if(!Array.isArray(state.decking.items))state.decking.items=[];
-  return state.decking;
+  if(!state.decking)state.decking={enabled:false,shape:'rect',dims:{a:0,b:0,c:0,d:0},type:'HD',colour:'',width:0,length:0,items:[]};
+  const d=state.decking;
+  if(!Array.isArray(d.items))d.items=[];
+  if(!d.shape||!DECK_SHAPES[d.shape])d.shape='rect';
+  /* quotes saved before the shape calculator carried a plain width x length */
+  if(!d.dims)d.dims={a:+d.width||0,b:+d.length||0,c:0,d:0};
+  ['a','b','c','d'].forEach(k=>{if(typeof d.dims[k]!=='number')d.dims[k]=+d.dims[k]||0;});
+  return d;
+}
+/* Shoelace over the outline, so area and diagram can never disagree.
+   Returns 0 for a degenerate or self-inverted outline (e.g. notch >= the deck). */
+function deckingArea(){
+  const d=deckingState(),shape=DECK_SHAPES[d.shape];
+  if(!shape)return 0;
+  if(!deckingDimsValid())return 0;
+  const pts=shape.points(d.dims);
+  let acc=0;
+  for(let i=0;i<pts.length;i++){
+    const [x1,y1]=pts[i],[x2,y2]=pts[(i+1)%pts.length];
+    acc+=x1*y2-x2*y1;
+  }
+  const mm2=Math.abs(acc)/2;
+  return Math.round(mm2/1e6*100)/100;   /* mm² -> m², 2dp */
+}
+/* Every required dimension present, and cut-outs strictly inside the deck. */
+function deckingDimsValid(){
+  const d=deckingState(),shape=DECK_SHAPES[d.shape];if(!shape)return false;
+  const need=shape.fields.map(f=>f[0]);
+  if(!need.every(k=>d.dims[k]>0))return false;
+  if(d.shape==='rect')return true;
+  if(d.shape==='tshape')return d.dims.c<=d.dims.a;
+  /* lleft / lright / ushape all remove c x d from an a x b rectangle */
+  return d.dims.c<d.dims.a && d.dims.d<d.dims.b;
+}
+function deckingDimsError(){
+  const d=deckingState();
+  if(d.shape==='rect')return '';
+  const shape=DECK_SHAPES[d.shape];
+  if(!shape.fields.map(f=>f[0]).every(k=>d.dims[k]>0))return '';
+  if(d.shape==='tshape')return d.dims.c>d.dims.a?'Stem width (C) cannot be wider than the top section (A).':'';
+  if(d.dims.c>=d.dims.a)return 'C must be smaller than the total width (A).';
+  if(d.dims.d>=d.dims.b)return 'D must be smaller than the total length (B).';
+  return '';
+}
+/* Boards run across the deck, so running metres = area / board cover width.
+   Board lengths add 5% cutting wastage. Single source for every consumer. */
+function deckingGeom(){
+  const d=deckingState();
+  const areaM2=deckingArea();
+  const boardW=(BOARD_WIDTH_MM[d.type]||BOARD_WIDTH_MM.HD)/1000;
+  const runningM=areaM2>0?areaM2/boardW:0;
+  const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M*DECKING_WASTE):0;
+  return {areaM2,runningM,lengths,boardW};
+}
+/* Narrower boards need more runs, so clips scale inversely with cover width. */
+function deckingClipFactor(){
+  return BOARD_WIDTH_MM.HD/(BOARD_WIDTH_MM[deckingState().type]||BOARD_WIDTH_MM.HD);
+}
+/* Recompute quantities for products carrying a perM2 rate. Items the rep has
+   typed over are pinned (auto:false) and never overwritten. */
+function deckingSyncAutoItems(){
+  const d=deckingState(),areaM2=deckingArea(),factor=deckingClipFactor();
+  deckingProducts().forEach(p=>{
+    const rate=+p.perM2||0;
+    if(rate<=0)return;
+    const ix=d.items.findIndex(i=>i.code===p.code);
+    if(ix>=0&&d.items[ix].auto===false)return;         /* manually pinned */
+    const qty=areaM2>0?Math.ceil(rate*areaM2*factor):0;
+    if(qty<=0){ if(ix>=0)d.items.splice(ix,1); return; }
+    if(ix>=0)d.items[ix].qty=qty;
+    else d.items.push({code:p.code,qty,auto:true});
+  });
 }
 /* Catalogue prices are TRADE COST. The customer price is cost x the decking
    mark-up, and (like materialsSell) is treated as VAT-inclusive.
@@ -2487,7 +2647,83 @@ function deckingSetType(t){
   d.type=t;
   /* keep the colour only if the new board type is offered in it */
   if(d.colour&&!deckingBoards(t).some(p=>p.name===d.colour))d.colour='';
+  renderDecking();   /* clip factor changed — deckingCalc re-syncs auto items */
+}
+/* ── Step 1: shape ──────────────────────────────────────────────────────── */
+function deckingSetShape(s){
+  if(!DECK_SHAPES[s])return;
+  const d=deckingState();
+  if(d.shape===s)return;
+  d.shape=s;
+  if(s==='rect'){d.dims.c=0;d.dims.d=0;}
   renderDecking();
+}
+function deckingRenderShapes(){
+  const d=deckingState(),w=document.getElementById('dk_shapes');if(!w)return;
+  w.innerHTML=DECK_SHAPE_KEYS.map(k=>{
+    const sh=DECK_SHAPES[k],sel=d.shape===k;
+    return `<div class="dk-shape ${sel?'sel':''}" onclick="deckingSetShape('${k}')" title="${esc(sh.note||sh.label)}">
+      <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="${DECK_SHAPE_ICON[k]}" fill="${sel?'var(--brand)':'#dfe6e7'}" stroke="${sel?'var(--brand)':'#b9c3c5'}" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+      <div class="nm">${sh.label}</div>
+    </div>`;
+  }).join('');
+}
+/* ── Step 2: dimension inputs + a diagram drawn to the entered proportions ─ */
+function deckingSetDim(k,v){
+  const d=deckingState();
+  d.dims[k]=Math.max(0,+v||0);
+  d.width=d.dims.a; d.length=d.dims.b;   /* mirrored for the picking list header */
+  deckingRenderDiagram();
+  deckingCalc();
+}
+function deckingRenderDims(){
+  const d=deckingState(),w=document.getElementById('dk_dims');if(!w)return;
+  const shape=DECK_SHAPES[d.shape];
+  w.innerHTML=shape.fields.map(([k,label,hint])=>{
+    const letter=label.match(/\(([A-D])\)/);
+    const pretty=label.replace(/\s*\([A-D]\)/,'');
+    return `<div class="field">
+      <label><span class="dk-let">${letter?letter[1]:''}</span>${pretty} <span style="font-weight:400;color:#8a969a">(mm)</span></label>
+      <input type="number" min="0" step="10" value="${d.dims[k]||''}" oninput="deckingSetDim('${k}',this.value)">
+      <div class="hint">${hint}</div>
+    </div>`;
+  }).join('');
+}
+/* Outline scaled into a 260x200 viewBox with the dimension letters placed on
+   the edges they measure. Falls back to the schematic icon before dims exist. */
+function deckingShapeSVG(){
+  const d=deckingState(),shape=DECK_SHAPES[d.shape];
+  const VW=260,VH=200,PAD=30;
+  if(!deckingDimsValid()){
+    return `<svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="${DECK_SHAPE_ICON[d.shape]}" fill="#eef2f3" stroke="#b9c3c5" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"/>
+    </svg>`;
+  }
+  const pts=shape.points(d.dims);
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const w=Math.max(...xs)-Math.min(...xs), h=Math.max(...ys)-Math.min(...ys);
+  const k=Math.min((VW-PAD*2)/w,(VH-PAD*2)/h);
+  const ox=(VW-w*k)/2-Math.min(...xs)*k, oy=(VH-h*k)/2-Math.min(...ys)*k;
+  const P=pts.map(([x,y])=>`${(x*k+ox).toFixed(1)},${(y*k+oy).toFixed(1)}`).join(' ');
+  const lbl=(t,x,y)=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="800" fill="#c2a14e" font-family="Helvetica,Arial">${t}</text>`;
+  const X=v=>v*k+ox, Y=v=>v*k+oy;
+  const {a,b,c}=d.dims, dd=d.dims.d;
+  let marks=lbl('A',X(a/2),Y(0)-14)+lbl('B',X(0)-14,Y(b/2));
+  if(d.shape==='lleft') marks+=lbl('C',X(a-c/2),Y(b)+14)+lbl('D',X(a)+14,Y(b-dd/2));
+  if(d.shape==='lright')marks+=lbl('C',X(c/2),Y(b)+14)+lbl('D',X(0)-14,Y(b-dd/2));
+  if(d.shape==='tshape')marks+=lbl('C',X(a/2),Y(b+dd)+14)+lbl('D',X((a+c)/2)+14,Y(b+dd/2));
+  if(d.shape==='ushape')marks+=lbl('C',X(a/2),Y(b-dd)-12)+lbl('D',X((a+c)/2)+14,Y(b-dd/2));
+  return `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="${P}" fill="#e8f1f2" stroke="var(--brand)" stroke-width="2.5" stroke-linejoin="round"/>
+    ${marks}
+  </svg>`;
+}
+function deckingRenderDiagram(){
+  const w=document.getElementById('dk_diagram');if(!w)return;
+  const err=deckingDimsError();
+  w.innerHTML=deckingShapeSVG()+(err?`<div class="dk-warn" style="margin-top:8px">${err}</div>`:'');
 }
 /* takes a product code, not a name — codes are safe to inline in an onclick */
 function deckingSetColour(code){
@@ -2515,14 +2751,23 @@ function deckingRenderColours(){
     </label>`;
   }).join('');
 }
+/* A rep typing a quantity pins it: auto:false stops deckingSyncAutoItems()
+   overwriting it on the next keystroke in Step 2. */
 function deckingExtraQty(code,qty){
   const d=deckingState();
   const n=Math.max(0,Math.floor(+qty||0));
   const ix=d.items.findIndex(i=>i.code===code);
   if(n<=0){if(ix>=0)d.items.splice(ix,1);}
-  else if(ix>=0)d.items[ix].qty=n;
-  else d.items.push({code,qty:n});
-  deckingRenderExtras();deckingCalc();
+  else if(ix>=0){d.items[ix].qty=n;d.items[ix].auto=false;}
+  else d.items.push({code,qty:n,auto:false});
+  deckingCalc();
+}
+/* Hand a pinned item back to the calculator. */
+function deckingExtraAuto(code){
+  const d=deckingState();
+  const ix=d.items.findIndex(i=>i.code===code);
+  if(ix>=0)d.items.splice(ix,1);
+  deckingCalc();
 }
 function deckingRenderExtras(){
   const d=deckingState(),w=document.getElementById('dk_extras');if(!w)return;
@@ -2533,41 +2778,45 @@ function deckingRenderExtras(){
     const qty=it?it.qty:0;
     const sell=deckSellPrice(p.price);
     const tot=Math.round(qty*sell*100)/100;
+    const isAuto=!!(it&&it.auto);
+    const pinned=!!(it&&it.auto===false&&(+p.perM2||0)>0);
+    const tag=isAuto?`<div class="dk-auto">AUTO</div>`
+      :pinned?`<div class="dk-auto" style="color:#8a969a;cursor:pointer" onclick="deckingExtraAuto('${p.code}')" title="Return to the calculated quantity">MANUAL ↺</div>`:'';
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${p.code}</td>
-      <td>${esc(p.name)} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
+      <td>${esc(p.name)} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span>${(+p.perM2||0)>0?` <span style="color:#8a969a;font-size:10px">· ${p.perM2}/m²</span>`:''}</td>
       <td class="r">£${money(sell)}</td>
-      <td class="c"><input class="num" type="number" min="0" step="1" value="${qty}" style="width:80px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)"></td>
+      <td class="c"><input class="num" type="number" min="0" step="1" value="${qty}" style="width:80px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)">${tag}</td>
       <td class="r">${qty?'£'+money(tot):'—'}</td>
     </tr>`;
   }).join('');
 }
-/* Boards are laid across the deck, so running metres come from area / board width
-   (offcuts are re-used on the next run). Board lengths = running metres / 3.6m. */
+/* Shape-driven. Area comes from the outline, running metres from area / board
+   cover width, board lengths add 5% wastage, and any product with a perM2 rate
+   has its quantity refreshed. Everything else in the module reads deckingGeom(). */
 function deckingCalc(){
   const d=deckingState();
-  const wEl=document.getElementById('dk_width'),lEl=document.getElementById('dk_length');
-  if(wEl)d.width=Math.max(0,+wEl.value||0);
-  if(lEl)d.length=Math.max(0,+lEl.value||0);
-  const areaM2=Math.round((d.width/1000)*(d.length/1000)*100)/100;
-  const boardW=(BOARD_WIDTH_MM[d.type]||BOARD_WIDTH_MM.HD)/1000;
-  const runningM=areaM2>0?Math.ceil(areaM2/boardW):0;
-  const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M):0;
+  const {areaM2,runningM,lengths}=deckingGeom();
+  deckingSyncAutoItems();
   const board=d.colour?deckingBoards(d.type).find(p=>p.name===d.colour):null;
   const boardSell=board?Math.round(lengths*deckSellPrice(board.price)*100)/100:0;
   const extrasSell=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?deckSellPrice(p.price)*i.qty:0);},0);
   const res={areaM2,runningM,lengths,board,boardSell,extrasSell:Math.round(extrasSell*100)/100};
   res.total=Math.round((res.boardSell+res.extrasSell)*100)/100;
+  deckingRenderExtras();
 
   const s=document.getElementById('dk_summary');
   if(s){
-    s.innerHTML=areaM2>0
+    const err=deckingDimsError();
+    s.innerHTML=err
+      ? `<div class="dk-warn">${err}</div>`
+      : areaM2>0
       ? `<div class="chip" style="display:flex;gap:22px;flex-wrap:wrap;font-size:13px;font-weight:600">
            <span>Area: <b>${areaM2}m²</b></span>
-           <span>Running metres: <b>${runningM}m</b></span>
-           <span>Board lengths: <b>${lengths} lengths</b></span>
+           <span>Running metres: <b>${runningM.toFixed(1)}m</b></span>
+           <span>Board lengths: <b>${lengths} lengths</b> <span style="font-weight:500;color:#8a969a">(incl 5% wastage)</span></span>
          </div>`
-      : `<div style="color:#8a969a;font-size:12px">Enter a width and length to calculate board quantities.</div>`;
+      : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate board quantities.</div>`;
   }
   const m=document.getElementById('dk_materials');
   if(m){
@@ -2584,7 +2833,7 @@ function deckingCalc(){
         <tbody>${rows.join('')}</tbody>
         <tfoot><tr><td colspan="3" class="r"><b>Decking total (incl VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
       </table></div>
-      <div style="font-size:10.5px;color:#8a969a;margin-top:6px">Board quantities assume ${BOARD_LENGTH_M}m lengths at ${BOARD_WIDTH_MM[d.type]}mm cover width. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
+      <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DECK_SHAPES[d.shape].label} · ${areaM2}m². Board quantities assume ${BOARD_LENGTH_M}m lengths at ${BOARD_WIDTH_MM[d.type]}mm cover width, plus 5% cutting wastage. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
     }
   }
   /* decking is part of the contract price — keep youpay, deposit and finance in step */
@@ -2595,10 +2844,7 @@ function deckingCalc(){
 function deckingTotal(unit){
   const d=deckingState();
   if(!d.enabled)return 0;
-  const areaM2=Math.round((d.width/1000)*(d.length/1000)*100)/100;
-  const boardW=(BOARD_WIDTH_MM[d.type]||BOARD_WIDTH_MM.HD)/1000;
-  const runningM=areaM2>0?Math.ceil(areaM2/boardW):0;
-  const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M):0;
+  const {lengths}=deckingGeom();
   const board=d.colour?deckingBoards(d.type).find(p=>p.name===d.colour):null;
   const boards=board?lengths*unit(board.price):0;
   const extras=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?unit(p.price)*i.qty:0);},0);
@@ -2613,10 +2859,7 @@ function deckingPickingRows(){
   const d=deckingState();
   if(!d.enabled)return [];
   const rows=[];
-  const areaM2=Math.round((d.width/1000)*(d.length/1000)*100)/100;
-  const boardW=(BOARD_WIDTH_MM[d.type]||BOARD_WIDTH_MM.HD)/1000;
-  const runningM=areaM2>0?Math.ceil(areaM2/boardW):0;
-  const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M):0;
+  const {lengths}=deckingGeom();
   const board=d.colour?deckingBoards(d.type).find(p=>p.name===d.colour):null;
   if(board&&lengths>0)rows.push([`${d.type} Composite Board — ${board.name}`,board.code,lengths]);
   d.items.forEach(i=>{const p=deckingProduct(i.code);if(p&&i.qty>0)rows.push([p.name,p.code,i.qty]);});
@@ -2626,9 +2869,9 @@ function renderDecking(){
   const d=deckingState();
   const en=document.getElementById('dk_enable');if(en)en.checked=!!d.enabled;
   const cfg=document.getElementById('dk_cfg');if(cfg)cfg.style.display=d.enabled?'':'none';
-  const wEl=document.getElementById('dk_width');if(wEl)wEl.value=d.width||'';
-  const lEl=document.getElementById('dk_length');if(lEl)lEl.value=d.length||'';
-  deckingRenderTypes();deckingRenderColours();deckingRenderExtras();deckingCalc();
+  deckingRenderShapes();deckingRenderDims();deckingRenderDiagram();
+  deckingRenderTypes();deckingRenderColours();
+  deckingCalc();   /* renders extras + summary, syncs auto items, calls recalc() */
 }
 
 function renderCostings(){
@@ -2715,7 +2958,7 @@ function renderCostings(){
       const p=deckingProduct(r[1]);
       brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(r[0])} × ${r[2]}</td><td class="r">${money2(p?Math.round(p.price*r[2]*100)/100:0)}</td></tr>`;
     });
-    brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Decking subtotal (${_dk.type} · ${_dk.width}×${_dk.length}mm)</td><td class="r">${money2(deckingCost)}</td></tr>`;
+    brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Decking subtotal (${_dk.type} · ${DECK_SHAPES[_dk.shape].label} · ${deckingArea()}m²)</td><td class="r">${money2(deckingCost)}</td></tr>`;
     brkHTML+=`<tr style="color:#666;font-size:11px"><td>&nbsp;&nbsp;Sold to customer at ${(+admin.deckingMarkup||0)}% mark-up — £${money(deckingSell)} incl VAT (before offer discount)</td><td class="r"></td></tr>`;
   }
   if(bandShifted)brkHTML+=`<tr style="color:#ed1c2d;font-size:11px;font-style:italic"><td colspan="2">⚠ Sold at ${soldAtBand}% — costed at ${costedAtBand}% (effective band including all costs)</td></tr>`;
@@ -2885,6 +3128,7 @@ function renderAdmin(){
         <td><input value="${esc(p.name)}" oninput="admin.decking[${i}].name=this.value"></td>
         <td class="r"><input class="num" value="${p.price}" oninput="admin.decking[${i}].price=+this.value||0"></td>
         <td><input value="${esc(p.unit||'each')}" oninput="admin.decking[${i}].unit=this.value"></td>
+        <td class="r"><input class="num" value="${p.perM2||''}" placeholder="—" title="Quantity per m² — leave blank for manual entry" oninput="admin.decking[${i}].perM2=+this.value||0"></td>
         <td><button class="chiprm" onclick="admin.decking.splice(${i},1);renderAdmin()">×</button></td>`;
       db.appendChild(tr);
     });
@@ -3136,17 +3380,21 @@ function adminDeckImportCSV(input){
       const body=(head[0]==='code'&&head.includes('name'))?rows.slice(1):rows;
       const out=[],bad=[];
       body.forEach((r,ix)=>{
-        const [code,cat,name,price,unit]=[0,1,2,3,4].map(i=>String(r[i]==null?'':r[i]).trim());
+        const [code,cat,name,price,unit,perM2]=[0,1,2,3,4,5].map(i=>String(r[i]==null?'':r[i]).trim());
         const p=parseFloat(String(price).replace(/[£,\s]/g,''));
         if(!code||!cat||!name||isNaN(p)){bad.push(ix+1);return;}
-        out.push({code,cat,name,price:Math.round(p*100)/100,unit:unit||'each'});
+        const row={code,cat,name,price:Math.round(p*100)/100,unit:unit||'each'};
+        const rate=parseFloat(String(perM2).replace(/[,\s]/g,''));   /* optional column */
+        if(!isNaN(rate)&&rate>0)row.perM2=rate;
+        out.push(row);
       });
-      if(!out.length)throw new Error('No valid rows found. Expected columns: code,cat,name,price,unit');
+      if(!out.length)throw new Error('No valid rows found. Expected columns: code,cat,name,price,unit[,perM2]');
       admin.decking=out;
       /* a colour that no longer exists must not stay selected on the open quote */
       const d=deckingState();
       if(d.colour&&!deckingBoards(d.type).some(b=>b.name===d.colour))d.colour='';
       d.items=d.items.filter(i=>deckingProduct(i.code));
+      deckingSyncAutoItems();   /* the new catalogue may carry different perM2 rates */
       renderAdmin();
       toast(`Imported ${out.length} decking product${out.length===1?'':'s'}`+(bad.length?` — skipped ${bad.length} invalid row${bad.length===1?'':'s'}`:''));
     }catch(e){ alert('CSV import failed: '+e.message); }
@@ -3157,8 +3405,8 @@ function adminDeckImportCSV(input){
 }
 function adminDeckExportCSV(){
   const q=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
-  const csv=['code,cat,name,price,unit'].concat(
-    (admin.decking||[]).map(p=>[p.code,p.cat,p.name,p.price,p.unit].map(q).join(','))
+  const csv=['code,cat,name,price,unit,perM2'].concat(
+    (admin.decking||[]).map(p=>[p.code,p.cat,p.name,p.price,p.unit,p.perM2||''].map(q).join(','))
   ).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -3533,9 +3781,13 @@ function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
   if(!state.config.sides)state.config.sides={left:"None",right:"None",front:"None",back:"None"};
   if(!state.config.doors)state.config.doors={};
   if(!state.config.sideNotes)state.config.sideNotes={front:"",left:"",right:"",back:""};
-  /* decking added after earlier quotes were saved — backfill so older quotes open cleanly */
-  if(!state.decking)state.decking={enabled:false,type:'HD',colour:'',width:0,length:0,items:[]};
+  /* decking added after earlier quotes were saved — backfill so older quotes open cleanly.
+     Quotes saved before the shape calculator carried only width x length: those are
+     rectangles, so map them onto the rect shape rather than losing the deck. */
+  if(!state.decking)state.decking={enabled:false,shape:'rect',dims:{a:0,b:0,c:0,d:0},type:'HD',colour:'',width:0,length:0,items:[]};
   if(!Array.isArray(state.decking.items))state.decking.items=[];
+  if(!state.decking.shape)state.decking.shape='rect';
+  if(!state.decking.dims)state.decking.dims={a:+state.decking.width||0,b:+state.decking.length||0,c:0,d:0};
   fillForm();initConfig();renderPricing();renderSurvey();updateTop();setDoc(state.doc||'contract');
   showView(currentUser.signedOnly?'survey':'customer');toast('Quote loaded');}
 function quickStatus(id,s){
@@ -3797,18 +4049,19 @@ function renderDocuments(){
   /* customer-facing decking blocks — only rendered when decking is actually sold,
      so quotes without it look exactly as they did before */
   const dkSell=(state._calc&&state._calc.decking)||0;
-  const dkArea=Math.round((dk.width/1000)*(dk.length/1000)*100)/100;
+  const dkArea=deckingArea();
+  const dkShape=DECK_SHAPES[dk.shape]?DECK_SHAPES[dk.shape].label:'';
   const dkBoard=dk.enabled&&dk.colour?deckingBoards(dk.type).find(p=>p.name===dk.colour):null;
   const deckingOrderBlock=(dk.enabled&&dkSell>0)
     ? `<div class="sh">Order Breakdown</div>
        <table class="mt"><tbody>
          <tr><td>Veranda materials <span style="color:#6a777c">(incl VAT)</span></td><td class="r">£${money(calc.materials)}</td></tr>
-         <tr><td>Composite decking — ${esc(dk.type)}${dkBoard?' · '+esc(dkBoard.name):''} <span style="color:#6a777c">(${dkArea}m², incl VAT)</span></td><td class="r">£${money(dkSell)}</td></tr>
+         <tr><td>Composite decking — ${esc(dk.type)}${dkBoard?' · '+esc(dkBoard.name):''} <span style="color:#6a777c">(${esc(dkShape)}, ${dkArea}m², incl VAT)</span></td><td class="r">£${money(dkSell)}</td></tr>
          <tr><td>Installation &amp; fitting</td><td class="r">£${money(calc.fitting)}</td></tr>
          <tr style="color:var(--brand)"><td>Special offer — ${calc.discount}% off materials &amp; decking</td><td class="r">−£${money(calc.matDiscAmt)}</td></tr>
        </tbody><tfoot><tr><td class="r"><b>Total — You Pay</b></td><td class="r"><b>£${money(calc.youpay)}</b></td></tr></tfoot></table>`
     : '';
-  const deckingBlock=dkRows.length?`<div class="sh" style="margin-top:14px">Composite Decking <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">(${dk.type} · ${dk.width} × ${dk.length} mm)</span></div>
+  const deckingBlock=dkRows.length?`<div class="sh" style="margin-top:14px">Composite Decking <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">(${dk.type} · ${esc(dkShape)} · ${dkArea}m²)</span></div>
      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:175px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead>
      <tbody>${dkRows.map((r,i)=>`<tr><td class="c">D${i+1}</td><td>${esc(r[0])}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
   const doorBlocks=doorSets.length?`<div class="sh" style="margin-top:14px">Glass Door Components <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">(all sets · quantities combined)</span></div>
@@ -3819,7 +4072,7 @@ function renderDocuments(){
   const confirmRow=(name,detail,imgHTML,on)=>`<tr><td><b>${name}</b></td><td>${detail}</td><td class="c">${imgHTML}</td><td class="c tickwrap"><span class="ck${on?' on':''}" onclick="this.classList.toggle('on')"></span></td></tr>`;
   /* must come after confirmRow — it is a const, so referencing it earlier hits the TDZ */
   const deckingSpecRow=(dk.enabled&&dkSell>0&&dkBoard)
-    ? confirmRow('Composite Decking',`${esc(dk.type)} — ${esc(dkBoard.name)} · ${dk.width} × ${dk.length} mm (${dkArea}m²)`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
+    ? confirmRow('Composite Decking',`${esc(dk.type)} — ${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
     : '';
 
   const html=`
