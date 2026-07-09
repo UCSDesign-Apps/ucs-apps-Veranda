@@ -246,24 +246,26 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .dk-shape.sel{border-color:var(--brand);border-width:2px;background:#f2f8f9;}
 .dk-shape svg{width:100%;height:62px;display:block;}
 .dk-shape .nm{font-size:12px;font-weight:700;color:var(--brand-d);margin-top:6px;line-height:1.25;}
-.dk-dimwrap{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;}
-@media(max-width:820px){.dk-dimwrap{grid-template-columns:1fr;} }
-.dk-dimfields{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-@media(max-width:560px){.dk-dimfields{grid-template-columns:1fr;} }
-.dk-dimfields .field label{display:block;}
-.dk-dimfields .hint{font-size:10.5px;color:#8a969a;font-weight:400;margin-top:2px;line-height:1.35;}
 .dk-let{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;background:var(--brand);color:#fff;font-size:10.5px;font-weight:800;margin-right:6px;}
-.dk-diagram{border:1px solid var(--line);border-radius:12px;background:#fbfcfc;padding:10px;}
-.dk-diagram svg{width:100%;height:auto;display:block;}
 .dk-auto{font-size:9.5px;font-weight:700;color:#c2a14e;letter-spacing:.4px;}
 .dk-warn{background:#fdecec;border:1px solid #f1b4b4;color:#a33;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600;}
-.dk-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
-.dk-side{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fbfcfc;}
-.dk-side .sn{font-size:12px;font-weight:800;color:var(--brand-d);margin-bottom:7px;}
-.dk-side .sl{font-size:10px;color:#8a969a;font-weight:400;}
-.dk-side .chip-row{gap:5px;}
-.dk-side .opt-chip{padding:5px 10px;font-size:11.5px;}
 .dk-catrow td{background:#f4f7f8;font-weight:800;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#6a777c;}
+/* Step 2 — dimensions above, large diagram below */
+.dk-dimgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:520px){.dk-dimgrid{grid-template-columns:1fr;}}
+.dk-dimgrid .field label{display:block;}
+.dk-dimgrid .hint{font-size:10.5px;color:#8a969a;font-weight:400;margin-top:2px;line-height:1.35;}
+.dk-canvasbox{margin-top:14px;background:#f4f6f7;border:1px solid var(--line);border-radius:12px;padding:16px 12px 12px;text-align:center;}
+.dk-legend{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;font-weight:600;color:#6a777c;}
+.dk-legend span{display:inline-flex;align-items:center;gap:6px;}
+.dk-key{display:inline-block;width:16px;height:4px;border-radius:2px;}
+.dk-key1{background:#ed1c2d;height:5px;}
+.dk-key2{background:#9a6200;width:14px;}
+.dk-pills{display:flex;flex-wrap:wrap;gap:8px;}
+.dk-pill{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;}
+.dk-pill1{background:#fdecec;border:1px solid #ed1c2d;color:#a3141f;}
+.dk-pill2{background:#fbf3e3;border:1px solid #9a6200;color:#7a4e00;}
+.dk-pill .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 .imgbank{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;}
 .imgcard{border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center;font-size:11px;}
 .imgcard img{width:100%;height:80px;object-fit:cover;display:block;background:#f3f3f3;} .imgcard .nm{padding:5px;color:var(--muted);}
@@ -722,35 +724,31 @@ body.print-internal .internal-notes-only{display:block !important;}
 
           <!-- STEP 2 — DIMENSIONS + CANVAS -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">2</span> Dimensions</div>
-            <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram. <b>Tap a side of the diagram</b> to add steps to that edge.</div>
-            <div class="dk-dimwrap">
-              <div class="dk-dimfields" id="dk_dims"></div>
-              <div class="dk-diagram" style="text-align:center">
-                <canvas id="dk_canvas" width="220" height="180" style="cursor:pointer;max-width:100%" onclick="deckingCanvasClick(event)"></canvas>
-                <div style="font-size:10px;color:#8a969a;margin-top:6px">Tap an edge to cycle: none → single → double</div>
+            <div class="dk-step"><span class="dk-num">2</span> Dimensions &amp; Steps</div>
+            <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram. <b>Tap an edge of the diagram</b> to add steps to that side.</div>
+            <div class="dk-dimgrid" id="dk_dims"></div>
+            <div id="dk_summary" style="margin-top:12px"></div>
+            <div class="dk-canvasbox">
+              <canvas id="dk_canvas" width="300" height="260" style="cursor:pointer;max-width:100%" onclick="deckingCanvasClick(event)"></canvas>
+              <div class="dk-legend">
+                <span><i class="dk-key dk-key1"></i> Single step</span>
+                <span><i class="dk-key dk-key2"></i><i class="dk-key dk-key2" style="margin-left:2px"></i> Double step</span>
+                <span style="color:#8a969a">Tap an edge: none → single → double</span>
               </div>
             </div>
-            <div id="dk_summary" style="margin-top:12px"></div>
+            <div id="dk_step_labels" style="margin-top:10px"></div>
           </div>
 
-          <!-- STEP 3 — STEPS -->
+          <!-- STEP 3 — COLOUR -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">3</span> Steps</div>
-            <div class="sub" style="margin-bottom:10px">Set steps per side. Each step runs the full length of its side and adds treads, risers and bearer timber.</div>
-            <div class="dk-sides" id="dk_steps"></div>
-          </div>
-
-          <!-- STEP 4 — COLOUR -->
-          <div class="card">
-            <div class="dk-step"><span class="dk-num">4</span> Board Colour</div>
+            <div class="dk-step"><span class="dk-num">3</span> Board Colour</div>
             <div class="sub" style="margin-bottom:10px">Each board carries its own cover width, so the board you pick sets the running metres.</div>
             <div class="imgbank" id="dk_colours"></div>
           </div>
 
-          <!-- STEP 5 — MATERIALS -->
+          <!-- STEP 4 — MATERIALS -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">5</span> Materials Summary</div>
+            <div class="dk-step"><span class="dk-num">4</span> Materials Summary</div>
             <div class="sub" style="margin-bottom:10px">Everything below is calculated from the shape, board and steps. Type over any quantity to pin it — the calculator then leaves that line alone.</div>
             <div id="dk_materials"></div>
           </div>
@@ -2705,17 +2703,25 @@ function deckingCycleStep(side){
   deckingSetStep(side,((d.steps[side]||0)+1)%3);
 }
 const DECK_STEP_LABEL=['None','Single','Double'];
-function deckingRenderSteps(){
-  const d=deckingState(),w=document.getElementById('dk_steps');if(!w)return;
-  w.innerHTML=DECK_SIDES.map(s=>{
-    const len=deckingSideLengthM(s);
-    return `<div class="dk-side">
-      <div class="sn">${DECK_SIDE_LABEL[s]}${len>0?` <span class="sl">· ${len.toFixed(2)}m run</span>`:''}</div>
-      <div class="chip-row">${[0,1,2].map(n=>
-        `<div class="opt-chip ${d.steps[s]===n?'sel':''}" onclick="deckingSetStep('${s}',${n})">${DECK_STEP_LABEL[n]}</div>`
-      ).join('')}</div>
-    </div>`;
-  }).join('');
+/* Sides are lettered clockwise from the front: A front, B right, C back, D left. */
+const DECK_SIDE_LETTER={front:'A',right:'B',back:'C',left:'D'};
+/* Coloured pills under the diagram, one per side that carries steps. */
+function renderDkStepLabels(){
+  const d=deckingState(),w=document.getElementById('dk_step_labels');if(!w)return;
+  const active=DECK_SIDES.filter(s=>(d.steps[s]||0)>0);
+  if(!active.length){
+    w.innerHTML='<div style="font-size:11.5px;color:#8a969a">No steps. Tap an edge of the diagram to add one.</div>';
+    return;
+  }
+  w.innerHTML='<div class="dk-pills">'+active.map(s=>{
+    const n=d.steps[s], len=deckingSideLengthM(s);
+    const cls=n===1?'dk-pill1':'dk-pill2';
+    const dot=n===1?'#ed1c2d':'#9a6200';
+    return `<span class="${'dk-pill '+cls}">
+      <i class="dot" style="background:${dot}"></i>
+      ${DECK_SIDE_LABEL[s]} (${DECK_SIDE_LETTER[s]}): ${DECK_STEP_LABEL[n]} step${len>0?` · ${len.toFixed(2)}m`:''}
+    </span>`;
+  }).join('')+'</div>';
 }
 /* Total metres of step run across all sides, weighted by riser count. */
 function deckingStepRunM(){
@@ -2727,8 +2733,7 @@ function deckingStepRunM(){
 function deckingSetDim(k,v){
   const d=deckingState();
   d.dims[k]=Math.max(0,+v||0);
-  deckingDrawCanvas();
-  deckingRenderSteps();
+  deckingDrawCanvas();   /* also refreshes the step pills (side lengths changed) */
   deckingCalc();
 }
 function deckingRenderDims(){
@@ -2745,7 +2750,7 @@ function deckingRenderDims(){
 }
 
 /* ── Canvas (220x180) — outline, A/B/C/D labels, step indicator circles ───── */
-const DK_CANVAS={W:220,H:180,PAD:26};
+const DK_CANVAS={W:300,H:260,PAD:36};
 /* Maps deck millimetres onto canvas pixels for the current shape. */
 function deckingCanvasGeom(){
   const pts=deckingPoints();
@@ -2767,25 +2772,35 @@ function dkLabel(ctx,t,x,y){
   ctx.fillStyle='#c2a14e';ctx.font='800 12px Helvetica,Arial';
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,x,y);
 }
-/* One circle per riser, drawn just outside the edge that carries the steps. */
-function dkStepDots(ctx,g){
+const DK_STEP_OFFSET=10;   /* px the step line sits outside the edge */
+const DK_STEP1_COLOUR='#ed1c2d';
+const DK_STEP2_COLOUR='#9a6200';
+/* A single step draws one thick red line just outside its edge; a double step
+   draws two thinner amber lines 3px apart. "Outside" is decided by which side of
+   the canvas centre the edge midpoint falls on, so the lines never sit on the deck. */
+function dkStepLine(ctx,g){
   const d=deckingState(),b=g.b;
-  const spots={
-    front:[g.X((b.x0+b.x1)/2),g.Y(b.y1)+9],
-    back :[g.X((b.x0+b.x1)/2),g.Y(b.y0)-9],
-    left :[g.X(b.x0)-9,g.Y((b.y0+b.y1)/2)],
-    right:[g.X(b.x1)+9,g.Y((b.y0+b.y1)/2)]
+  const cx=DK_CANVAS.W/2, cy=DK_CANVAS.H/2;
+  const edges={
+    front:{horiz:true, x1:g.X(b.x0),x2:g.X(b.x1),y:g.Y(b.y1)},
+    back :{horiz:true, x1:g.X(b.x0),x2:g.X(b.x1),y:g.Y(b.y0)},
+    left :{horiz:false,y1:g.Y(b.y0),y2:g.Y(b.y1),x:g.X(b.x0)},
+    right:{horiz:false,y1:g.Y(b.y0),y2:g.Y(b.y1),x:g.X(b.x1)}
   };
   DECK_SIDES.forEach(s=>{
     const n=d.steps[s]||0;if(!n)return;
-    const [cx,cy]=spots[s];
-    const horiz=(s==='front'||s==='back');
-    for(let i=0;i<n;i++){
-      const off=(i-(n-1)/2)*10;
+    const e=edges[s];
+    const dir=e.horiz ? (e.y>=cy?1:-1) : (e.x>=cx?1:-1);   /* outward */
+    const base=DK_STEP_OFFSET*dir;
+    const runs=(n===1)?[{off:base,w:5,c:DK_STEP1_COLOUR}]
+                      :[{off:base,w:4,c:DK_STEP2_COLOUR},{off:base+3*dir,w:4,c:DK_STEP2_COLOUR}];
+    runs.forEach(r=>{
       ctx.beginPath();
-      ctx.arc(horiz?cx+off:cx, horiz?cy:cy+off, 3.4, 0, Math.PI*2);
-      ctx.fillStyle='#c2a14e';ctx.fill();
-    }
+      ctx.lineWidth=r.w;ctx.strokeStyle=r.c;ctx.lineCap='round';
+      if(e.horiz){ctx.moveTo(e.x1,e.y+r.off);ctx.lineTo(e.x2,e.y+r.off);}
+      else       {ctx.moveTo(e.x+r.off,e.y1);ctx.lineTo(e.x+r.off,e.y2);}
+      ctx.stroke();
+    });
   });
 }
 function drawRect(ctx,g){
@@ -2793,7 +2808,7 @@ function drawRect(ctx,g){
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X((b.x0+b.x1)/2),g.Y(b.y0)-13);
   dkLabel(ctx,'B',g.X(b.x0)-13,g.Y((b.y0+b.y1)/2));
-  dkStepDots(ctx,g);
+  dkStepLine(ctx,g);
 }
 function drawLLeft(ctx,g){
   const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d,box=g.b;
@@ -2802,7 +2817,7 @@ function drawLLeft(ctx,g){
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
   dkLabel(ctx,'C',g.X(a-c/2),g.Y(bb)+13);      /* notch on the RIGHT */
   dkLabel(ctx,'D',g.X(a)+13,g.Y(bb-dd/2));
-  dkStepDots(ctx,g);
+  dkStepLine(ctx,g);
 }
 function drawLRight(ctx,g){
   const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
@@ -2811,7 +2826,7 @@ function drawLRight(ctx,g){
   dkLabel(ctx,'B',g.X(a)+13,g.Y(bb/2));
   dkLabel(ctx,'C',g.X(c/2),g.Y(bb)+13);        /* notch on the LEFT — mirrored */
   dkLabel(ctx,'D',g.X(0)-13,g.Y(bb-dd/2));
-  dkStepDots(ctx,g);
+  dkStepLine(ctx,g);
 }
 function drawT(ctx,g){
   const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
@@ -2820,7 +2835,7 @@ function drawT(ctx,g){
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
   dkLabel(ctx,'C',g.X(a/2),g.Y(bb+dd)+13);
   dkLabel(ctx,'D',g.X((a+c)/2)+13,g.Y(bb+dd/2));
-  dkStepDots(ctx,g);
+  dkStepLine(ctx,g);
 }
 function drawU(ctx,g){
   const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
@@ -2829,10 +2844,12 @@ function drawU(ctx,g){
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
   dkLabel(ctx,'C',g.X(a/2),g.Y(bb-dd)-11);
   dkLabel(ctx,'D',g.X((a+c)/2)+13,g.Y(bb-dd/2));
-  dkStepDots(ctx,g);
+  dkStepLine(ctx,g);
 }
 const DK_DRAW={square:drawRect,lleft:drawLLeft,lright:drawLRight,tshape:drawT,ushape:drawU};
 function deckingDrawCanvas(){
+  /* pills are DOM, not canvas — render them even where there is no 2d context */
+  renderDkStepLabels();
   const cv=document.getElementById('dk_canvas');if(!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support — state still calculates */
@@ -3094,7 +3111,7 @@ function renderDecking(){
   const d=deckingState();
   const en=document.getElementById('dk_enable');if(en)en.checked=!!d.enabled;
   const cfg=document.getElementById('dk_cfg');if(cfg)cfg.style.display=d.enabled?'':'none';
-  deckingRenderShapes();deckingRenderDims();deckingRenderSteps();deckingRenderColours();
+  deckingRenderShapes();deckingRenderDims();deckingRenderColours();
   deckingCalc();   /* syncs auto items, renders materials, draws canvas, calls recalc() */
 }
 
