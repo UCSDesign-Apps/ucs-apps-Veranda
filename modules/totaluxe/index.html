@@ -260,12 +260,12 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .dk-legend span{display:inline-flex;align-items:center;gap:6px;}
 .dk-key{display:inline-block;width:16px;height:4px;border-radius:2px;}
 .dk-key1{background:#ed1c2d;height:5px;}
-.dk-key2{background:#9a6200;width:14px;}
+.dk-key2{background:#ed1c2d;width:14px;}
 .dk-pills{display:flex;flex-wrap:wrap;gap:8px;}
 .dk-pill{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;}
-.dk-pill1{background:#fdecec;border:1px solid #ed1c2d;color:#a3141f;}
-.dk-pill2{background:#fbf3e3;border:1px solid #9a6200;color:#7a4e00;}
-.dk-pill .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.dk-pill1,.dk-pill2{background:#fdecec;border:1px solid #ed1c2d;color:#a3141f;}
+.dk-pill .dot{width:9px;height:9px;border-radius:50%;background:#ed1c2d;flex-shrink:0;}
+.dk-pill .dots{display:inline-flex;gap:2px;}
 .imgbank{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;}
 .imgcard{border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center;font-size:11px;}
 .imgcard img{width:100%;height:80px;object-fit:cover;display:block;background:#f3f3f3;} .imgcard .nm{padding:5px;color:var(--muted);}
@@ -731,8 +731,8 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="dk-canvasbox">
               <canvas id="dk_canvas" width="300" height="260" style="cursor:pointer;max-width:100%" onclick="deckingCanvasClick(event)"></canvas>
               <div class="dk-legend">
-                <span><i class="dk-key dk-key1"></i> Single step</span>
-                <span><i class="dk-key dk-key2"></i><i class="dk-key dk-key2" style="margin-left:2px"></i> Double step</span>
+                <span><i class="dk-key dk-key1"></i> Single step — one line</span>
+                <span><span style="display:inline-flex;flex-direction:column;gap:3px"><i class="dk-key dk-key2"></i><i class="dk-key dk-key2"></i></span> Double step — two lines</span>
                 <span style="color:#8a969a">Tap an edge: none → single → double</span>
               </div>
             </div>
@@ -2715,10 +2715,10 @@ function renderDkStepLabels(){
   }
   w.innerHTML='<div class="dk-pills">'+active.map(s=>{
     const n=d.steps[s], len=deckingSideLengthM(s);
-    const cls=n===1?'dk-pill1':'dk-pill2';
-    const dot=n===1?'#ed1c2d':'#9a6200';
-    return `<span class="${'dk-pill '+cls}">
-      <i class="dot" style="background:${dot}"></i>
+    /* both are red — one dot vs two mirrors the one line vs two on the diagram */
+    const dots='<span class="dots">'+Array.from({length:n},()=>'<i class="dot"></i>').join('')+'</span>';
+    return `<span class="${'dk-pill dk-pill'+n}">
+      ${dots}
       ${DECK_SIDE_LABEL[s]} (${DECK_SIDE_LETTER[s]}): ${DECK_STEP_LABEL[n]} step${len>0?` · ${len.toFixed(2)}m`:''}
     </span>`;
   }).join('')+'</div>';
@@ -2749,24 +2749,44 @@ function deckingRenderDims(){
   }).join('');
 }
 
-/* ── Canvas (220x180) — outline, A/B/C/D labels, step indicator circles ───── */
+/* ── Canvas (300x260) — outline, A/B/C/D labels, step lines ───────────────── */
 const DK_CANVAS={W:300,H:260,PAD:36};
-/* Maps deck millimetres onto canvas pixels for the current shape. */
+/* Proportional stand-in dimensions so a shape draws the moment it is selected,
+   before the rep has typed anything. Canvas only — deckingArea(),
+   deckingPerimeter() and deckingSideLengthM() must still read zero. */
+const DK_PLACEHOLDER_DIMS={
+  square:{a:5000,b:4000,c:0,d:0},
+  lleft :{a:5000,b:4000,c:2000,d:1600},
+  lright:{a:5000,b:4000,c:2000,d:1600},
+  tshape:{a:5000,b:2600,c:2200,d:1400},
+  ushape:{a:5000,b:4000,c:1800,d:2200}
+};
+/* Maps deck millimetres onto canvas pixels. Falls back to the placeholder
+   outline when the dimensions are missing or invalid; `placeholder` tells the
+   caller to draw it faintly and prompt for dimensions. */
 function deckingCanvasGeom(){
-  const pts=deckingPoints();
-  if(!pts)return null;
-  const b=deckingBBox();
+  const d=deckingState(),shape=DK_SHAPES[d.shape];
+  if(!shape)return null;
+  const valid=deckingDimsValid();
+  const dims=valid?d.dims:(DK_PLACEHOLDER_DIMS[d.shape]||DK_PLACEHOLDER_DIMS.square);
+  const pts=shape.points(dims);
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const b={x0,y0,x1,y1,w:x1-x0,h:y1-y0};
   if(!b.w||!b.h)return null;
   const k=Math.min((DK_CANVAS.W-DK_CANVAS.PAD*2)/b.w,(DK_CANVAS.H-DK_CANVAS.PAD*2)/b.h);
   const ox=(DK_CANVAS.W-b.w*k)/2-b.x0*k, oy=(DK_CANVAS.H-b.h*k)/2-b.y0*k;
-  return {pts,b,k,X:v=>v*k+ox,Y:v=>v*k+oy};
+  return {pts,b,k,dims,placeholder:!valid,X:v=>v*k+ox,Y:v=>v*k+oy};
 }
 function dkStroke(ctx,g){
   ctx.beginPath();
   g.pts.forEach(([x,y],i)=>{const px=g.X(x),py=g.Y(y);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
   ctx.closePath();
-  ctx.fillStyle='#e8f1f2';ctx.fill();
-  ctx.lineWidth=2.5;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
+  ctx.fillStyle=g.placeholder?'#eef2f3':'#e8f1f2';ctx.fill();
+  ctx.lineWidth=2.5;ctx.strokeStyle=g.placeholder?'#a9b6b9':'#1f4e57';ctx.lineJoin='round';
+  if(ctx.setLineDash)ctx.setLineDash(g.placeholder?[5,4]:[]);
+  ctx.stroke();
+  if(ctx.setLineDash)ctx.setLineDash([]);
 }
 function dkLabel(ctx,t,x,y){
   ctx.fillStyle='#c2a14e';ctx.font='800 12px Helvetica,Arial';
@@ -2774,7 +2794,7 @@ function dkLabel(ctx,t,x,y){
 }
 const DK_STEP_OFFSET=10;   /* px the step line sits outside the edge */
 const DK_STEP1_COLOUR='#ed1c2d';
-const DK_STEP2_COLOUR='#9a6200';
+const DK_STEP2_COLOUR='#ed1c2d';   /* double steps are red too — one line vs two is the tell */
 /* A single step draws one thick red line just outside its edge; a double step
    draws two thinner amber lines 3px apart. "Outside" is decided by which side of
    the canvas centre the edge midpoint falls on, so the lines never sit on the deck. */
@@ -2803,15 +2823,17 @@ function dkStepLine(ctx,g){
     });
   });
 }
+/* All five read g.dims, never state.dims — g.dims is the placeholder outline
+   when nothing has been entered yet, so the letters land on the drawn shape. */
 function drawRect(ctx,g){
-  const d=deckingState(),b=g.b;
+  const b=g.b;
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X((b.x0+b.x1)/2),g.Y(b.y0)-13);
   dkLabel(ctx,'B',g.X(b.x0)-13,g.Y((b.y0+b.y1)/2));
   dkStepLine(ctx,g);
 }
 function drawLLeft(ctx,g){
-  const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d,box=g.b;
+  const {a,b:bb,c}=g.dims,dd=g.dims.d;
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
@@ -2820,7 +2842,7 @@ function drawLLeft(ctx,g){
   dkStepLine(ctx,g);
 }
 function drawLRight(ctx,g){
-  const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
+  const {a,b:bb,c}=g.dims,dd=g.dims.d;
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
   dkLabel(ctx,'B',g.X(a)+13,g.Y(bb/2));
@@ -2829,7 +2851,7 @@ function drawLRight(ctx,g){
   dkStepLine(ctx,g);
 }
 function drawT(ctx,g){
-  const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
+  const {a,b:bb,c}=g.dims,dd=g.dims.d;
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
@@ -2838,7 +2860,7 @@ function drawT(ctx,g){
   dkStepLine(ctx,g);
 }
 function drawU(ctx,g){
-  const d=deckingState(),{a,b:bb,c}=d.dims,dd=d.dims.d;
+  const {a,b:bb,c}=g.dims,dd=g.dims.d;
   dkStroke(ctx,g);
   dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
   dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
@@ -2855,12 +2877,14 @@ function deckingDrawCanvas(){
   if(!ctx)return;   /* jsdom / no canvas support — state still calculates */
   ctx.clearRect(0,0,DK_CANVAS.W,DK_CANVAS.H);
   const g=deckingCanvasGeom();
-  if(!g){
-    ctx.fillStyle='#8a969a';ctx.font='11px Helvetica,Arial';ctx.textAlign='center';
-    ctx.fillText('Enter dimensions',DK_CANVAS.W/2,DK_CANVAS.H/2);
-    return;
-  }
+  if(!g)return;
   (DK_DRAW[deckingState().shape]||drawRect)(ctx,g);
+  if(g.placeholder){
+    /* the outline is a proportional stand-in — say so rather than imply a size */
+    ctx.fillStyle='#8a969a';ctx.font='600 10.5px Helvetica,Arial';
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.fillText('Example shape — enter dimensions above',DK_CANVAS.W/2,DK_CANVAS.H-6);
+  }
 }
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
 function deckingCanvasClick(ev){
