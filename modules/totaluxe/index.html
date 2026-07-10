@@ -1168,6 +1168,39 @@ const DECKING_SEED=[
 const DECK_CATS=['Board','Timber','Trim','Fixing','Step'];
 const DECK_CAT_LABEL={Board:'Boards',Timber:'Subframe',Trim:'Trim',Fixing:'Fixings',Step:'Steps'};
 const DECKING_BOARD_CATS=['Board'];
+
+/* A catalogue saved before the v2 calculator uses the old HD / Embossed / Edge
+   categories. Those rows cannot drive the calculator: nothing is cat 'Board' so
+   only a stray board survives the colour grid, there is no Timber / Trim / Step
+   at all, no board carries a cover width, and no fixing carries a perM2 rate —
+   so clips, screws, timber and trim never calculate.
+
+   Replace such a catalogue wholesale rather than half-migrating it. Every value
+   in a v1 catalogue is a placeholder from an earlier seed, and carrying the old
+   prices across would be worse than useless: v1's TL0611401 is a £23.50 "pack of
+   100" clip, and pairing that with v2's 1.5-bags-per-m² rate would order 1,800
+   clips and ~£1,057 of fixings on a 12m² deck.
+
+   A genuine v2 catalogue never uses these category names, so this is a no-op for
+   one — including a real price list imported by CSV. */
+const DECK_LEGACY_CATS=['HD','Embossed','Edge'];
+function deckingCatalogueIsLegacy(list){
+  return Array.isArray(list)&&list.some(p=>p&&DECK_LEGACY_CATS.indexOf(p.cat)>=0);
+}
+/* Idempotent. Returns true when it replaced the catalogue. */
+function healDeckingCatalogue(target){
+  const t=target||(typeof admin!=='undefined'?admin:null);
+  if(!t)return false;
+  if(!t.decking||!t.decking.length){t.decking=clone(DECKING_SEED);return true;}
+  if(deckingCatalogueIsLegacy(t.decking)){
+    t.decking=clone(DECKING_SEED);
+    if(typeof console!=='undefined'&&console.info){
+      console.info('[decking] pre-v2 catalogue replaced with the current seed — re-import the master price list if one was loaded');
+    }
+    return true;
+  }
+  return false;
+}
 function deckingProducts(){return (admin&&admin.decking&&admin.decking.length)?admin.decking:DECKING_SEED;}
 function deckingBoards(){return deckingProducts().filter(p=>p.cat==='Board');}
 function deckingExtras(){return deckingProducts().filter(p=>p.cat!=='Board');}
@@ -1580,7 +1613,7 @@ function loadAdmin(){
     if(!m.users||!m.users.length)m.users=clone(USERS_SEED);
     if(!m.baseCosts)m.baseCosts=clone(ADMIN_DEFAULT.baseCosts);
     if(!m.imgmap)m.imgmap=clone(ADMIN_DEFAULT.imgmap);
-    if(!m.decking||!m.decking.length)m.decking=clone(DECKING_SEED);
+    healDeckingCatalogue(m);   /* empty or pre-v2 catalogue -> current seed */
     if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
@@ -1622,6 +1655,8 @@ async function loadAdminFromServer(){
          doing so leaves the login dropdown blank and greyed out. Keep the
          seeded USERS_SEED list when the server has no users of its own. */
       if(!serverConfig.users||!serverConfig.users.length)delete serverConfig.users;
+      /* Same for decking catalogue — if server has empty array, keep the seed */
+      if(!serverConfig.decking||!serverConfig.decking.length)delete serverConfig.decking;
       /* Deep merge — never let a server empty object clobber a populated local object */
       Object.keys(serverConfig).forEach(key=>{
         if(key==='imgmap'){
@@ -1642,9 +1677,14 @@ async function loadAdminFromServer(){
           admin[key]=serverConfig[key];
         }
       });
+      /* The server may still be holding a pre-v2 decking catalogue (HD/Embossed/Edge
+         categories, no Timber/Trim/Step, no perM2 rates). Left alone it silently
+         stops clips, screws, timber and trim from calculating. */
+      healDeckingCatalogue(admin);
+      if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
-                          'roof','side','siderender','lifestyle','component','finance'];
+                          'roof','side','siderender','lifestyle','component','decking','finance'];
       if(!admin.imgmap)admin.imgmap={};
       requiredCats.forEach(cat=>{if(!admin.imgmap[cat])admin.imgmap[cat]={};});
       /* keep derived pricing constants in sync with the merged matrix */
