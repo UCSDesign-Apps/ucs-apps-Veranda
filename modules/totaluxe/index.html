@@ -261,6 +261,12 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .dk-key{display:inline-block;width:16px;height:4px;border-radius:2px;}
 .dk-key1{background:#ed1c2d;height:5px;}
 .dk-key2{background:#ed1c2d;width:14px;}
+.dk-calc{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);}
+.dk-calc .ct{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#8a969a;margin-bottom:8px;}
+.dk-calc input{background:#f1f4f5;color:#566;cursor:default;}
+.dk-calc .field label{display:block;}
+.dk-calc .hint{font-size:10.5px;color:#8a969a;font-weight:400;margin-top:2px;line-height:1.35;}
+.dk-let.calc{background:#8a969a;}
 .dk-pills{display:flex;flex-wrap:wrap;gap:8px;}
 .dk-pill{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;}
 .dk-pill1,.dk-pill2{background:#fdecec;border:1px solid #ed1c2d;color:#a3141f;}
@@ -727,6 +733,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="dk-step"><span class="dk-num">2</span> Dimensions &amp; Steps</div>
             <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram. <b>Tap an edge of the diagram</b> to add steps to that side.</div>
             <div class="dk-dimgrid" id="dk_dims"></div>
+            <div id="dk_derived"></div>
             <div id="dk_summary" style="margin-top:12px"></div>
             <div class="dk-canvasbox">
               <canvas id="dk_canvas" width="300" height="260" style="cursor:pointer;max-width:100%" onclick="deckingCanvasClick(event)"></canvas>
@@ -1059,13 +1066,24 @@ const DEFAULT_BOARD_WIDTH_MM=142;   /* used until a board is chosen */
 
 /* Deck footprints. points() returns the outline in millimetres (origin top-left,
    y increasing downwards) so one function drives the area, the perimeter and the
-   diagram — they can never disagree. L-Left and L-Right are exact mirrors. */
+   diagram — they can never disagree. L-Left and L-Right are exact mirrors.
+
+   edgeLabels[i] labels the edge from points[i] to points[i+1]. Letters A–D are the
+   entered dimensions and are placed ONLY on edges whose length really equals that
+   input; every remaining edge takes a fresh letter (E, F, G, H) with a formula in
+   `derived`. Labelling strictly A,B,C,… around the perimeter would put "C" on a
+   3000mm edge of an L-Right whose C input is the 2000mm notch — a rep measuring
+   from the diagram would cut the wrong board. Letters are unique per shape. */
 const DK_SHAPES={
   square:{
     label:'Rectangle',
     fields:[['a','Width (A)','Left to right measurement'],
             ['b','Length (B)','Front to back measurement']],
-    points:({a,b})=>[[0,0],[a,0],[a,b],[0,b]]
+    points:({a,b})=>[[0,0],[a,0],[a,b],[0,b]],
+    edgeLabels:['A','B','C','D'],
+    edgeDescs:['Back edge (width)','Right side (length)','Front edge (width)','Left side (length)'],
+    derived:{C:{formula:'A',calc:d=>d.a},
+             D:{formula:'B',calc:d=>d.b}}
   },
   lleft:{
     label:'L-shape (Left)',
@@ -1074,7 +1092,11 @@ const DK_SHAPES={
             ['b','Total length (B)','Full front to back'],
             ['c','Notch width (C)','Width of the cut-out section (right side)'],
             ['d','Notch length (D)','Depth of the cut-out section']],
-    points:({a,b,c,d})=>[[0,0],[a,0],[a,b-d],[a-c,b-d],[a-c,b],[0,b]]
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b-d],[a-c,b-d],[a-c,b],[0,b]],
+    edgeLabels:['A','E','C','D','F','B'],
+    edgeDescs:['Back edge (full width)','Right side, above the notch','Notch step in','Notch inner face','Front edge (lower section)','Left side (full length)'],
+    derived:{E:{formula:'B − D',calc:d=>d.b-d.d},
+             F:{formula:'A − C',calc:d=>d.a-d.c}}
   },
   lright:{
     label:'L-shape (Right)',
@@ -1083,7 +1105,11 @@ const DK_SHAPES={
             ['b','Total length (B)','Full front to back'],
             ['c','Notch width (C)','Width of the cut-out section (left side)'],
             ['d','Notch length (D)','Depth of the cut-out section']],
-    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[c,b],[c,b-d],[0,b-d]]
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[c,b],[c,b-d],[0,b-d]],
+    edgeLabels:['A','B','E','D','C','F'],
+    edgeDescs:['Back edge (full width)','Right side (full length)','Front edge (lower section)','Notch inner face','Notch step in','Left side, above the notch'],
+    derived:{E:{formula:'A − C',calc:d=>d.a-d.c},
+             F:{formula:'B − D',calc:d=>d.b-d.d}}
   },
   tshape:{
     label:'T-shape',
@@ -1092,7 +1118,13 @@ const DK_SHAPES={
             ['b','Top section length (B)','Depth of the wide part'],
             ['c','Stem width (C)','Width of the stem / middle section'],
             ['d','Stem length (D)','Depth of the stem section']],
-    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b+d],[(a-c)/2,b+d],[(a-c)/2,b],[0,b]]
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b+d],[(a-c)/2,b+d],[(a-c)/2,b],[0,b]],
+    edgeLabels:['A','B','E','D','C','F','G','H'],
+    edgeDescs:['Back edge (top width)','Right side of the top section','Right shoulder','Stem, right face','Stem, front face','Stem, left face','Left shoulder','Left side of the top section'],
+    derived:{E:{formula:'(A − C) ÷ 2',calc:d=>(d.a-d.c)/2},
+             F:{formula:'D',calc:d=>d.d},
+             G:{formula:'(A − C) ÷ 2',calc:d=>(d.a-d.c)/2},
+             H:{formula:'B',calc:d=>d.b}}
   },
   ushape:{
     label:'U-shape',
@@ -1101,7 +1133,13 @@ const DK_SHAPES={
             ['b','Total length (B)','Full front to back'],
             ['c','Gap width (C)','Width of the open gap'],
             ['d','Gap length (D)','Depth of the gap, measured from the front']],
-    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b-d],[(a-c)/2,b-d],[(a-c)/2,b],[0,b]]
+    points:({a,b,c,d})=>[[0,0],[a,0],[a,b],[(a+c)/2,b],[(a+c)/2,b-d],[(a-c)/2,b-d],[(a-c)/2,b],[0,b]],
+    edgeLabels:['A','B','E','D','C','F','G','H'],
+    edgeDescs:['Back edge (full width)','Right side','Front edge, right of the gap','Gap, right face','Gap inner face','Gap, left face','Front edge, left of the gap','Left side'],
+    derived:{E:{formula:'(A − C) ÷ 2',calc:d=>(d.a-d.c)/2},
+             F:{formula:'D',calc:d=>d.d},
+             G:{formula:'(A − C) ÷ 2',calc:d=>(d.a-d.c)/2},
+             H:{formula:'B',calc:d=>d.b}}
   }
 };
 const DK_SHAPE_KEYS=Object.keys(DK_SHAPES);
@@ -2773,6 +2811,9 @@ function deckingStepRunM(){
 function deckingSetDim(k,v){
   const d=deckingState();
   d.dims[k]=Math.max(0,+v||0);
+  /* deckingCalc() refreshes the calculated panel. It deliberately does NOT rebuild
+     the input grid: rewriting the field the rep is typing in would destroy the
+     caret on every keystroke. */
   deckingDrawCanvas();   /* also refreshes the step pills (side lengths changed) */
   deckingCalc();
 }
@@ -2787,6 +2828,29 @@ function deckingRenderDims(){
       <div class="hint">${hint}</div>
     </div>`;
   }).join('');
+  deckingRenderDerived();
+}
+/* Read-only panel for the edges the rep does not measure — their letters appear on
+   the diagram too, so every labelled edge has a value somewhere on the page. */
+function deckingRenderDerived(){
+  const d=deckingState(),w=document.getElementById('dk_derived');if(!w)return;
+  const sh=DK_SHAPES[d.shape];
+  if(!sh||!sh.derived||!sh.edgeLabels){w.innerHTML='';return;}
+  const valid=deckingDimsValid();
+  const rows=sh.edgeLabels.map((letter,i)=>({letter,i}))
+    .filter(x=>sh.derived[x.letter])
+    .filter((x,ix,arr)=>arr.findIndex(y=>y.letter===x.letter)===ix)   /* one row per letter */
+    .map(({letter,i})=>{
+      const spec=sh.derived[letter];
+      const val=valid?Math.round(spec.calc(d.dims)):0;
+      const desc=(sh.edgeDescs&&sh.edgeDescs[i])||'';
+      return `<div class="field">
+        <label><span class="dk-let calc">${letter}</span>${esc(desc)} <span style="font-weight:400;color:#8a969a">(mm)</span></label>
+        <input type="number" readonly tabindex="-1" value="${valid&&val>0?val:''}" placeholder="—">
+        <div class="hint">Calculated: ${spec.formula}</div>
+      </div>`;
+    }).join('');
+  w.innerHTML=rows?`<div class="dk-calc"><div class="ct">Calculated sides — shown on the diagram, no need to measure</div><div class="dk-dimgrid">${rows}</div></div>`:'';
 }
 
 /* ── Canvas (300x260) — outline, A/B/C/D labels, step lines ───────────────── */
@@ -2863,51 +2927,50 @@ function dkStepLine(ctx,g){
     });
   });
 }
-/* All five read g.dims, never state.dims — g.dims is the placeholder outline
-   when nothing has been entered yet, so the letters land on the drawn shape. */
-function drawRect(ctx,g){
-  const b=g.b;
+/* Ray-cast point-in-polygon, in deck millimetres. */
+function dkPointInPoly(pts,x,y){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
+  }
+  return inside;
+}
+/* Unit normal of edge i pointing AWAY from the deck.
+   A centroid-based direction is wrong on concave edges — on a U-shape it drives
+   the three gap labels straight into the deck — so pick the normal whose side is
+   outside the outline. Returns midpoint (mm) and outward unit vector. */
+function dkOutwardNormal(pts,i){
+  const n=pts.length;
+  const [x1,y1]=pts[i],[x2,y2]=pts[(i+1)%n];
+  const mx=(x1+x2)/2,my=(y1+y2)/2;
+  const ex=x2-x1,ey=y2-y1;
+  const L=Math.hypot(ex,ey)||1;
+  let nx=ey/L, ny=-ex/L;
+  const eps=Math.max(L*0.02,1);
+  if(dkPointInPoly(pts,mx+nx*eps,my+ny*eps)){nx=-nx;ny=-ny;}
+  return {mx,my,nx,ny};
+}
+/* One draw for every shape: stroke the outline, then label every edge from
+   edgeLabels, placed outward from the edge it names. Reads g.pts / g.dims, never
+   state.dims, so it also labels the placeholder outline before any dims exist. */
+const DK_LABEL_OFFSET=16;
+function dkDrawShape(ctx,g){
   dkStroke(ctx,g);
-  dkLabel(ctx,'A',g.X((b.x0+b.x1)/2),g.Y(b.y0)-13);
-  dkLabel(ctx,'B',g.X(b.x0)-13,g.Y((b.y0+b.y1)/2));
+  const sh=DK_SHAPES[deckingState().shape];
+  if(sh&&g.pts&&sh.edgeLabels&&sh.edgeLabels.length===g.pts.length){
+    sh.edgeLabels.forEach((letter,i)=>{
+      const {mx,my,nx,ny}=dkOutwardNormal(g.pts,i);
+      dkLabel(ctx,letter,g.X(mx)+nx*DK_LABEL_OFFSET,g.Y(my)+ny*DK_LABEL_OFFSET);
+    });
+  }
   dkStepLine(ctx,g);
 }
-function drawLLeft(ctx,g){
-  const {a,b:bb,c}=g.dims,dd=g.dims.d;
-  dkStroke(ctx,g);
-  dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
-  dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
-  dkLabel(ctx,'C',g.X(a-c/2),g.Y(bb)+13);      /* notch on the RIGHT */
-  dkLabel(ctx,'D',g.X(a)+13,g.Y(bb-dd/2));
-  dkStepLine(ctx,g);
-}
-function drawLRight(ctx,g){
-  const {a,b:bb,c}=g.dims,dd=g.dims.d;
-  dkStroke(ctx,g);
-  dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
-  dkLabel(ctx,'B',g.X(a)+13,g.Y(bb/2));
-  dkLabel(ctx,'C',g.X(c/2),g.Y(bb)+13);        /* notch on the LEFT — mirrored */
-  dkLabel(ctx,'D',g.X(0)-13,g.Y(bb-dd/2));
-  dkStepLine(ctx,g);
-}
-function drawT(ctx,g){
-  const {a,b:bb,c}=g.dims,dd=g.dims.d;
-  dkStroke(ctx,g);
-  dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
-  dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
-  dkLabel(ctx,'C',g.X(a/2),g.Y(bb+dd)+13);
-  dkLabel(ctx,'D',g.X((a+c)/2)+13,g.Y(bb+dd/2));
-  dkStepLine(ctx,g);
-}
-function drawU(ctx,g){
-  const {a,b:bb,c}=g.dims,dd=g.dims.d;
-  dkStroke(ctx,g);
-  dkLabel(ctx,'A',g.X(a/2),g.Y(0)-13);
-  dkLabel(ctx,'B',g.X(0)-13,g.Y(bb/2));
-  dkLabel(ctx,'C',g.X(a/2),g.Y(bb-dd)-11);
-  dkLabel(ctx,'D',g.X((a+c)/2)+13,g.Y(bb-dd/2));
-  dkStepLine(ctx,g);
-}
+function drawRect(ctx,g){dkDrawShape(ctx,g);}
+function drawLLeft(ctx,g){dkDrawShape(ctx,g);}
+function drawLRight(ctx,g){dkDrawShape(ctx,g);}
+function drawT(ctx,g){dkDrawShape(ctx,g);}
+function drawU(ctx,g){dkDrawShape(ctx,g);}
 const DK_DRAW={square:drawRect,lleft:drawLLeft,lright:drawLRight,tshape:drawT,ushape:drawU};
 function deckingDrawCanvas(){
   /* pills are DOM, not canvas — render them even where there is no 2d context */
@@ -3087,6 +3150,7 @@ function deckingCalc(){
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
   /* decking is part of the contract price — keep youpay, deposit and finance in step */
   recalc();
