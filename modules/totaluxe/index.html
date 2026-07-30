@@ -1840,7 +1840,9 @@ function blankState(){return{
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
   pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false,additionalCosts:[]},
-  fitting:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
+  /* contractParts = parts added at pricing (materials, discountable, part of the contract).
+     surveyParts   = on-site survey extras only — never alter the contract totals. */
+  fitting:[],contractParts:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
   decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0}
 };}
 let state=blankState();
@@ -2590,8 +2592,10 @@ function renderPricingExtras(){
   el.innerHTML=state.surveyParts.map((p,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(p.desc)} ×${p.qty} · £${money(p.cost*p.qty)} <a onclick="delPricingMat(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional materials.</i>';
 }
 /* ===== ADDITIONAL ITEMS (parts catalogue, mat/fit split) =====================
-   matCost -> state.surveyParts (materials: discountable)
-   fitCost -> state.fitting     (fitting: NEVER discounted)                    */
+   matCost -> state.contractParts (materials: added to the discountable total)
+   fitCost -> state.fitting       (fitting: NEVER discounted)
+   On-site survey extras stay in state.surveyParts and remain outside the contract. */
+function contractParts(){if(!Array.isArray(state.contractParts))state.contractParts=[];return state.contractParts;}
 function partMat(p){return +((p.matCost!==undefined)?p.matCost:p.cost)||0;}
 function renderPartsCatalogueSelect(){
   const sel=document.getElementById('pr_part_sel');if(!sel)return;
@@ -2620,25 +2624,25 @@ function addCustomPart(){
 }
 function _addPartToState(desc,matCost,fitCost,qty){
   qty=Math.max(1,+qty||1);
-  /* materials line — always added so the item reaches the picking list */
-  state.surveyParts.push({desc,cost:+matCost||0,qty,src:'part'});
+  /* materials line — always added (even at £0) so the item is listed and reaches the picking list */
+  contractParts().push({desc,cost:+matCost||0,qty,src:'part'});
   /* fitting line — only when there is a fitting charge; never discounted */
   if((+fitCost||0)>0)state.fitting.push({desc,price:+fitCost||0,qty,src:'part'});
   renderPricing();renderSurvey();renderDocuments();
 }
 function delPricingPart(type,i){
   if(type==='fit')state.fitting.splice(i,1);
-  else state.surveyParts.splice(i,1);
+  else contractParts().splice(i,1);
   renderPricing();renderSurvey();renderDocuments();
 }
 function renderPricingPartsList(){
   renderPartsCatalogueSelect();
   const el=document.getElementById('pricingPartsList');if(!el)return;
   const pill=(txt,bg,bd,fg)=>`<span style="display:inline-block;background:${bg};border:1px solid ${bd};color:${fg};border-radius:10px;padding:1px 7px;margin-left:5px;font-weight:700;font-size:11px">${txt}</span>`;
-  el.innerHTML=state.surveyParts.map((p,i)=>{
+  el.innerHTML=contractParts().map((p,i)=>{
     const fi=state.fitting.findIndex(f=>f.src==='part'&&f.desc===p.desc);
     const f=fi>-1?state.fitting[fi]:null;
-    const del=(fi>-1?`delPricingPart('fit',${fi});`:'')+`delPricingPart('part',${i})`;
+    const del=(fi>-1?`delPricingPart('fit',${fi});`:'')+`delPricingPart('mat',${i})`;
     return `<div style="display:flex;align-items:center;gap:6px;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:5px 10px;margin:0 0 6px 0">
       <span style="flex:1">${esc(p.desc)} <span style="color:#8a969a">×${p.qty}</span></span>
       ${pill('Mat £'+money((+p.cost||0)*p.qty),'#e8f1fb','#bcd6f0','#1b5b96')}
@@ -3518,7 +3522,8 @@ function recalc(){
   const dp=document.getElementById('p_disc');
   state.pricing.discount=dp?(+dp.value||30):(state.pricing.discount||30);
   const d=state.pricing.discount;
-  const materials=materialsSell();
+  const contractPartsMat=Math.round(sum(state.contractParts||[],'cost')*100)/100; // catalogue parts added at pricing
+  const materials=Math.round((materialsSell()+contractPartsMat)*100)/100;
   const decking=deckingSellTotal();                                // customer price, inc VAT (0 when not enabled)
   const discountable=Math.round((materials+decking)*100)/100;      // decking is discounted alongside materials
   const matDiscAmt=Math.round(discountable*(d/100)*100)/100;
@@ -3546,7 +3551,7 @@ function recalc(){
   T('c_sku',state.config&&state.config.sku?state.config.sku:'—');
   /* c_cost / c_sides_cost / c_total_cost elements removed from DOM — T() handles null safely */
   renderPaySchedule(sched,youpay);
-  state._calc={materials,decking,discountable,matDiscAmt,matNet,fitting,svParts,svLabour,svTotal,orderTotal,youpay,deposit,balance,sched,discount:d,finance:financeCalc(youpay)};
+  state._calc={materials,contractPartsMat,decking,discountable,matDiscAmt,matNet,fitting,svParts,svLabour,svTotal,orderTotal,youpay,deposit,balance,sched,discount:d,finance:financeCalc(youpay)};
 }
 function renderPaySchedule(sched,total){
   const el=document.getElementById('payschedule');if(!el)return;
@@ -4495,6 +4500,7 @@ function renderDocuments(){
   const imgCell=(name)=>pim?`<td class="c">${docImg('component',compKey(name),'',40,28,'margin:0 auto')}</td>`:'';
   const bom=mergeRows(buildBOM(cf));
   const bomRows=bom.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r[0]}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('');
+  const pickContractRows=(state.contractParts||[]).map((p,i)=>`<tr><td class="c">A${i+1}</td><td>${p.desc} <i>(additional item — on contract)</i></td>${imgCell(p.desc)}<td>—</td><td class="c">${p.qty}</td><td class="c">${ck(false)}</td></tr>`).join('');
   const pickPartRows=state.surveyParts.map((p,i)=>`<tr><td class="c">+${i+1}</td><td>${p.desc} <i>(survey extra)</i></td>${imgCell(p.desc)}<td>—</td><td class="c">${p.qty}</td><td class="c">${ck(false)}</td></tr>`).join('');
   const pickLabRows=state.surveyLabour.map((l,i)=>`<tr><td class="c">L${i+1}</td><td>${l.desc} <i>(survey labour — additional to contract)</i></td>${imgCell(l.desc)}<td>—</td><td class="c">${l.qty}</td><td class="c">${ck(false)}</td></tr>`).join('');
   const svP=sum(state.surveyParts,'cost'), svL=sum(state.surveyLabour,'price'), svT=svP+svL;
@@ -4822,7 +4828,7 @@ function renderDocuments(){
         <div class="li"><span class="k">Width × Projection</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
       </div>
       <div class="sh">Veranda Kit Components</div>
-      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:165px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead><tbody>${bomRows}${pickPartRows}${pickLabRows}</tbody></table>
+      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:165px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead><tbody>${bomRows}${pickContractRows}${pickPartRows}${pickLabRows}</tbody></table>
       ${deckingBlock}
       ${sidewallBlock}
       ${doorBlocks}
