@@ -657,17 +657,26 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div id="payschedule" style="margin-top:10px"></div>
         </div>
-        <!-- Additional materials & labour (all roles) — separate from on-site survey extras -->
+        <!-- Additional items (all roles) — catalogue-driven, mat/fit split -->
         <div class="card">
-          <h2>Additional Materials &amp; Labour</h2>
-          <div class="sub">Extra items for this job. Materials add to the order's materials cost; labour adds to the installation fee. (On-site survey extras are added on the Survey document.)</div>
-          <div style="font-weight:700;font-size:13px;margin:10px 0 4px">Additional materials</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <input id="pr_mat_desc" placeholder="Material description…" style="flex:2;min-width:180px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
-            <input id="pr_mat_cost" type="number" min="0" step="0.01" placeholder="Cost £" style="width:110px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
-            <button class="btn primary" onclick="addPricingMaterial()">＋ Add material</button>
+          <h2>Additional Items</h2>
+          <div class="sub">Extra items for this job, from the parts catalogue (Admin → Parts). The <b>materials</b> element is recorded as a job extra (picking list &amp; survey); the <b>fitting</b> element is added to Fitting &amp; Survey and is <b>never discounted</b>.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+            <select id="pr_part_sel" style="flex:2;min-width:220px;padding:9px;border:1px solid #cfd8da;border-radius:8px"></select>
+            <input id="pr_part_qty" type="number" min="1" step="1" value="1" placeholder="Qty" style="width:80px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+            <button class="btn primary" onclick="addPartFromCatalogue()">＋ Add</button>
           </div>
-          <div id="pricingMatList" style="font-size:12px;margin-top:8px"></div>
+          <div id="pricingPartsList" style="font-size:12px;margin-top:10px"></div>
+          <details style="margin-top:12px">
+            <summary style="cursor:pointer;font-weight:700;font-size:13px">Custom item (not in catalogue)</summary>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+              <input id="pr_part_desc" placeholder="Item description…" style="flex:2;min-width:180px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+              <input id="pr_part_mat" type="number" min="0" step="0.01" placeholder="Mat £" style="width:100px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+              <input id="pr_part_fit" type="number" min="0" step="0.01" placeholder="Fit £" style="width:100px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+              <input id="pr_part_cqty" type="number" min="1" step="1" value="1" placeholder="Qty" style="width:80px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
+              <button class="btn primary" onclick="addCustomPart()">＋ Add custom</button>
+            </div>
+          </details>
           <div style="font-weight:700;font-size:13px;margin:14px 0 4px">Additional labour / install</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <input id="pr_lab_desc" placeholder="Labour description…" style="flex:2;min-width:180px;padding:9px;border:1px solid #cfd8da;border-radius:8px">
@@ -927,8 +936,8 @@ body.print-internal .internal-notes-only{display:block !important;}
         </div></div>
 
         <div class="apane" id="ap-parts"><div class="card">
-          <div class="sub">Additional-parts catalogue used at survey. Set real costs here.</div>
-          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Description</th><th class="r" style="width:140px">Cost £</th><th style="width:30px"></th></tr></thead><tbody id="adminPartRows"></tbody></table></div>
+          <div class="sub">Additional-parts catalogue used in Pricing &amp; at survey. Set real costs here. <b>Materials</b> are subject to the customer discount; <b>Fitting</b> is never discounted.</div>
+          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Description</th><th class="r" style="width:160px">Materials £ <span style="font-weight:400;font-size:11px">(discounted)</span></th><th class="r" style="width:160px">Fitting £ <span style="font-weight:400;font-size:11px">(not discounted)</span></th><th style="width:30px"></th></tr></thead><tbody id="adminPartRows"></tbody></table></div>
           <button class="btn sm" style="margin-top:10px" onclick="adminAddPart()">＋ Add part</button>
         </div></div>
 
@@ -1615,7 +1624,23 @@ const FITTING_SEED=[
  ["TL - Freestanding Pergola 3.5m x 3.5m",600,750],["TL - Freestanding Pergola 3.5m x 4m",600,750],["TL - Freestanding Pergola 3.5m x 5m",650,815],["TL - Freestanding Pergola 3.5m x 6m",650,815],
  ["TL - Freestanding Pergola 4m x 4m",600,750],["TL - Freestanding Pergola 4m x 5m",650,815],["TL - Freestanding Pergola 4m x 6m",650,815]
 ].map(r=>({desc:r[0],direct:r[1],finance:r[2]}));
-const PARTS_SEED=["Extra Post — Round (Baseplate)","Extra Post — Square (Baseplate)","Extra Polycarbonate Sheet","Extra Glass Roof Panel","In-Between Beam (extra)","Aura Glass Door Panel 1040x2100","Side Wall Infill — Aluminium","Side Wall Infill — Glass","LED Lighting Kit","Infrared Heater","Gutter Extension 1m","Downpipe (extra)","Lead Flashing Roll","Foundation Block"].map(d=>({desc:d,cost:0}));
+/* matCost = materials (discountable). fitCost = fitting/labour (NEVER discounted). */
+const PARTS_SEED=[
+  {desc:'Extra Post — Round (Baseplate)',      matCost:0, fitCost:0},
+  {desc:'Extra Post — Square (Baseplate)',     matCost:0, fitCost:0},
+  {desc:'Extra Polycarbonate Sheet',           matCost:0, fitCost:0},
+  {desc:'Extra Glass Roof Panel',              matCost:0, fitCost:0},
+  {desc:'In-Between Beam (extra)',             matCost:0, fitCost:0},
+  {desc:'Aura Glass Door Panel 1040x2100',     matCost:0, fitCost:0},
+  {desc:'Side Wall Infill — Aluminium',        matCost:0, fitCost:0},
+  {desc:'Side Wall Infill — Glass',            matCost:0, fitCost:0},
+  {desc:'LED Lighting Kit',                    matCost:0, fitCost:150},
+  {desc:'Infrared Heater',                     matCost:0, fitCost:200},
+  {desc:'Gutter Extension 1m',                 matCost:0, fitCost:0},
+  {desc:'Downpipe (extra)',                    matCost:0, fitCost:0},
+  {desc:'Lead Flashing Roll',                  matCost:0, fitCost:80},
+  {desc:'Foundation Block',                    matCost:0, fitCost:120},
+];
 
 const ALL_SECTIONS=['quotes','customer','build','pricing','decking','docs','costings','admin'];
 const ALL_DOCS=['quote','contract','survey','picking'];
@@ -2564,6 +2589,64 @@ function renderPricingExtras(){
   const el=document.getElementById('pricingMatList');if(!el)return;
   el.innerHTML=state.surveyParts.map((p,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(p.desc)} ×${p.qty} · £${money(p.cost*p.qty)} <a onclick="delPricingMat(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional materials.</i>';
 }
+/* ===== ADDITIONAL ITEMS (parts catalogue, mat/fit split) =====================
+   matCost -> state.surveyParts (materials: discountable)
+   fitCost -> state.fitting     (fitting: NEVER discounted)                    */
+function partMat(p){return +((p.matCost!==undefined)?p.matCost:p.cost)||0;}
+function renderPartsCatalogueSelect(){
+  const sel=document.getElementById('pr_part_sel');if(!sel)return;
+  const keep=sel.value;
+  sel.innerHTML=admin.parts.map((p,i)=>{
+    const m=partMat(p),f=+p.fitCost||0;
+    return `<option value="${i}">${esc(p.desc)} — Mat £${money(m)} / Fit £${money(f)}</option>`;
+  }).join('')||'<option value="">No parts in catalogue — add them in Admin → Parts</option>';
+  if(keep&&admin.parts[+keep])sel.value=keep;
+}
+function addPartFromCatalogue(){
+  const p=admin.parts[+val('pr_part_sel')];
+  if(!p){toast('No catalogue part selected');return;}
+  const qty=Math.max(1,+val('pr_part_qty')||1);
+  _addPartToState(p.desc,partMat(p),+p.fitCost||0,qty);
+  V('pr_part_qty','1');
+  toast('Item added');
+}
+function addCustomPart(){
+  const desc=(val('pr_part_desc')||'').trim();
+  if(!desc){toast('Enter an item description');return;}
+  const qty=Math.max(1,+val('pr_part_cqty')||1);
+  _addPartToState(desc,+val('pr_part_mat')||0,+val('pr_part_fit')||0,qty);
+  V('pr_part_desc','');V('pr_part_mat','');V('pr_part_fit','');V('pr_part_cqty','1');
+  toast('Item added');
+}
+function _addPartToState(desc,matCost,fitCost,qty){
+  qty=Math.max(1,+qty||1);
+  /* materials line — always added so the item reaches the picking list */
+  state.surveyParts.push({desc,cost:+matCost||0,qty,src:'part'});
+  /* fitting line — only when there is a fitting charge; never discounted */
+  if((+fitCost||0)>0)state.fitting.push({desc,price:+fitCost||0,qty,src:'part'});
+  renderPricing();renderSurvey();renderDocuments();
+}
+function delPricingPart(type,i){
+  if(type==='fit')state.fitting.splice(i,1);
+  else state.surveyParts.splice(i,1);
+  renderPricing();renderSurvey();renderDocuments();
+}
+function renderPricingPartsList(){
+  renderPartsCatalogueSelect();
+  const el=document.getElementById('pricingPartsList');if(!el)return;
+  const pill=(txt,bg,bd,fg)=>`<span style="display:inline-block;background:${bg};border:1px solid ${bd};color:${fg};border-radius:10px;padding:1px 7px;margin-left:5px;font-weight:700;font-size:11px">${txt}</span>`;
+  el.innerHTML=state.surveyParts.map((p,i)=>{
+    const fi=state.fitting.findIndex(f=>f.src==='part'&&f.desc===p.desc);
+    const f=fi>-1?state.fitting[fi]:null;
+    const del=(fi>-1?`delPricingPart('fit',${fi});`:'')+`delPricingPart('part',${i})`;
+    return `<div style="display:flex;align-items:center;gap:6px;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:5px 10px;margin:0 0 6px 0">
+      <span style="flex:1">${esc(p.desc)} <span style="color:#8a969a">×${p.qty}</span></span>
+      ${pill('Mat £'+money((+p.cost||0)*p.qty),'#e8f1fb','#bcd6f0','#1b5b96')}
+      ${f?pill('Fit £'+money((+f.price||0)*f.qty),'#fdeceb','#f2c4bf','#bd4219'):''}
+      <a onclick="${del}" title="Remove" style="color:#bd4219;cursor:pointer;font-weight:700;margin-left:4px">×</a>
+    </div>`;
+  }).join('')||'<i style="color:#8a969a">No additional items.</i>';
+}
 function addPart(){
   const v=val('sv_partpick');
   if(v==='__other__'){
@@ -2577,7 +2660,8 @@ function addPart(){
     toggleOtherPart('sv_other_part_wrap',{value:'0'});
   } else {
     const p=admin.parts[+v];if(!p)return;
-    state.surveyParts.push({desc:p.desc,cost:p.cost,qty:1});
+    state.surveyParts.push({desc:p.desc,cost:partMat(p),qty:1});
+    if((+p.fitCost||0)>0)state.surveyLabour.push({desc:p.desc,price:+p.fitCost||0,qty:1});
   }
   renderSurvey();recalc();
 }
@@ -2611,7 +2695,8 @@ function addPartDoc(){
     toggleOtherPart('sv_doc_other_part_wrap',{value:'0'});
   } else {
     const p=admin.parts[+v];if(!p)return;
-    state.surveyParts.push({desc:p.desc,cost:p.cost,qty:1});
+    state.surveyParts.push({desc:p.desc,cost:partMat(p),qty:1});
+    if((+p.fitCost||0)>0)state.surveyLabour.push({desc:p.desc,price:+p.fitCost||0,qty:1});
   }
   renderSurvey();renderDocuments();
 }
@@ -2653,6 +2738,7 @@ function renderPricing(){
   V('p_pay',state.job.pay);refreshPickers();V('p_deppct',admin.depPct);V('p_disc',state.pricing.discount);
   rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
   renderPricingExtras();
+  renderPricingPartsList();
   recalc();
 }
 /* ===== COMPOSITE DECKING ===================================================== */
@@ -3409,7 +3495,7 @@ function renderSurvey(){
   const otherPartOpt='<option value="__other__">Other — enter description &amp; cost below</option>';
   const otherLabOpt='<option value="__other__">Other — enter description &amp; amount below</option>';
   const pp=document.getElementById('sv_partpick');
-  if(pp){pp.innerHTML=admin.parts.map((p,i)=>`<option value="${i}">${p.desc} — £${p.cost}</option>`).join('')+otherPartOpt;
+  if(pp){pp.innerHTML=admin.parts.map((p,i)=>`<option value="${i}">${esc(p.desc)} — Mat £${money(partMat(p))} / Fit £${money(+p.fitCost||0)}</option>`).join('')+otherPartOpt;
     pp.value=pp.value||'0';}
   refreshPickers(); /* also updates sv_labpick via pickerHTML */
   const lp=document.getElementById('sv_labpick');
@@ -3483,7 +3569,17 @@ function renderAdmin(){
   admin.fitting.forEach((f,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(f.desc)}" oninput="admin.fitting[${i}].desc=this.value"></td><td class="r"><input class="num" value="${f.direct}" oninput="admin.fitting[${i}].direct=+this.value||0"></td><td class="r"><input class="num" value="${f.finance}" oninput="admin.fitting[${i}].finance=+this.value||0"></td><td><button class="chiprm" onclick="admin.fitting.splice(${i},1);renderAdmin()">×</button></td>`;fb.appendChild(tr);});
   // parts
   const pb=document.getElementById('adminPartRows');pb.innerHTML='';
-  admin.parts.forEach((p,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(p.desc)}" oninput="admin.parts[${i}].desc=this.value"></td><td class="r"><input class="num" value="${p.cost}" oninput="admin.parts[${i}].cost=+this.value||0"></td><td><button class="chiprm" onclick="admin.parts.splice(${i},1);renderAdmin()">×</button></td>`;pb.appendChild(tr);});
+  admin.parts.forEach((p,i)=>{
+    /* migrate legacy single-cost entries to the mat/fit split */
+    if(p.matCost===undefined)p.matCost=+p.cost||0;
+    if(p.fitCost===undefined)p.fitCost=0;
+    delete p.cost;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><input value="${esc(p.desc)}" oninput="admin.parts[${i}].desc=this.value"></td>`+
+      `<td class="r"><input class="num" value="${p.matCost}" oninput="admin.parts[${i}].matCost=+this.value||0"></td>`+
+      `<td class="r"><input class="num" value="${p.fitCost}" oninput="admin.parts[${i}].fitCost=+this.value||0"></td>`+
+      `<td><button class="chiprm" onclick="admin.parts.splice(${i},1);renderAdmin()">×</button></td>`;
+    pb.appendChild(tr);});
   // decking catalogue
   const db=document.getElementById('adminDeckRows');
   if(db){
@@ -3713,7 +3809,7 @@ function setMapImg(cat,opt,input){
 function togglePerm(i,kind,key,on){const arr=admin.users[i][kind];const ix=arr.indexOf(key);if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);}
 function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
 function adminAddFit(){admin.fitting.push({desc:"New item",direct:0,finance:0});renderAdmin();}
-function adminAddPart(){admin.parts.push({desc:"New part",cost:0});renderAdmin();}
+function adminAddPart(){admin.parts.push({desc:"New part",matCost:0,fitCost:0});renderAdmin();}
 
 /* ── Decking catalogue admin ─────────────────────────────────────────────── */
 function adminAddDeck(){admin.decking.push({code:"TL0000000",cat:"Fixing",name:"New product",price:0,unit:"each"});renderAdmin();}
@@ -4552,7 +4648,7 @@ function renderDocuments(){
         <div style="font-size:11px;color:#6a777c">Materials &amp; install costs added here are <b>additional to the signed contract</b>. They populate the <b>Survey Notes &amp; Additional Items</b> page and the picking list, and do not change the contract price.</div>
         <div style="font-weight:700;font-size:12px;margin-top:6px">Additional materials</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="sv_doc_partpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_part_wrap',this)">${admin.parts.map((p,i)=>`<option value="${i}">${esc(p.desc)} — £${p.cost}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
+          <select id="sv_doc_partpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_part_wrap',this)">${admin.parts.map((p,i)=>`<option value="${i}">${esc(p.desc)} — Mat £${money(partMat(p))} / Fit £${money(+p.fitCost||0)}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
           <button class="btn primary sm" onclick="addPartDoc()">＋ Add</button>
         </div>
         <div id="sv_doc_other_part_wrap" style="display:none;gap:8px;margin-top:6px;flex-wrap:wrap">
