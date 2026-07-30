@@ -2610,17 +2610,21 @@ function addPartFromCatalogue(){
   const p=admin.parts[+val('pr_part_sel')];
   if(!p){toast('No catalogue part selected');return;}
   const qty=Math.max(1,+val('pr_part_qty')||1);
-  _addPartToState(p.desc,partMat(p),+p.fitCost||0,qty);
+  const fitCost=+p.fitCost||0;
+  _addPartToState(p.desc,partMat(p),fitCost,qty);
+  rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
   V('pr_part_qty','1');
-  toast('Item added');
+  toast('Item added'+(fitCost>0?' — fitting line added above ↑':''));
 }
 function addCustomPart(){
   const desc=(val('pr_part_desc')||'').trim();
   if(!desc){toast('Enter an item description');return;}
   const qty=Math.max(1,+val('pr_part_cqty')||1);
-  _addPartToState(desc,+val('pr_part_mat')||0,+val('pr_part_fit')||0,qty);
+  const fitCost=+val('pr_part_fit')||0;
+  _addPartToState(desc,+val('pr_part_mat')||0,fitCost,qty);
+  rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
   V('pr_part_desc','');V('pr_part_mat','');V('pr_part_fit','');V('pr_part_cqty','1');
-  toast('Item added');
+  toast('Item added'+(fitCost>0?' — fitting line added above ↑':''));
 }
 function _addPartToState(desc,matCost,fitCost,qty){
   qty=Math.max(1,+qty||1);
@@ -2728,7 +2732,8 @@ function rowsTable(tbody,list,priceKey,fn){
   tbody.innerHTML='';
   list.forEach((it,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td><input value="${esc(it.desc)}" oninput="${fn}(${i},'desc',this.value)"></td>
+    const fromPart=it.src==='part';
+    tr.innerHTML=`<td><input value="${esc(it.desc)}" oninput="${fn}(${i},'desc',this.value)">${fromPart?'<span style="font-size:10px;background:#e8f0fd;color:#1a50aa;border-radius:8px;padding:1px 6px;margin-left:6px;vertical-align:middle">from parts</span>':''}</td>
      ${isAdmin?`<td class="r"><input class="num" value="${it[priceKey]}" oninput="${fn}(${i},'${priceKey}',this.value)"></td>`:'<td class="r" style="display:none"></td>'}
      <td class="r"><input class="num" value="${it.qty}" oninput="${fn}(${i},'qty',this.value)"></td>
      ${isAdmin?`<td class="r">£${(it[priceKey]*it.qty).toFixed(2)}</td>`:'<td class="r" style="display:none"></td>'}
