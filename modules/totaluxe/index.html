@@ -385,6 +385,12 @@ body.print-internal .internal-notes-only{display:block !important;}
   .paysel{border:none;background:transparent;-webkit-appearance:none;appearance:none;padding:0;font-weight:600;}
   @page{size:A4;margin:0;}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  /* Costings print mode — triggered by printCostings() adding .printing-costings to body */
+  body.printing-costings #view-costings{display:block!important;}
+  body.printing-costings .view:not(#view-costings){display:none!important;}
+  body.printing-costings #topnav,body.printing-costings #nav,body.printing-costings .doctabs,body.printing-costings .demo-banner{display:none!important;}
+  body.printing-costings #view-costings .no-print{display:none!important;}
+  body.printing-costings .card{break-inside:avoid;box-shadow:none!important;border:1px solid #ddd!important;}
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -796,6 +802,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
             <h2 style="margin:0">Job Costings</h2>
             <span style="background:#ed1c2d;color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.5px">INTERNAL — CONFIDENTIAL</span>
+            <button class="btn sm no-print" onclick="printCostings()" style="margin-left:auto;background:#3c4650;color:#fff;border-color:#3c4650">⬇ Print / Save PDF</button>
           </div>
           <div class="sub">Commission and margin analysis. Not shown to customers.</div>
         </div>
@@ -3474,6 +3481,11 @@ function renderCostings(){
   const cvRow=document.getElementById('ct_commission_value_row');if(cvRow)cvRow.style.display=commissionRate>0?'':'none';
   const soCb=document.getElementById('ct_special_offer');if(soCb)soCb.checked=specialOffer;
   const maCb=document.getElementById('ct_manager_approval');if(maCb)maCb.checked=managerApproval;
+}
+function printCostings(){
+  document.body.classList.add('printing-costings');
+  window.print();
+  document.body.classList.remove('printing-costings');
 }
 function toggleSpecialOffer(){
   const cb=document.getElementById('ct_special_offer');
