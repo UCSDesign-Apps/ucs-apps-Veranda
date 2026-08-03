@@ -1442,9 +1442,9 @@ function vArea(w,p){return (w/1000)*(p/1000);}
 function basePrice(model,width,proj,roof){
   const pm=admin.priceMatrix||PRICE_LIST_2026_DEFAULT;
   const r=(roof||'').toLowerCase();
-  /* all models use width as-is — Nebbiolo MODELS widths are already 4045/5045/6045 */
-  const pmWidth=width;
-  const key=pmWidth+'x'+proj;
+  /* bespoke sizes round UP to the nearest available matrix width/projection */
+  let pmWidth=width;
+  let pmProj=proj;
   /* resolve the right sub-table based on model + roof type */
   let tbl=null;
   if(model==='Nebbiolo')tbl=pm.Nebbiolo;
@@ -1462,6 +1462,16 @@ function basePrice(model,width,proj,roof){
   else if(model==='Pinela Tilt'||model==='PinelaTilt')tbl=pm['Pinela-Tilt'];
   else if(model==='Pinela Deluxe'||model==='PinelaDeluxe')tbl=pm['Pinela-Deluxe'];
   else if(model==='Pinela Deluxe Plus'||model==='PinelaDeluxePlus')tbl=pm['Pinela-DeluxePlus'];
+  /* round the entered size up to the nearest size present in this model's own matrix */
+  if(tbl){
+    const keys=Object.keys(tbl);
+    const tblWidths=[...new Set(keys.map(k=>+k.split('x')[0]))].sort((a,b)=>a-b);
+    const tblProjs=[...new Set(keys.map(k=>+k.split('x')[1]))].sort((a,b)=>a-b);
+    const roundUp=(val,arr)=>{const found=arr.find(v=>v>=val);return found!==undefined?found:arr[arr.length-1];};
+    pmWidth=roundUp(width,tblWidths);
+    pmProj=roundUp(proj,tblProjs);
+  }
+  const key=pmWidth+'x'+pmProj;
   /* look up price — fall back to baseCosts if table or key missing */
   let base=(tbl&&tbl[key]!=null)?tbl[key]:+(admin.baseCosts[model]||0);
   /* roof uplifts (polycarbonate only) */
