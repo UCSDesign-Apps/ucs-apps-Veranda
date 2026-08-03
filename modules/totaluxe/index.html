@@ -643,11 +643,12 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="totbar"><span>Fitting &amp; Survey</span><span>£<span id="s_fit">0.00</span></span></div>
             <div class="totbar" id="row_ext" style="display:none"><span>Job Extras (survey parts)</span><span>£<span id="s_ext">0.00</span></span></div>
             <div class="totbar big"><span>Order Total (full price)</span><span>£<span id="s_tot">0.00</span></span></div>
-            <div class="grid g3" style="margin-top:14px">
-              <div class="field"><label>Discount on materials &amp; decking</label>
-                <select id="p_disc" onchange="recalc()"><option value="30">30%</option><option value="35">35%</option><option value="40">40%</option><option value="45">45%</option></select></div>
-              <div></div><div></div>
-            </div>
+          </div>
+          <!-- Discount: visible to all roles -->
+          <div class="grid g3" style="margin-top:14px">
+            <div class="field"><label>Discount on materials &amp; decking</label>
+              <select id="p_disc" onchange="recalc()"><option value="30">30%</option><option value="35">35%</option><option value="40">40%</option><option value="45">45%</option></select></div>
+            <div></div><div></div>
           </div>
           <!-- You Pay: visible to all roles -->
           <div style="background:linear-gradient(135deg,var(--brand),var(--brand-d));color:#fff;border-radius:12px;padding:16px 20px;margin-top:14px;display:flex;justify-content:space-between;align-items:center">
@@ -3549,7 +3550,7 @@ function recalc(){
   const svLabour=sum(state.surveyLabour,'price');
   const svTotal=Math.round((svParts+svLabour)*100)/100;
   const orderTotal=Math.round((materials+decking+fitting)*100)/100; // contract full list price (no survey extras)
-  const youpay=Math.round((matNet+fitting)*100)/100;             // contract today's price (no survey extras)
+  const youpay=Math.round(Math.round((matNet+fitting)*100)/100/5)*5;  /* rounded to nearest £5 */
   state.pricing.youpay=youpay;
   const sched=paymentSchedule(youpay);
   const deposit=sched.deposit;
