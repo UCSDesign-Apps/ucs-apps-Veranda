@@ -1037,18 +1037,18 @@ const TL_LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABLAAAAK9CAIAAAC7DQJ
 /* ===== CATALOGUE ===== */
 const MODELS={
   /* ── Verandas ── */
-  Bosco:{colours:["Grey 7024","Cream 9001","White 9016","Black 9005"],roofs:["Clear","Opal","Solar","Ultra Clear"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060,8060,9060,10060,11060,12060],projections:[2500,3000,3500,4000,6000],projByWidth:{8060:[2500,3000,3500,4000],9060:[2500,3000,3500,4000],10060:[2500,3000,3500,4000],11060:[2500,3000,3500,4000],12060:[2500,3000,3500,4000]}},
+  Bosco:{colours:["Grey 7024","Cream 9001","White 9016","Black 9005"],roofs:["Clear","Opal","Solar","Ultra"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060,8060,9060,10060,11060,12060],projections:[2500,3000,3500,4000,6000],projByWidth:{8060:[2500,3000,3500,4000],9060:[2500,3000,3500,4000],10060:[2500,3000,3500,4000],11060:[2500,3000,3500,4000],12060:[2500,3000,3500,4000]}},
   Nebbiolo:{colours:["Grey 7024","Cream 9001"],roofs:["Clear","Opal","Solar","Ultra"],gutters:["Classic"],posts:["Square"],widths:[4045,5045,6045],projections:[2500,3000,3500]},
   Ribolla:{colours:["Grey 7024","Black 9005"],roofs:["Clear","Opal","Ultra"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060],projections:[2500,3000,3500,4000]},
   Pigato:{colours:["Grey 7024","Cream 9001","Traffic White 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
   "Pigato Plus":{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Classic","Round"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
   Giallo:{colours:["Grey 7024","Cream 9001","Traffic white 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Straight"],posts:["2 Piece Post"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
   "Giallo Plus":{colours:["Grey 7024","Traffic white 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Straight"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
-  Trebbiano:{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Glass 8.8mm"],gutters:["Straight"],posts:["Square 150mm"],widths:[3914,4878,5842,6806],projections:[2982,3482,3982,4482]},
+  Trebbiano:{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Glass Roof"],gutters:["Straight"],posts:["Square 150mm"],widths:[3914,4878,5842,6806],projections:[2982,3482,3982,4482]},
   /* ── Pergolas / Louvered roofs ── */
   Verdeca:{colours:["White (fabric)"],roofs:["Fabric canopy"],gutters:["Integrated"],posts:["Square"],widths:[4000,5000,6000],projections:[3000,3500,4000]},
   Pinela:{colours:["Anthracite 7024"],roofs:["Adjustable slats"],gutters:["Integrated"],posts:["Square"],widths:[3000,3500],projections:[3011,3539,4067,4947]},
-  "Pinela Glass":{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Glass slats 8.8mm"],gutters:["Integrated"],posts:["Square 150mm"],widths:[3124,4088,5052,6016,6980],projections:[3000,3500,4000,4500]},
+  "Pinela Glass":{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Glass Roof"],gutters:["Integrated"],posts:["Square 150mm"],widths:[3124,4088,5052,6016,6980],projections:[3000,3500,4000,4500]},
   "Pinela Delight":{colours:["Traffic White 9016","Anthracite 7024","Black 9005"],roofs:["Adjustable slats"],gutters:["Integrated"],posts:["Square 150mm"],widths:[3124,4088,5052,6016],projections:[3000,3500,4000]},
   "Pinela Tilt":{colours:["Traffic White 9016","Anthracite 7024","Black 9005"],roofs:["Adjustable slats"],gutters:["Integrated"],posts:["Square 150mm"],widths:[4088,5052,6016,6980],projections:[3000,3500,4000,4500]},
   "Pinela Deluxe":{colours:["Traffic White 9016","Anthracite 7024","Black 9005"],roofs:["Retractable slats"],gutters:["Integrated"],posts:["Square 150mm"],widths:[3000,3500,4000],projections:[3014,3571,4128,4964,6078]},
@@ -2490,6 +2490,12 @@ function optimiseDoor(side, openingMm){
 }
 function setDoor(s,f,v){if(!state.config.doors[s])state.config.doors[s]=defaultDoor();state.config.doors[s][f]=v;renderSides();applyConfig();}
 /* Auto-suggest fitting lines based on current configuration */
+/* Same fitting line suggested twice (e.g. two aluminium sides) becomes one line at qty 2 */
+function pushOrIncrement(arr,item){
+  const ex=arr.find(x=>x.desc===item.desc);
+  if(ex)ex.qty=(ex.qty||1)+1;
+  else arr.push(item);
+}
 function autoFitting(){
   if(!state.config.model)return;
   const cf=state.config;
@@ -2507,7 +2513,8 @@ function autoFitting(){
     if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
   } else {
     /* Veranda — band by width: 4060=4m, 5060=5m, 6060=6m etc. Clamp 3-6 */
-    const wm=Math.round((cf.width||4060)/1000);
+    const rawW=cf.width||4060;
+    const wm=rawW%1000===0?Math.floor(rawW/1000):Math.ceil(rawW/1000);
     const band=Math.min(6,Math.max(3,wm));
     const glassStr=isGlass?(' - Glass Roof'):'';
     const key=`TL - Veranda ${band}m${glassStr}`;
@@ -2524,30 +2531,33 @@ function autoFitting(){
       const tracks=d?d.tracks:3;
       const hKey=`TL - Aura Glass Doors - ${tracks} Track`;
       const hf=admin.fitting.find(x=>x.desc===hKey);
-      if(hf)suggested.push({desc:hf.desc,price:payPrice(hf),qty:1});
+      if(hf)pushOrIncrement(suggested,{desc:hf.desc,price:payPrice(hf),qty:1});
       if(d&&d.heritage){
         const hhf=admin.fitting.find(x=>x.desc==='TL - Aura Doors Heritage Kit (Per Glass Unit)');
-        if(hhf)suggested.push({desc:hhf.desc,price:payPrice(hhf),qty:d.tracks||1});
+        if(hhf)pushOrIncrement(suggested,{desc:hhf.desc,price:payPrice(hhf),qty:d.tracks||1});
       }
       if(d&&d.keyframe&&d.keyframe.req){
         const kf=admin.fitting.find(x=>x.desc===`TL - Keyframe (${d.keyframe.type})`);
-        if(kf)suggested.push({desc:kf.desc,price:payPrice(kf),qty:1});
+        if(kf)pushOrIncrement(suggested,{desc:kf.desc,price:payPrice(kf),qty:1});
       }
     } else if(opt==='Full Aluminium Panel'){
       const f=admin.fitting.find(x=>x.desc==='TL - Full Aluminium Sidewall');
-      if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
+      if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
     } else if(opt==='Half Glass / Half Aluminium'){
       const f=admin.fitting.find(x=>x.desc==='TL - Half Alu / Half Glass Sidewall');
-      if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
+      if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
     }
   });
-  /* Only add lines that aren't already in the fitting list */
-  const existing=new Set(state.fitting.map(f=>f.desc));
-  const newLines=suggested.filter(s=>!existing.has(s.desc));
-  if(newLines.length){
-    state.fitting.push(...newLines);
+  /* Merge into the fitting list — an existing line gains qty rather than repeating */
+  let added=0,bumped=0;
+  suggested.forEach(s=>{
+    const ex=state.fitting.find(f=>f.desc===s.desc);
+    if(ex){ex.qty=(ex.qty||1)+1;bumped++;}
+    else{state.fitting.push(s);added++;}
+  });
+  if(added||bumped){
     renderPricing();
-    toast('Fitting costs updated ('+newLines.length+' line'+(newLines.length>1?'s':'')+' added)');
+    toast('Fitting costs updated ('+added+' line'+(added===1?'':'s')+' added'+(bumped?', '+bumped+' qty increased':'')+')');
   }
 }
 function setDoorKF(s,f,v){const d=state.config.doors[s]||defaultDoor();if(!d.keyframe)d.keyframe={req:false,type:"Aluminium"};d.keyframe[f]=v;state.config.doors[s]=d;renderSides();applyConfig();}
@@ -4514,8 +4524,8 @@ function renderDocuments(){
   const sideCardsBig=relSides.filter(sideHas).map(s=>`<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column">${(cf.sides[s]&&cf.sides[s]!=='None')?`<div class="gimg grow" style="min-height:120px">${docImg('side',cf.sides[s],cf.sides[s],0,0,'width:100%;height:100%;border-radius:0;border:none')}</div>`:''}<div style="padding:12px 14px"><div style="font-weight:800;color:var(--brand-d);font-size:14.5px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13.5px;margin-top:3px">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div>`).join('')||'<div style="color:#8a969a;font-size:11px">No side infills or notes recorded.</div>';
   const sideCount=relSides.filter(sideHas).length;
   const sideRows=relSides.filter(sideHas).map(s=>{const opt=cf.sides[s]||'None';
-    const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%'):'<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">No infill</div>';
-    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div class="gimg grow" style="min-height:84px">${infill}</div><div style="padding:11px 13px"><div style="font-weight:800;color:var(--brand-d);font-size:15px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13px;margin-top:3px">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div><div class="gimg" style="border-radius:12px;border:1px solid var(--line);min-height:120px">${docImg('siderender',s,SIDE_LBL[s]+' RENDER',0,0,'width:100%;height:100%')}</div>`;
+    const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%;object-fit:cover'):'<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">No infill</div>';
+    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div class="gimg" style="height:130px;flex-shrink:0">${infill}</div><div style="padding:11px 13px"><div style="font-weight:800;color:var(--brand-d);font-size:15px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13px;margin-top:3px">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div><div class="gimg" style="border-radius:12px;border:1px solid var(--line);min-height:120px">${docImg('siderender',s,SIDE_LBL[s]+' RENDER',0,0,'width:100%;height:100%')}</div>`;
   }).join('')||'<div style="color:#8a969a;grid-column:1/3">No side infills or notes recorded.</div>';
 
   const fitOrder=state.fitting;
@@ -4827,7 +4837,7 @@ function renderDocuments(){
     ${phead('Internal Notes — STRICTLY CONFIDENTIAL')}
     <div class="pg" style="display:flex;flex-direction:column;gap:12px">
       <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;color:#856404;text-align:center">
-        ⚠ INTERNAL USE ONLY — This page must NEVER be shared with the customer
+        ⚠ INTERNAL USE ONLY
       </div>
       <div class="sh" style="margin:0">Internal Survey Notes</div>
       <div contenteditable="${state.doc==='survey'?'true':'false'}"
