@@ -2490,6 +2490,18 @@ function optimiseDoor(side, openingMm){
 }
 function setDoor(s,f,v){if(!state.config.doors[s])state.config.doors[s]=defaultDoor();state.config.doors[s][f]=v;renderSides();applyConfig();}
 /* Auto-suggest fitting lines based on current configuration */
+/* Set sizes run up to 60mm over the nominal metre (4060 = 4m, 5060 = 5m) */
+const WIDTH_TOLERANCE=60;
+/* Fitting is only priced 3m-6m. Wider verandas are installed as multiple bands,
+   split as evenly as possible: 7m = 3m+4m, 8m = 4m+4m, 11m = 5m+6m, 13m = 4m+4m+5m.
+   Every part lands between 3m and 6m, so every part has a price. */
+function splitBands(metres){
+  const m=Math.max(3,metres);
+  if(m<=6)return [m];
+  const parts=Math.ceil(m/6);
+  const base=Math.floor(m/parts), rem=m%parts;
+  return Array.from({length:parts},(_,i)=>base+(i>=parts-rem?1:0));
+}
 /* Same fitting line suggested twice (e.g. two aluminium sides) becomes one line at qty 2 */
 function pushOrIncrement(arr,item){
   const ex=arr.find(x=>x.desc===item.desc);
@@ -2512,14 +2524,19 @@ function autoFitting(){
     const f=admin.fitting.find(x=>x.desc===key);
     if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
   } else {
-    /* Veranda — band by width: 4060=4m, 5060=5m, 6060=6m etc. Clamp 3-6 */
+    /* Veranda — band by width. Set sizes carry up to 60mm of manufacturing
+       tolerance (4060 = the 4m product, 5060 = the 5m product), so anything
+       within 60mm of a whole metre bands DOWN to that metre. Bespoke widths
+       always step UP to the next whole metre. Over 6m there is no single
+       fitting line, so the width is split into 3-6m charges (7m = 3m + 4m). */
     const rawW=cf.width||4060;
-    const wm=rawW%1000===0?Math.floor(rawW/1000):Math.ceil(rawW/1000);
-    const band=Math.min(6,Math.max(3,wm));
+    const over=rawW%1000;
+    const metres=cf.bespoke?Math.ceil(rawW/1000):(over<=WIDTH_TOLERANCE?Math.floor(rawW/1000):Math.ceil(rawW/1000));
     const glassStr=isGlass?(' - Glass Roof'):'';
-    const key=`TL - Veranda ${band}m${glassStr}`;
-    const f=admin.fitting.find(x=>x.desc===key);
-    if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
+    splitBands(metres).forEach(band=>{
+      const f=admin.fitting.find(x=>x.desc===`TL - Veranda ${band}m${glassStr}`);
+      if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
+    });
   }
   /* Sides */
   const relSides=(cf.mount==='Free Standing')?['front','left','right','back']:['front','left','right'];
