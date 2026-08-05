@@ -2443,7 +2443,7 @@ function renderSides(){
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
           <span style="font-size:12px;color:#7a8a90">Colour: ${state.config.colour} · Components on Picking List</span>
-          <span class="admin-only" style="font-size:12px;font-weight:700;background:var(--gold);color:#fff;padding:3px 10px;border-radius:20px">Nett: £${doorCost}</span>
+          <span class="admin-only" style="display:none;font-size:12px;font-weight:700;background:var(--gold);color:#fff;padding:3px 10px;border-radius:20px">Nett: £${doorCost}</span>
         </div>
       </div>`;
     }
@@ -2498,8 +2498,8 @@ function autoFitting(){
   const isGlass=cf.roof&&cf.roof.toLowerCase().includes('glass');
   const isPergola=['Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus'].includes(cf.model);
   /* Veranda / Pergola base install */
-  if(isPergola){
-    /* Pergola — use closest freestanding match */
+  if(isPergola||cf.mount==='Free Standing'){
+    /* Free Standing / Pergola — use closest freestanding match by size */
     const wm=Math.round(cf.width/1000);
     const pm=Math.round(proj/1000);
     const key=`TL - Freestanding Pergola ${wm}m x ${pm}m`;
@@ -4512,6 +4512,7 @@ function renderDocuments(){
      <div class="cs">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div>`).join('')
      ||'<div style="color:#8a969a;font-size:10.5px">No side infills or notes.</div>';
   const sideCardsBig=relSides.filter(sideHas).map(s=>`<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column">${(cf.sides[s]&&cf.sides[s]!=='None')?`<div class="gimg grow" style="min-height:120px">${docImg('side',cf.sides[s],cf.sides[s],0,0,'width:100%;height:100%;border-radius:0;border:none')}</div>`:''}<div style="padding:12px 14px"><div style="font-weight:800;color:var(--brand-d);font-size:14.5px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13.5px;margin-top:3px">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div>`).join('')||'<div style="color:#8a969a;font-size:11px">No side infills or notes recorded.</div>';
+  const sideCount=relSides.filter(sideHas).length;
   const sideRows=relSides.filter(sideHas).map(s=>{const opt=cf.sides[s]||'None';
     const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%'):'<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">No infill</div>';
     return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div class="gimg grow" style="min-height:84px">${infill}</div><div style="padding:11px 13px"><div style="font-weight:800;color:var(--brand-d);font-size:15px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13px;margin-top:3px">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div><div class="gimg" style="border-radius:12px;border:1px solid var(--line);min-height:120px">${docImg('siderender',s,SIDE_LBL[s]+' RENDER',0,0,'width:100%;height:100%')}</div>`;
@@ -4657,7 +4658,7 @@ function renderDocuments(){
   ${state.doc==='survey'?`<section class="sheet">${phead('Sides & Infills')}
     <div class="pg"><div class="fill">
       <div class="sh">Sides / Infills — ${cf.mount}</div>
-      <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:14px 16px;grid-template-rows:repeat(2,minmax(0,220px));align-content:start">${sideRows}</div>
+      <div style="display:grid;grid-template-columns:${sideCount<=3?'1fr 1.15fr':'1fr 1fr'};gap:14px 16px;grid-template-rows:repeat(${Math.ceil(sideCount/2)},minmax(0,${sideCount<=2?'300px':'220px'}));align-content:start">${sideRows}</div>
     </div></div>${pfoot()}
   </section>`:''}
 
