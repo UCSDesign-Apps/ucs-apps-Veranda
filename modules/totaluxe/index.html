@@ -620,6 +620,35 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="wiz-body" id="wbody4">
             <div class="grid g4" id="sidesWrap"></div>
+            <button class="btn" style="margin-top:14px;width:100%" onclick="wizNext(4)">Next — Site &amp; groundworks ›</button>
+          </div>
+        </div>
+
+        <!-- STEP 5 — Site & Groundworks -->
+        <div class="wiz-step" id="wstep5">
+          <div class="wiz-hdr" onclick="wizToggle(5)">
+            <div class="wiz-num idle" id="wnum5">5</div>
+            <div class="wiz-title">Site &amp; Groundworks</div>
+            <div class="wiz-summary" id="wsumm5">Ground, soffit, box out &amp; notch</div>
+            <span class="wiz-chevron" id="wchev5">&#8964;</span>
+          </div>
+          <div class="wiz-body" id="wbody5">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field"><label>Ground type</label>
+                <select id="c_groundType" onchange="onSiteField()"></select></div>
+              <div class="field" id="groundOtherWrap" style="display:none"><label>Ground type — please specify</label>
+                <input id="c_groundTypeOther" type="text" placeholder="Describe the ground type" oninput="onSiteField()"></div>
+              <div class="field"><label>Soffit height (mm)</label>
+                <input id="c_soffitHeight" type="number" min="0" max="10000" step="1" placeholder="e.g. 2400" oninput="onSiteField()"></div>
+              <div class="field"><label>Box out required?</label>
+                <select id="c_boxOutReq" onchange="onSiteField()"><option>No</option><option>Yes</option></select></div>
+              <div class="field" id="boxOutSizeWrap" style="display:none"><label>Box out size</label>
+                <select id="c_boxOutSize" onchange="onSiteField()"></select></div>
+              <div class="field" id="boxOutOtherWrap" style="display:none"><label>Box out — please specify</label>
+                <input id="c_boxOutOther" type="text" placeholder="Describe the box out" oninput="onSiteField()"></div>
+              <div class="field"><label>Roof notch out required?</label>
+                <select id="c_roofNotch" onchange="onSiteField()"><option>No</option><option>Yes</option></select></div>
+            </div>
           </div>
         </div>
 
@@ -1856,7 +1885,13 @@ function blankState(){return{
   id:null,doc:'contract',status:'Draft',
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
-  config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:""},
+  config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:"",
+    /* SITE & GROUNDWORKS (2026-08-17) — site conditions captured in wizard step 5 and shown on the
+       Specification page of ALL THREE documents. They live on `config` (not a separate state.site)
+       because renderDocuments already binds cf=state.config, so the templates get them for free.
+       boxOutReq is kept SEPARATE from boxOutSize on purpose: collapsing them would make
+       "Yes, size not chosen yet" indistinguishable from "No", and a rep passes through that state. */
+    groundType:"",groundTypeOther:"",soffitHeight:0,boxOutReq:"No",boxOutSize:"",boxOutOther:"",roofNotch:"No"},
   pricing:{discount:30,youpay:0,specialOffer:false,managerApproval:false,additionalCosts:[]},
   /* contractParts = parts added at pricing (materials, discountable, part of the contract).
      surveyParts   = on-site survey extras only — never alter the contract totals. */
@@ -2010,8 +2045,88 @@ function fillSelect(id,arr,v){const s=document.getElementById(id);if(!s)return;s
    CONFIGURATOR WIZARD
 ═══════════════════════════════════════════════════════════════════════════ */
 const ROOF_ICON={'Clear':'☀️','Opal':'🌥️','Solar':'🌤️','Ultra Clear':'💎','Ultra':'💎','Glass 8.8mm':'🪟','Glass Roof':'🪟','Polycarbonate':'☀️','Adjustable slats':'🔄','Retractable slats':'↔️','Fabric canopy':'🏕️','Glass slats 8.8mm':'🪟'};
+/* ── SITE & GROUNDWORKS (2026-08-17) ──────────────────────────────────────────
+   Four site-condition fields captured in wizard step 5 and printed on the
+   Specification page of quote, contract AND survey.
+   DISPLAY RULE (Richard, 2026-08-17): all four ALWAYS render on every document,
+   including "No" and blanks (blank = "—"). An explicit "Box Out: No" is a positive
+   instruction to the fitter; an omitted row is ambiguous. Do not "tidy" these away
+   on the customer-facing documents without asking. */
+const WIZ_STEPS=5;
+const GROUND_TYPES=['Grass','Tarmac','Concrete Paving Slabs','Porcelain Paving Slabs','Loose Stones','Other'];
+const BOX_OUT_SIZES=['150mm (Downpipe)','200mm (Waste Pipe)','250mm','300mm','Other'];
+const SITE_DASH='—';
+/** fillSelect + a leading empty option, so "" is a selectable, savable "not answered yet". */
+function fillSelectPH(id,arr,v,placeholder){
+  const s=document.getElementById(id);if(!s)return;
+  s.innerHTML='';
+  const p=document.createElement('option');p.value='';p.textContent=placeholder||'—';s.appendChild(p);
+  arr.forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x;s.appendChild(o);});
+  s.value=v||'';
+}
+/** The single source of truth for how these four read — used by BOTH the documents
+ *  and the wizard step summary, so the rep sees exactly what the customer will. */
+function siteGroundVals(cf){
+  cf=cf||{};
+  const ground=cf.groundType==='Other'?(cf.groundTypeOther||SITE_DASH):(cf.groundType||SITE_DASH);
+  const soffit=(+cf.soffitHeight>0)?((+cf.soffitHeight)+' mm'):SITE_DASH;
+  let box='No';
+  if(cf.boxOutReq==='Yes')box=(cf.boxOutSize==='Other')?(cf.boxOutOther||SITE_DASH):(cf.boxOutSize||SITE_DASH);
+  const notch=(cf.roofNotch==='Yes')?'Required':'No';
+  return {ground,soffit,box,notch};
+}
+/** Four <div class="li"> rows — the same markup the existing spec lists use, so this
+ *  drops into the survey `dl` list and the quote/contract 3-column grid unchanged. */
+function siteGroundRows(cf){
+  const v=siteGroundVals(cf);
+  return `<div class="li"><span class="k">Ground Type</span><span class="v">${esc(v.ground)}</span></div>`+
+         `<div class="li"><span class="k">Soffit Height</span><span class="v">${esc(v.soffit)}</span></div>`+
+         `<div class="li"><span class="k">Box Out</span><span class="v">${esc(v.box)}</span></div>`+
+         `<div class="li"><span class="k">Roof Notch Out</span><span class="v">${esc(v.notch)}</span></div>`;
+}
+/** Show/hide the two conditional "please specify" inputs and the box-out size select. */
+function syncSiteReveals(){
+  const cf=state.config;
+  const show=(id,on)=>{const e=document.getElementById(id);if(e)e.style.display=on?'':'none';};
+  show('groundOtherWrap',cf.groundType==='Other');
+  show('boxOutSizeWrap',cf.boxOutReq==='Yes');
+  show('boxOutOtherWrap',cf.boxOutReq==='Yes'&&cf.boxOutSize==='Other');
+}
+/** Read step 5 into state. Clearing a parent answer clears its dependants in BOTH state
+ *  and the DOM — otherwise a hidden input keeps its old text and gets re-read next call,
+ *  resurrecting a "specify" value the rep thought they had cleared. */
+function onSiteField(){
+  const cf=state.config;
+  cf.groundType=val('c_groundType');
+  cf.groundTypeOther=val('c_groundTypeOther');
+  cf.soffitHeight=+val('c_soffitHeight')||0;
+  cf.boxOutReq=val('c_boxOutReq')||'No';
+  cf.boxOutSize=val('c_boxOutSize');
+  cf.boxOutOther=val('c_boxOutOther');
+  cf.roofNotch=val('c_roofNotch')||'No';
+  if(cf.groundType!=='Other'){cf.groundTypeOther='';V('c_groundTypeOther','');}
+  if(cf.boxOutReq!=='Yes'){cf.boxOutSize='';cf.boxOutOther='';V('c_boxOutSize','');V('c_boxOutOther','');}
+  else if(cf.boxOutSize!=='Other'){cf.boxOutOther='';V('c_boxOutOther','');}
+  syncSiteReveals();wizRefreshSummaries();scheduleAutoSave();
+}
+/** Populate the selects and push saved state into the controls. Called from renderWizard,
+ *  which initConfig calls — so this covers both a fresh quote and loadQuote. */
+function initSiteFields(){
+  const cf=state.config;
+  /* NB: fillSelect() has no placeholder option, so an unset field would silently show — and
+     then save — the first item ("Grass"). These two need a real empty choice so that
+     "not answered yet" stays representable and prints as "—". */
+  fillSelectPH('c_groundType',GROUND_TYPES,cf.groundType,'Select ground type…');
+  fillSelectPH('c_boxOutSize',BOX_OUT_SIZES,cf.boxOutSize,'Select size…');
+  V('c_groundTypeOther',cf.groundTypeOther||'');
+  V('c_soffitHeight',cf.soffitHeight||'');
+  V('c_boxOutReq',cf.boxOutReq||'No');
+  V('c_boxOutOther',cf.boxOutOther||'');
+  V('c_roofNotch',cf.roofNotch||'No');
+  syncSiteReveals();
+}
 function wizToggle(n){
-  for(let i=1;i<=4;i++){
+  for(let i=1;i<=WIZ_STEPS;i++){
     const body=document.getElementById('wbody'+i);
     const chev=document.getElementById('wchev'+i);
     const step=document.getElementById('wstep'+i);
@@ -2025,7 +2140,7 @@ function wizToggle(n){
   }
 }
 function wizOpen(n){
-  for(let i=1;i<=4;i++){
+  for(let i=1;i<=WIZ_STEPS;i++){
     const body=document.getElementById('wbody'+i);
     const chev=document.getElementById('wchev'+i);
     const step=document.getElementById('wstep'+i);
@@ -2301,11 +2416,11 @@ function wizRefreshSummaries(){
   const P=cf.bespoke&&cf.bespokeProj?cf.bespokeProj:cf.proj;
   if(T3)T3.textContent=(W||'—')+' × '+(P||'—')+' mm'+(cf.bespoke?' ★':'');
   /* step number badges */
-  [1,2,3,4].forEach(i=>{
-    const num=document.getElementById('wnum'+i);if(!num)return;
+  for(let i=1;i<=WIZ_STEPS;i++){
+    const num=document.getElementById('wnum'+i);if(!num)continue;
     const isOpen=document.getElementById('wbody'+i)?.classList.contains('open');
     num.className='wiz-num '+(isOpen?'active':'done');
-  });
+  }
   /* sides summary */
   if(T4){
     const mount=cf.mount||'Wall Mounted';
@@ -2313,6 +2428,9 @@ function wizRefreshSummaries(){
     const active=sides.filter(s=>cf.sides&&cf.sides[s]&&cf.sides[s]!=='None');
     T4.textContent=active.length?active.map(s=>cf.sides[s]).join(', '):'No sides selected';
   }
+  /* site & groundworks summary — same values the documents print */
+  const T5=document.getElementById('wsumm5');
+  if(T5){const v=siteGroundVals(cf);T5.textContent=`${v.ground} · ${v.soffit} · Box out ${v.box} · Notch ${v.notch}`;}
 }
 function renderWizard(){
   renderModelGrid();
@@ -2321,6 +2439,7 @@ function renderWizard(){
   renderRoofChips();
   renderGutterPost(); /* renders chips + syncs hidden selects */
   renderWizWidths();
+  initSiteFields();   /* step 5 — populates selects + pushes saved state into the controls */
   wizRefreshSummaries();
 }
 function initConfig(){
@@ -4314,6 +4433,18 @@ function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
   if(!state.config.sides)state.config.sides={left:"None",right:"None",front:"None",back:"None"};
   if(!state.config.doors)state.config.doors={};
   if(!state.config.sideNotes)state.config.sideNotes={front:"",left:"",right:"",back:""};
+  /* Site & Groundworks added 2026-08-17. loadQuote uses a SHALLOW Object.assign, so a saved
+     quote's `config` replaces blankState's wholesale — these come back undefined on every
+     pre-existing quote unless we backfill them explicitly (same reason sides/doors/sideNotes
+     are backfilled above). undefined-check, not falsy-check: soffitHeight 0 is a real value. */
+  {const _cd=blankState().config;
+   ['groundType','groundTypeOther','soffitHeight','boxOutReq','boxOutSize','boxOutOther','roofNotch']
+     .forEach(k=>{if(state.config[k]===undefined)state.config[k]=_cd[k];});}
+  /* The site photo used to be survey-only under the key `survey_sitephoto`; it is now shown on
+     quote/contract too under the shared key `sitephoto`. Carry the old key across or every photo
+     already taken on site would vanish from its saved job. */
+  if(!state.images)state.images={};
+  if(!state.images.sitephoto&&state.images.survey_sitephoto)state.images.sitephoto=state.images.survey_sitephoto;
   /* decking added after earlier quotes were saved — backfill so older quotes open cleanly.
      Quotes saved before the shape calculator carried only width x length: those are
      rectangles, so map them onto the rect shape rather than losing the deck. */
@@ -4656,10 +4787,16 @@ function renderDocuments(){
           <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">
         <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%')}</div>
-        <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('survey_sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
+        <div class="gimg" style="height:142px;border-radius:10px;border:1px solid var(--line)">${ph('sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
       </div>`:`
       <div class="grow" style="min-height:340px;display:flex;flex-direction:column;gap:8px">
-        <div class="gimg" style="height:260px;border-radius:10px;border:1px solid var(--line);flex-shrink:0">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
+        <!-- Render + SITE PHOTO side by side. The site photo used to appear on the survey only;
+             it is the same sitephoto key, so a photo taken on site shows on all three documents.
+             NB: no backticks in comments inside this template literal - they would close it. -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;height:260px;flex-shrink:0">
+          <div class="gimg" style="border-radius:10px;border:1px solid var(--line);height:100%">${docImg('model',cf.model,'VERANDA RENDER · '+displayName(cf.model),0,0,'width:100%;height:100%;object-fit:contain;background:#eef0f1')}</div>
+          <div class="gimg" style="border-radius:10px;border:1px solid var(--line);height:100%">${ph('sitephoto','SITE PHOTO',0,0,'width:100%;height:100%')}</div>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px;flex-shrink:0">
           <div class="li"><span class="k">Model / Suite</span><span class="v">${displayName(cf.model)} Veranda</span></div>
           <div class="li"><span class="k">Frame (W×P)</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
@@ -4670,6 +4807,12 @@ function renderDocuments(){
           ${state.doc==='survey'?`<div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>`:''}
         </div>
       </div>`}
+      <!-- SITE & GROUNDWORKS — all four ALWAYS shown, on all three documents (see siteGroundVals).
+           Placed outside the survey/quote ternary above so both layout branches get it. -->
+      <div class="sh">Site &amp; Groundworks</div>
+      ${state.doc==='survey'
+        ? `<div class="dl">${siteGroundRows(cf)}</div>`
+        : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
@@ -4905,7 +5048,10 @@ function ph(key,label,w,h,extra,src,tint){
   /* Only object-fit is routed to the <img>; background stays on the container */
   const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extraStr.replace(/object-fit:[^;]+;?/g,'')||'');
   /* Only the site photo is clickable — all other image placeholders are display-only */
-  const clickable=(key==='survey_sitephoto');
+  /* `sitephoto` is the one per-quote image a rep/surveyor can upload. Renamed from
+     `survey_sitephoto` on 2026-08-17 when it started appearing on quote + contract too;
+     loadQuote carries the old key across so existing jobs keep their photo. */
+  const clickable=(key==='sitephoto');
   return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
 function docImg(cat,opt,label,w,hh,extra,tint){
