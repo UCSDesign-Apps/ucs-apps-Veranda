@@ -780,6 +780,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="dk-dimgrid" id="dk_dims"></div>
             <div id="dk_derived"></div>
             <div id="dk_summary" style="margin-top:12px"></div>
+            <div id="dk_dir" style="margin-top:8px"></div>
             <div class="dk-canvasbox">
               <canvas id="dk_canvas" width="300" height="260" style="cursor:pointer;max-width:100%" onclick="deckingCanvasClick(event)"></canvas>
               <div class="dk-legend">
@@ -1956,7 +1957,7 @@ function blankState(){return{
   /* contractParts = parts added at pricing (materials, discountable, part of the contract).
      surveyParts   = on-site survey extras only — never alter the contract totals. */
   fitting:[],contractParts:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
-  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0}
+  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false}
 };}
 let state=blankState();
 function today(){return new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -2978,8 +2979,12 @@ function renderPricing(){
 const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Antique Oak':'#a4794b','Chocolate':'#4e352a','Silver Birch':'#b9b2a6'};
 
 function deckingState(){
-  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0};
+  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false};
   const d=state.decking;
+  /* Which way the boards run: 'a' along the width, 'b' along the projection.
+     Anything saved before the optimiser existed ran along A. */
+  if(d.boardDir!=='b')d.boardDir='a';
+  d.boardDirLocked=!!d.boardDirLocked;
   if(!Array.isArray(d.items))d.items=[];
   /* v1 called the rectangle 'rect' */
   if(d.shape==='rect')d.shape='square';
@@ -3018,6 +3023,10 @@ function deckingSetShape(s){
   if(d.shape===s)return;
   d.shape=s;
   if(s==='square'){d.dims.c=0;d.dims.d=0;}
+  /* a different outline is a different job — the rep's pinned direction was for
+     the old one, so hand the choice back to the optimiser */
+  d.boardDirLocked=false;
+  deckingOptimiseDirection();
   renderDecking();
 }
 function deckingRenderShapes(){
@@ -3134,6 +3143,7 @@ function deckingSetDim(k,v){
      the input grid: rewriting the field the rep is typing in would destroy the
      caret on every keystroke. */
   deckingDrawCanvas();   /* also refreshes the step pills (side lengths changed) */
+  deckingOptimiseDirection();   /* a new size can flip which way is cheaper */
   deckingCalc();
   drawSubframePlan();
   drawBoardPlan();
@@ -3348,19 +3358,33 @@ function drawSubframePlan(){
   /* Clip to the outline so a notched shape shows no grid over the cut-out. */
   ctx.save();outline();ctx.clip();
 
-  /* Joists — brown bars running the full projection at max 300mm centres */
+  /* Joists — brown bars spanning the deck across the boards, at max 300mm
+     centres along the board run. Drawn through the U/V mapper, so the whole
+     grid turns with the board direction. */
+  const P=(u,v)=>{const xy=c.xy(u,v);return [X(xy[0]),Y(xy[1])];};
+  const alongA=(c.dir!=='b');
+  const vA=alongA?b.y0:b.x0, vB=alongA?b.y1:b.x1;
   ctx.fillStyle=DK_PLAN_JOIST;
-  c.joistX.forEach(x=>ctx.fillRect(X(x)-2,Y(b.y0),4,b.h*k));
+  c.joistU.forEach(u=>{
+    const p0=P(u,vA),p1=P(u,vB);
+    ctx.fillRect(Math.min(p0[0],p1[0])-(alongA?2:0),Math.min(p0[1],p1[1])-(alongA?0:2),
+                 alongA?4:Math.abs(p1[0]-p0[0]),alongA?Math.abs(p1[1]-p0[1]):4);
+  });
   /* Noggins — tan bars between each joist pair, staggered bay to bay */
   ctx.fillStyle=DK_PLAN_NOGGIN;
   c.nogginsByBay.forEach((row,i)=>{
-    const xL=X(c.joistX[i]),xR=X(c.joistX[i+1]);
-    row.forEach(y=>ctx.fillRect(xL,Y(y)-2,Math.max(1,xR-xL),4));
+    row.forEach(v=>{
+      const p0=P(c.joistU[i],v),p1=P(c.joistU[i+1],v);
+      ctx.fillRect(Math.min(p0[0],p1[0])-(alongA?0:2),Math.min(p0[1],p1[1])-(alongA?2:0),
+                   alongA?Math.max(1,Math.abs(p1[0]-p0[0])):4,
+                   alongA?4:Math.max(1,Math.abs(p1[1]-p0[1])));
+    });
   });
   /* Concrete pads — red dots on the bearing joists only */
   ctx.fillStyle=DK_PLAN_PAD;
-  c.padJoistX.forEach(x=>c.padY.forEach(y=>{
-    ctx.beginPath();ctx.arc(X(x),Y(y),5,0,Math.PI*2);ctx.fill();
+  c.padJoistU.forEach(u=>c.padV.forEach(v=>{
+    const pt=P(u,v);
+    ctx.beginPath();ctx.arc(pt[0],pt[1],5,0,Math.PI*2);ctx.fill();
   }));
   ctx.restore();
 
@@ -3376,11 +3400,12 @@ function drawSubframePlan(){
   ctx.fillText(Math.round(b.h)+'mm',0,0);
   ctx.restore();
   ctx.font='600 10px Helvetica,Arial';ctx.textBaseline='alphabetic';
-  const jStep=c.joistX.length>1?Math.round(b.w/(c.joistX.length-1)):0;
-  const pStep=c.padY.length>1?Math.round(b.h/(c.padY.length-1)):0;
+  const runSpan=(c.dir==='b')?b.h:b.w, crossSpan=(c.dir==='b')?b.w:b.h;
+  const jStep=c.joistU.length>1?Math.round(runSpan/(c.joistU.length-1)):0;
+  const pStep=c.padV.length>1?Math.round(crossSpan/(c.padV.length-1)):0;
   ctx.fillText(c.numJoists+' joists at '+jStep+'mm · '+
                c.nogginsTotal+' noggins, staggered · '+
-               c.pads+' pads at '+pStep+'mm on '+c.padJoistX.length+' bearing joists',W/2,H-9);
+               c.pads+' pads at '+pStep+'mm on '+c.padJoistU.length+' bearing joists',W/2,H-9);
 }
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
@@ -3421,25 +3446,35 @@ function drawBoardPlan(){
   };
   outline();ctx.fillStyle='#f3f7f8';ctx.fill();
 
+  const alongA=(lay.dir!=='b');
+  const ax=dkAxes(lay.dir,b);
+  const P=(u,v)=>{const xy=ax.xy(u,v);return [X(xy[0]),Y(xy[1])];};
   ctx.save();outline();ctx.clip();
   let cuts=0;
   lay.rows.forEach((row,r)=>{
-    const top=Y(row.y0), hgt=Math.max(1,(row.y1-row.y0)*k);
     row.segs.forEach(sg=>{
       /* the board run itself — alternating shades so each one reads separately */
+      const c0=P(sg[0],row.v0), c1=P(sg[1],row.v1);
+      const rx=Math.min(c0[0],c1[0]), ry=Math.min(c0[1],c1[1]);
+      const rw=Math.max(1,Math.abs(c1[0]-c0[0])), rh=Math.max(1,Math.abs(c1[1]-c0[1]));
       ctx.fillStyle=(r%2)?DK_BOARD_B:DK_BOARD_A;
-      ctx.fillRect(X(sg[0]),top,Math.max(1,(sg[1]-sg[0])*k),hgt);
+      ctx.fillRect(rx,ry,rw,rh);
       ctx.fillStyle='rgba(0,0,0,0.16)';   /* the gap between boards */
-      ctx.fillRect(X(sg[0]),Y(row.y1)-0.5,Math.max(1,(sg[1]-sg[0])*k),1);
+      if(alongA)ctx.fillRect(rx,ry+rh-0.5,rw,1);
+      else      ctx.fillRect(rx+rw-0.5,ry,1,rh);
       /* cuts: the butt joints down this segment, then the trim at its end */
       ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
       if(ctx.setLineDash)ctx.setLineDash([6,4]);
-      const xcuts=[];
-      for(let x=sg[0]+lay.lenMm;x<sg[1];x+=lay.lenMm)xcuts.push(x);
-      xcuts.push(sg[1]);
-      xcuts.forEach(x=>{
-        const px=(x>=sg[1])?X(x)-1.5:X(x);
-        ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,top+hgt);ctx.stroke();cuts++;
+      const ucuts=[];
+      for(let u=sg[0]+lay.lenMm;u<sg[1];u+=lay.lenMm)ucuts.push(u);
+      ucuts.push(sg[1]);
+      ucuts.forEach(u=>{
+        const a=P(u,row.v0), z=P(u,row.v1);
+        const back=(u>=sg[1])?1.5:0;
+        ctx.beginPath();
+        if(alongA){ctx.moveTo(a[0]-back,Math.min(a[1],z[1]));ctx.lineTo(a[0]-back,Math.max(a[1],z[1]));}
+        else      {ctx.moveTo(Math.min(a[0],z[0]),a[1]-back);ctx.lineTo(Math.max(a[0],z[0]),a[1]-back);}
+        ctx.stroke();cuts++;
       });
       if(ctx.setLineDash)ctx.setLineDash([]);
     });
@@ -3449,19 +3484,29 @@ function drawBoardPlan(){
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
 
   /* Direction arrow, in the gutter so it never sits over a board */
-  const ay=Y(b.y0)-16, aL=X(b.x0)+8, aR=X(b.x1)-8;
-  if(aR-aL>24){
-    ctx.strokeStyle='#1f4e57';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(aL,ay);ctx.lineTo(aR-6,ay);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(aR-7,ay-4);ctx.lineTo(aR,ay);ctx.lineTo(aR-7,ay+4);
-    ctx.closePath();ctx.fillStyle='#1f4e57';ctx.fill();
+  ctx.strokeStyle='#1f4e57';ctx.lineWidth=1.5;ctx.fillStyle='#1f4e57';
+  if(alongA){
+    const ay=Y(b.y0)-16, aL=X(b.x0)+8, aR=X(b.x1)-8;
+    if(aR-aL>24){
+      ctx.beginPath();ctx.moveTo(aL,ay);ctx.lineTo(aR-6,ay);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(aR-7,ay-4);ctx.lineTo(aR,ay);ctx.lineTo(aR-7,ay+4);
+      ctx.closePath();ctx.fill();
+    }
+  }else{
+    const axx=X(b.x0)-18, aT=Y(b.y0)+8, aB=Y(b.y1)-8;
+    if(aB-aT>24){
+      ctx.beginPath();ctx.moveTo(axx,aT);ctx.lineTo(axx,aB-6);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(axx-4,aB-7);ctx.lineTo(axx,aB);ctx.lineTo(axx+4,aB-7);
+      ctx.closePath();ctx.fill();
+    }
   }
 
   /* Count note — the same figures the materials list orders */
-  const clipped=lay.rows.some(r=>r.segs.length!==1||r.segs[0][1]-r.segs[0][0]<b.w-1);
+  const clipped=lay.rows.some(r=>r.segs.length!==1||r.segs[0][1]-r.segs[0][0]<lay.runLenMm-1);
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';ctx.textBaseline='alphabetic';
   ctx.font='600 10px Helvetica,Arial';
-  ctx.fillText(lay.runs+' runs at '+Math.round(lay.boardWmm)+'mm cover · '+
+  ctx.fillText('Boards along '+(alongA?'the width (A)':'the projection (B)')+' · '+
+               lay.runs+' runs at '+Math.round(lay.boardWmm)+'mm cover · '+
                lay.totalBoards+' × '+BOARD_LENGTH_M+'m lengths · '+cuts+' cuts · '+
                lay.laidM.toFixed(1)+'m laid'+
                (clipped?' · runs cut to the outline':''),W/2,H-9);
@@ -3513,26 +3558,29 @@ const NOGGIN_END_INSET_MM=300;/* first and last noggin sit 300mm in from the end
    (dimension A), because the boards run along A and every board has to cross its
    joists. Rotate one and you have to rotate the other — deckingBoardLayout()
    lays the boards along A, so the joists are set out to suit. */
-function deckingSubframeCounts(){
+function deckingSubframeCounts(dir){
   const b=deckingBBox();
-  const empty={joistX:[],padY:[],padJoistX:[],nogginsByBay:[],numJoists:0,
-               joistLengthMm:0,nogginLengthMm:0,nogginsTotal:0,pads:0,screws:0};
+  const empty={dir:'a',joistU:[],padV:[],padJoistU:[],nogginsByBay:[],numJoists:0,
+               joistLengthMm:0,nogginLengthMm:0,nogginsTotal:0,pads:0,screws:0,
+               xy:(u,v)=>[u,v]};
   if(!(b.w>0&&b.h>0))return empty;
+  dir=(dir==='a'||dir==='b')?dir:deckingBoardDir();
+  const ax=dkAxes(dir,b);
 
-  /* Joists run the full projection, evenly spaced across the width at no more
-     than 300mm, with one on each edge. */
-  const joistX=dkEvenSpan(b.x0,b.x1,JOIST_SPACING_MM);
+  /* Joists run the full width of the deck across the boards, evenly spaced along
+     the board run at no more than 300mm, with one at each end. */
+  const joistU=dkEvenSpan(ax.u0,ax.u1,JOIST_SPACING_MM);
   /* Pads run down each joist, evenly spaced at no more than 1200mm, one at each
-     end. They do not carry every joist: every 4th bears, and the two edge joists
+     end. They do not carry every joist: every 4th bears, and the two end joists
      always do whatever the count works out at. */
-  const padY=dkEvenSpan(b.y0,b.y1,PAD_SPACING_MM);
-  const padJoistX=joistX.filter((x,i)=>i%PAD_JOIST_EVERY===0||i===joistX.length-1);
+  const padV=dkEvenSpan(ax.v0,ax.v1,PAD_SPACING_MM);
+  const padJoistU=joistU.filter((u,i)=>i%PAD_JOIST_EVERY===0||i===joistU.length-1);
 
   /* Noggins sit 300mm in from each end with the middle divided evenly at no more
      than 1220mm. Alternate bays take the midpoints of that division instead, so
      adjacent bays are staggered and every joist can be screwed through its face. */
-  const e0=b.y0+NOGGIN_END_INSET_MM, e1=b.y1-NOGGIN_END_INSET_MM;
-  const flush=(e1>e0)?dkEvenSpan(e0,e1,NOGGING_SPACING_MM):[b.y0+b.h/2];
+  const e0=ax.v0+NOGGIN_END_INSET_MM, e1=ax.v1-NOGGIN_END_INSET_MM;
+  const flush=(e1>e0)?dkEvenSpan(e0,e1,NOGGING_SPACING_MM):[(ax.v0+ax.v1)/2];
   const staggered=[];
   if(flush.length>1){
     staggered.push(flush[0]);
@@ -3540,14 +3588,15 @@ function deckingSubframeCounts(){
     staggered.push(flush[flush.length-1]);
   }
   const nogginsByBay=[];
-  for(let i=0;i<joistX.length-1;i++)nogginsByBay.push((i%2&&staggered.length)?staggered:flush);
+  for(let i=0;i<joistU.length-1;i++)nogginsByBay.push((i%2&&staggered.length)?staggered:flush);
 
   const nogginsTotal=nogginsByBay.reduce((n,row)=>n+row.length,0);
-  const bayWidth=(joistX.length>1)?(b.w/(joistX.length-1)):0;
-  const pads=padJoistX.length*padY.length;
-  return {joistX,padY,padJoistX,nogginsByBay,
-          numJoists:joistX.length,
-          joistLengthMm:joistX.length*b.h,
+  const joistSpan=ax.v1-ax.v0;
+  const bayWidth=(joistU.length>1)?((ax.u1-ax.u0)/(joistU.length-1)):0;
+  const pads=padJoistU.length*padV.length;
+  return {dir,joistU,padV,padJoistU,nogginsByBay,xy:ax.xy,
+          numJoists:joistU.length,
+          joistLengthMm:joistU.length*joistSpan,
           nogginLengthMm:nogginsTotal*bayWidth,
           nogginsTotal,pads,
           /* two screws per fixing point: both ends of every noggin, and every
@@ -3576,43 +3625,100 @@ function dkScanSegments(yMid){
   for(let i=0;i+1<xs.length;i+=2)if(xs[i+1]>xs[i])segs.push([xs[i],xs[i+1]]);
   return segs;
 }
+/* The same ray cast the other way: a vertical line at xMid, returning the y
+   ranges it covers. Boards running along B are counted off this one. */
+function dkScanSegmentsV(xMid){
+  const pts=deckingPoints();
+  if(!pts)return [];
+  const n=pts.length,ys=[];
+  for(let i=0;i<n;i++){
+    const [x1,y1]=pts[i],[x2,y2]=pts[(i+1)%n];
+    if((x1<=xMid&&x2>xMid)||(x2<=xMid&&x1>xMid))ys.push(y1+(xMid-x1)*(y2-y1)/(x2-x1));
+  }
+  ys.sort((a,b)=>a-b);
+  const segs=[];
+  for(let i=0;i+1<ys.length;i+=2)if(ys[i+1]>ys[i])segs.push([ys[i],ys[i+1]]);
+  return segs;
+}
 /* Total covered length of one run, in mm. */
 function boardRunCoverage(yMid){
   return dkScanSegments(yMid).reduce((t,sg)=>t+(sg[1]-sg[0]),0);
 }
+function boardRunCoverageV(xMid){
+  return dkScanSegmentsV(xMid).reduce((t,sg)=>t+(sg[1]-sg[0]),0);
+}
+/* Boards run along U and stack along V. For dir 'a' that is U=x, V=y; for dir
+   'b' the deck is read the other way round. Everything downstream — the board
+   count, the joists, the diagrams — works in U/V and maps back at the last
+   moment, so one set of rules covers both directions. */
+function dkAxes(dir,b){
+  return (dir==='b')
+    ? {alongA:false,u0:b.y0,u1:b.y1,v0:b.x0,v1:b.x1,
+       scan:v=>dkScanSegmentsV(v), xy:(u,v)=>[v,u]}
+    : {alongA:true, u0:b.x0,u1:b.x1,v0:b.y0,v1:b.y1,
+       scan:v=>dkScanSegments(v),  xy:(u,v)=>[u,v]};
+}
+function deckingBoardDir(){return deckingState().boardDir==='b'?'b':'a';}
 /* Boards run along dimension A and stack along B, and the joists are set out to
    cross them. Each run is clipped to the outline before it is counted, so a
    notched shape orders the boards it lays rather than the boards its bounding
    rectangle would take. Every board in the plan is a board you buy, whole or
    cut, so there is no wastage percentage on top — the offcut is already paid for
    inside the length it came from. */
-function deckingBoardLayout(){
+function deckingBoardLayout(dir){
   const d=deckingState();
   const b=deckingBBox();
+  dir=(dir==='a'||dir==='b')?dir:deckingBoardDir();
   const boardProd=d.colour?deckingProduct(d.colour):null;
   const boardWmm=(boardProd&&+boardProd.widthMm)||DEFAULT_BOARD_WIDTH_MM;
   const lenMm=BOARD_LENGTH_M*1000;
-  const empty={boardProd,boardWmm,lenMm,A_mm:0,B_mm:0,rows:[],runs:0,
+  const empty={dir,boardProd,boardWmm,lenMm,runLenMm:0,stackLenMm:0,rows:[],runs:0,
                boardsPerRun:0,totalBoards:0,joints:0,laidM:0};
   if(!(b.w>0&&b.h>0&&boardWmm>0))return empty;
 
-  const runs=Math.ceil(b.h/boardWmm);
+  const ax=dkAxes(dir,b);
+  const runs=Math.ceil((ax.v1-ax.v0)/boardWmm);
   const rows=[];
   let totalBoards=0,joints=0,laidMm=0;
   for(let r=0;r<runs;r++){
-    const y0=b.y0+r*boardWmm, y1=Math.min(y0+boardWmm,b.y1);
-    const segs=dkScanSegments((y0+y1)/2);
+    const v0=ax.v0+r*boardWmm, v1=Math.min(v0+boardWmm,ax.v1);
+    const segs=ax.scan((v0+v1)/2);
     /* per segment, never on the sum: two 1800mm segments either side of a gap
        need a board each, not one board between them */
     const boards=segs.reduce((t,sg)=>t+Math.ceil((sg[1]-sg[0])/lenMm),0);
     segs.forEach(sg=>{laidMm+=sg[1]-sg[0];});
     joints+=Math.max(0,boards-segs.length);   /* butt joints within the segments */
     totalBoards+=boards;
-    rows.push({y0,y1,yMid:(y0+y1)/2,segs,boards});
+    rows.push({v0,v1,vMid:(v0+v1)/2,segs,boards});
   }
-  return {boardProd,boardWmm,lenMm,A_mm:b.w,B_mm:b.h,rows,runs,
+  return {dir,boardProd,boardWmm,lenMm,runLenMm:ax.u1-ax.u0,stackLenMm:ax.v1-ax.v0,rows,runs,
           boardsPerRun:rows.reduce((m,r)=>Math.max(m,r.boards),0),
           totalBoards,joints,laidM:laidMm/1000};
+}
+
+/* ── Direction optimiser ───────────────────────────────────────────────── */
+/* Counts the deck both ways round and keeps the cheaper one. The count is the
+   real layout count, not an estimate, so the figures on the chip are the figures
+   on the order. A tie stays on A. Once the rep flips it by hand the choice is
+   locked, because they will have a site reason — the fall, a view line, a board
+   they want running with the house — that no arithmetic here can see. */
+function deckingOptimiseDirection(){
+  const d=deckingState();
+  if(!deckingDimsValid())return;
+  if(d.boardDirLocked)return;
+  const countA=deckingBoardLayout('a').totalBoards;
+  const countB=deckingBoardLayout('b').totalBoards;
+  d.boardDir=(countA<=countB)?'a':'b';
+  d.boardDirCounts={a:countA,b:countB};
+}
+/* Manual override. Pins the choice until the shape or the board changes. */
+function deckingFlipDir(){
+  const d=deckingState();
+  d.boardDir=(d.boardDir==='a')?'b':'a';
+  d.boardDirLocked=true;
+  deckingCalc();
+  drawSubframePlan();
+  drawBoardPlan();
 }
 
 /* ── Materials ──────────────────────────────────────────────────────────── */
@@ -3663,7 +3769,7 @@ function deckingAutoItems(){
        clipped to the joists beyond it */
     let crossings=0;
     lay.rows.forEach(row=>row.segs.forEach(sg=>{
-      crossings+=sub.joistX.filter(x=>x>=sg[0]-1&&x<=sg[1]+1).length;
+      crossings+=sub.joistU.filter(u=>u>=sg[0]-1&&u<=sg[1]+1).length;
     }));
     out[clip.code]=Math.ceil((crossings+lay.joints)/deckingPackSize(clip,20));
   }
@@ -3729,12 +3835,45 @@ function deckingExtraAuto(code){
   deckingCalc();
 }
 
+/* Tells the rep which way the boards ended up running and what it saved. The
+   counts are the real layout counts for each direction, so the figure quoted
+   here is the figure on the order. */
+function deckingRenderDirection(){
+  const w=document.getElementById('dk_dir');if(!w)return;
+  const d=deckingState();
+  if(!deckingDimsValid()||!deckingArea()){w.innerHTML='';return;}
+  const cA=deckingBoardLayout('a').totalBoards;
+  const cB=deckingBoardLayout('b').totalBoards;
+  const dir=deckingBoardDir();
+  const chosen=(dir==='a')?cA:cB, other=(dir==='a')?cB:cA;
+  const lo=Math.min(cA,cB), hi=Math.max(cA,cB), saved=hi-lo;
+  const here=(dir==='a')?'width (A)':'length (B)';
+  const there=(dir==='a')?'length (B)':'width (A)';
+  const best=chosen<=other;
+  let tail;
+  if(saved===0)tail='— both directions equal at '+cA+' boards';
+  else if(best)tail='— '+chosen+' boards vs '+other+' the other way (saves '+saved+' board'+(saved===1?'':'s')+')';
+  else tail='— '+chosen+' boards; along the '+there+' would take '+other+' ('+saved+' fewer)';
+  /* green when the deck is on its cheapest run, amber when the rep has pinned it
+     to the dearer one — that is their call to make, but it should be visible */
+  const ok=best||saved===0;
+  const bg=ok?'#e8f5e9':'#fff6e0', bd=ok?'#a5d6a7':'#e6c98a';
+  const tag=d.boardDirLocked?'✎ Set by hand':'✓ Optimised';
+  w.innerHTML=`<div class="chip" style="background:${bg};border-color:${bd};font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>${tag}: boards run along <b>${here}</b> ${esc(tail)}</span>
+      <button onclick="deckingFlipDir()" class="btn sm" title="Run the boards the other way — the choice then sticks until the shape or board changes">↺ Flip board direction</button>
+    </div>`;
+}
+
 /* ── Step 4: colour ─────────────────────────────────────────────────────── */
 function deckingSetColour(code){
   const p=deckingProduct(code);if(!p)return;
   const d=deckingState();
   d.colour=(d.colour===code)?'':code;
   d.colourName=d.colour?p.name:'';
+  /* cover width changes how many runs fit, which can flip the cheaper direction */
+  d.boardDirLocked=false;
+  deckingOptimiseDirection();
   renderDecking();   /* board width changed -> running metres and clips change */
 }
 function deckingRenderColours(){
@@ -3799,6 +3938,7 @@ function deckingCalc(){
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingRenderDirection();
   deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
   drawSubframePlan();
