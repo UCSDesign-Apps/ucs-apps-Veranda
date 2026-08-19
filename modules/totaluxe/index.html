@@ -250,6 +250,8 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .dk-auto{font-size:9.5px;font-weight:700;color:#c2a14e;letter-spacing:.4px;}
 .dk-warn{background:#fdecec;border:1px solid #f1b4b4;color:#a33;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600;}
 .dk-catrow td{background:#f4f7f8;font-weight:800;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#6a777c;}
+.dk-grouprow td{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a969a;padding:8px 0 4px;border-top:1px solid var(--line);}
+.dk-grouprow:first-child td{border-top:0;padding-top:0;}
 /* Step 2 — dimensions above, large diagram below */
 .dk-dimgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 @media(max-width:520px){.dk-dimgrid{grid-template-columns:1fr;}}
@@ -799,28 +801,27 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="imgbank" id="dk_colours"></div>
           </div>
 
-          <!-- SUBFRAME PLAN -->
-          <div class="card" id="dk_plan_card" style="display:none">
-            <div class="dk-step">Subframe Plan</div>
-            <div class="sub" style="margin-bottom:10px">Overhead view showing joist layout, noggins and concrete pad positions.</div>
-            <canvas id="dk_plan_canvas" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
-            <div class="dk-legend" style="margin-top:8px">
-              <span><i class="dk-key" style="background:#7b4f2a"></i> Joists — even, max 300mm</span>
-              <span><i class="dk-key" style="background:#d2b48c"></i> Noggins — staggered, max 1220mm</span>
-              <span><i class="dk-key" style="background:#ed1c2d;width:10px;height:10px;border-radius:50%"></i> Pads — every 4th joist, max 1200mm</span>
+          <!-- LAYOUT PLANS -->
+          <div class="card" id="dk_diagrams_card" style="display:none">
+            <div class="dk-step" style="margin-bottom:6px">Layout Plans</div>
+            <div class="sub" style="margin-bottom:10px">Subframe plan (left) and board layout plan (right). Tap either to enlarge.</div>
+            <div id="dk_diagrams_grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div id="dk_plan_pane">
+                <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Subframe Plan</div>
+                <canvas id="dk_plan_canvas" onclick="deckingZoomPlan('plan')" title="Tap to enlarge" style="width:100%;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+              </div>
+              <div id="dk_board_pane">
+                <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Board Layout</div>
+                <canvas id="dk_board_canvas" onclick="deckingZoomPlan('board')" title="Tap to enlarge" style="width:100%;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+              </div>
             </div>
-          </div>
-
-          <!-- BOARD LAYOUT PLAN -->
-          <div class="card" id="dk_board_card" style="display:none">
-            <div class="dk-step">Board Layout Plan</div>
-            <div class="sub" style="margin-bottom:10px">Overhead view showing optimised board direction and cut positions (red dashes).</div>
-            <canvas id="dk_board_canvas" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
-            <div class="dk-legend" style="margin-top:8px">
-              <span><i class="dk-key" style="background:#d9c19a;height:10px"></i><i class="dk-key" style="background:#a9784f;height:10px"></i> Board runs — alternating shades</span>
-              <span><i class="dk-key" style="background:repeating-linear-gradient(90deg,#ed1c2d 0 4px,transparent 4px 7px)"></i> Cut line — end of a 3.6m length</span>
-              <span><i class="dk-key" style="background:rgba(169,120,79,0.22);border:1px dashed #a9784f;height:10px"></i> Overhang — trimmed on site</span>
-              <span style="color:#8a969a">155mm pitch (150mm cover + 5mm gap), across the joists</span>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:8px;justify-content:center;color:#555">
+              <span><span style="display:inline-block;width:24px;height:4px;background:#7b4f2a;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Joist @ 300c/c</span>
+              <span><span style="display:inline-block;width:14px;height:4px;background:#d2b48c;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Noggin staggered</span>
+              <span><span style="display:inline-block;width:10px;height:10px;background:#ed1c2d;vertical-align:middle;margin-right:4px;border-radius:50%"></span>Concrete pad</span>
+              <span><span style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Board @ 155mm pitch</span>
+              <span><span style="display:inline-block;width:20px;height:10px;background:rgba(169,120,79,0.22);border:1px dashed #a9784f;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Overhang — trimmed</span>
+              <span style="color:#ed1c2d">— — Trim/cut</span>
             </div>
           </div>
 
@@ -1290,6 +1291,18 @@ const DECKING_SEED=[
 ];
 /* Categories the calculator drives automatically, and the order they group in */
 const DECK_CATS=['Board','Joist','Noggin','Membrane','Tape','Concrete','Screw','Trim','Fixing','Step'];
+/* How the summary reads on the page: the rep quotes by trade, not by category,
+   so joists and noggins belong together, and everything that gets screwed or
+   taped down sits under Fixings. Every category above has to appear in exactly
+   one group, or its lines would vanish from the table. */
+const DECK_GROUPS=[
+  {label:'Decking Boards',   cats:['Board']},
+  {label:'Subframe Timber',  cats:['Joist','Noggin']},
+  {label:'Ground Preparation',cats:['Membrane','Concrete']},
+  {label:'Fixings',          cats:['Fixing','Screw','Tape']},
+  {label:'Perimeter Trim',   cats:['Trim']},
+  {label:'Steps',            cats:['Step']}
+];
 const DECK_CAT_LABEL={Board:'Boards',Joist:'Joists',Noggin:'Noggins',Membrane:'Weed Membrane',
   Tape:'Joist Tape',Concrete:'Concrete Pads',Screw:'Timber Screws',
   Trim:'Trim',Fixing:'Fixings',Step:'Steps'};
@@ -3333,23 +3346,51 @@ function deckingDrawCanvas(){
    the width, tan noggins staggered between each joist pair, red concrete pads.
    Sized from the real dimensions only — there is no placeholder plan, because a
    fitter would read one as a layout to build from. */
-const DK_PLAN={W:640,HMAX:460,PAD:36};
+/* Both plans sit side by side, so each is drawn at half-card resolution and
+   scaled by CSS. Tapping one drops the other and redraws it big — the internal
+   resolution goes up with it, so an enlarged plan is genuinely sharper rather
+   than a stretched thumbnail. */
+const DK_PLAN_SMALL={W:400,HMAX:300,PAD:26};
+const DK_PLAN_LARGE={W:880,HMAX:560,PAD:34};
+let dkPlanZoom='';   /* '' | 'plan' | 'board' — view state, never saved */
+function dkPlanSize(which){return (dkPlanZoom===which)?DK_PLAN_LARGE:DK_PLAN_SMALL;}
+/* Tap to enlarge, tap again to go back to the pair. */
+function deckingZoomPlan(which){
+  dkPlanZoom=(dkPlanZoom===which)?'':which;
+  deckingApplyPlanZoom();
+  drawSubframePlan();
+  drawBoardPlan();
+}
+function deckingApplyPlanZoom(){
+  const grid=document.getElementById('dk_diagrams_grid');
+  const panes={plan:document.getElementById('dk_plan_pane'),
+               board:document.getElementById('dk_board_pane')};
+  if(grid)grid.style.gridTemplateColumns=dkPlanZoom?'1fr':'1fr 1fr';
+  Object.keys(panes).forEach(k=>{
+    if(!panes[k])return;
+    panes[k].style.display=(!dkPlanZoom||dkPlanZoom===k)?'':'none';
+    const cv=panes[k].querySelector&&panes[k].querySelector('canvas');
+    if(cv)cv.style.cursor=(dkPlanZoom===k)?'zoom-out':'zoom-in';
+  });
+}
 const DK_PLAN_JOIST='#7b4f2a';    /* brown */
 const DK_PLAN_NOGGIN='#d2b48c';   /* tan */
 const DK_PLAN_PAD='#ed1c2d';      /* red */
 function drawSubframePlan(){
-  const card=document.getElementById('dk_plan_card');
+  const card=document.getElementById('dk_diagrams_card');
   const cv=document.getElementById('dk_plan_canvas');
   const pts=deckingPoints();
   const b=deckingBBox();
   const ok=!!(pts&&b.w>0&&b.h>0);
-  if(card)card.style.display=ok?'':'none';
+  /* the two plans share a card — only hide it when neither can draw */
+  if(card)card.style.display=(ok||deckingBoardLayout().totalBoards>0)?'':'none';
   if(!ok||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support — the counts still calculate */
 
-  const k=Math.min((DK_PLAN.W-DK_PLAN.PAD*2)/b.w,(DK_PLAN.HMAX-DK_PLAN.PAD*2)/b.h);
-  const W=DK_PLAN.W, H=Math.round(b.h*k+DK_PLAN.PAD*2);
+  const SZ=dkPlanSize('plan');
+  const k=Math.min((SZ.W-SZ.PAD*2)/b.w,(SZ.HMAX-SZ.PAD*2)/b.h);
+  const W=SZ.W, H=Math.round(b.h*k+SZ.PAD*2);
   cv.width=W;cv.height=H;
   const ox=(W-b.w*k)/2-b.x0*k, oy=(H-b.h*k)/2-b.y0*k;
   const X=v=>v*k+ox, Y=v=>v*k+oy;
@@ -3428,13 +3469,13 @@ const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
 function drawBoardPlan(){
-  const card=document.getElementById('dk_board_card');
+  const card=document.getElementById('dk_diagrams_card');
   const cv=document.getElementById('dk_board_canvas');
   const pts=deckingPoints();
   const b=deckingBBox();
   const lay=deckingBoardLayout();
   const ok=!!(pts&&b.w>0&&b.h>0&&lay.totalBoards>0);
-  if(card)card.style.display=ok?'':'none';
+  if(card&&ok)card.style.display='';
   if(!ok||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support */
@@ -3444,8 +3485,9 @@ function drawBoardPlan(){
   const overW=(lay.dir==='b')?lay.overhangMm:0;
   const overH=(lay.dir==='b')?0:lay.overhangMm;
   const drawW=b.w+overW, drawH=b.h+overH;
-  const k=Math.min((DK_PLAN.W-DK_PLAN.PAD*2)/drawW,(DK_PLAN.HMAX-DK_PLAN.PAD*2)/drawH);
-  const W=DK_PLAN.W, H=Math.round(drawH*k+DK_PLAN.PAD*2);
+  const SZ=dkPlanSize('board');
+  const k=Math.min((SZ.W-SZ.PAD*2)/drawW,(SZ.HMAX-SZ.PAD*2)/drawH);
+  const W=SZ.W, H=Math.round(drawH*k+SZ.PAD*2);
   cv.width=W;cv.height=H;
   const ox=(W-drawW*k)/2-b.x0*k, oy=(H-drawH*k)/2-b.y0*k;
   const X=v=>v*k+ox, Y=v=>v*k+oy;
@@ -3583,7 +3625,13 @@ function dkEvenSpan(from,to,maxStep){
   return out;
 }
 const PAD_JOIST_EVERY=4;      /* pads carry every 4th joist, plus both edges */
-const NOGGIN_END_INSET_MM=300;/* first and last noggin sit 300mm in from the ends */
+/* End noggins alternate their inset bay to bay — 300mm in on one, 250mm on the
+   next. That 50mm is about one noggin thickness, which is the point: it lets the
+   fitter drive a screw straight through the joist into each end without hitting
+   the fixing opposite, and it shows on the plan as a stagger rather than one
+   straight line of noggins running across the deck. */
+const NOGGIN_END_INSET_MM=300;      /* even bays */
+const NOGGIN_END_INSET_ALT_MM=250;  /* odd bays */
 /* Joists run down the projection (dimension B) and are spaced across the width
    (dimension A), because the boards run along A and every board has to cross its
    joists. Rotate one and you have to rotate the other — deckingBoardLayout()
@@ -3626,14 +3674,11 @@ function deckingSubframeCounts(dir){
      instead, so adjacent bays are staggered and every joist can be screwed
      through its face. Laid out inside each covered piece of the bay. */
   const nogginRow=(sp,stagger)=>{
-    const e0=sp[0]+NOGGIN_END_INSET_MM, e1=sp[1]-NOGGIN_END_INSET_MM;
+    const inset=stagger?NOGGIN_END_INSET_ALT_MM:NOGGIN_END_INSET_MM;
+    const e0=sp[0]+inset, e1=sp[1]-inset;
     if(!(e1>e0))return [(sp[0]+sp[1])/2];
-    const flush=dkEvenSpan(e0,e1,NOGGING_SPACING_MM);
-    if(!stagger||flush.length<2)return flush;
-    const out=[flush[0]];
-    for(let i=0;i<flush.length-1;i++)out.push((flush[i]+flush[i+1])/2);
-    out.push(flush[flush.length-1]);
-    return out;
+    /* ends at the inset, middle divided evenly at no more than 1220mm */
+    return dkEvenSpan(e0,e1,NOGGING_SPACING_MM);
   };
   const nogginsByBay=[];
   for(let i=0;i<joists.length-1;i++){
@@ -4046,19 +4091,17 @@ function deckingRenderMaterials(res){
   };
 
   let rows='';
-  DECK_CATS.forEach(cat=>{
-    let body='';
-    if(cat==='Board'){
-      body=line(res.board,res.lengths,true,true);
-    }else{
-      body=deckingByCat(cat).map(p=>{
+  DECK_GROUPS.forEach(g=>{
+    const body=g.cats.map(cat=>{
+      if(cat==='Board')return line(res.board,res.lengths,true,true);
+      return deckingByCat(cat).map(p=>{
         const it=d.items.find(i=>i.code===p.code);
         if(!it||it.qty<=0)return '';
         return line(p,it.qty,it.auto===true,false);
       }).join('');
-    }
-    if(!body)return;
-    rows+=`<tr class="dk-catrow"><td colspan="5">${DECK_CAT_LABEL[cat]}</td></tr>`+body;
+    }).join('');
+    if(!body)return;   /* a group with nothing in it is not worth a heading */
+    rows+=`<tr class="dk-grouprow"><td colspan="5">${g.label}</td></tr>`+body;
   });
 
   const isAdmin=currentUser&&currentUser.role==='admin';
