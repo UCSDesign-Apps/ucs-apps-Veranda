@@ -798,6 +798,18 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="imgbank" id="dk_colours"></div>
           </div>
 
+          <!-- SUBFRAME PLAN -->
+          <div class="card" id="dk_plan_card" style="display:none">
+            <div class="dk-step">Subframe Plan</div>
+            <div class="sub" style="margin-bottom:10px">Overhead view showing joist layout, noggins and concrete pad positions.</div>
+            <canvas id="dk_plan_canvas" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+            <div class="dk-legend" style="margin-top:8px">
+              <span><i class="dk-key" style="background:#7b4f2a"></i> Joists — 300mm centres</span>
+              <span><i class="dk-key" style="background:#d2b48c"></i> Noggins — staggered at 1220mm</span>
+              <span><i class="dk-key" style="background:#ed1c2d;width:10px;height:10px;border-radius:50%"></i> Concrete pads — 1200mm centres</span>
+            </div>
+          </div>
+
           <!-- STEP 4 — MATERIALS -->
           <div class="card">
             <div class="dk-step"><span class="dk-num">4</span> Materials Summary</div>
@@ -1218,7 +1230,8 @@ const JOIST_SPACING_MM=300;
 const JOIST_W_MM=47;
 const JOIST_D_MM=100;
 const JOIST_L_MM=3000;
-const NOGGING_SPACING_MM=1200;   /* noggings run perpendicular to the joists */
+const NOGGING_SPACING_MM=1220;   /* staggered every 1220mm between joists */
+const PAD_SPACING_MM=1200;       /* concrete pads at 1200mm centres on joists */
 const BOARD_WASTAGE=1.10;        /* 10% cutting wastage on board lengths */
 const STEP_TREAD_DEPTH_M=0.30;   /* tread depth per step riser — drives step board area */
 
@@ -1246,11 +1259,18 @@ const DECKING_SEED=[
   {code:'TL0611402',cat:'Fixing',name:'Starter / End Clip (pack of 50)',price:13.75,unit:'pack'},
   /* ── Steps — quantity = metres of step run (see deckingCalc) ────────────── */
   {code:'TL0611420',cat:'Step',name:'Step Set — Riser + Tread Kit',price:24.00,unit:'m'},
-  {code:'TL0611421',cat:'Step',name:'Step Bearer Timber 47×100mm × 3.0m',price:18.90,unit:'length',lengthM:3.0}
+  {code:'TL0611421',cat:'Step',name:'Step Bearer Timber 47×100mm × 3.0m',price:18.90,unit:'length',lengthM:3.0},
+  /* ── Ground prep and subframe consumables ───────────────────────── */
+  {code:'TL0611430',cat:'Membrane',name:'Weed Membrane (roll covers 25m²)',price:18.50,unit:'roll',perM2:0.04},
+  {code:'TL0611431',cat:'Tape',name:'Joist Tape 50mm × 50m roll',price:12.00,unit:'roll',perJoistM:0.02},
+  {code:'TL0611432',cat:'Concrete',name:'Concrete Pad Bag (25kg, 2 pads per bag)',price:8.50,unit:'bag'},
+  {code:'TL0611433',cat:'Screw',name:'Timber Screw 80mm — Joist/Noggin (box 200)',price:14.00,unit:'box'}
 ];
 /* Categories the calculator drives automatically, and the order they group in */
-const DECK_CATS=['Board','Timber','Trim','Fixing','Step'];
-const DECK_CAT_LABEL={Board:'Boards',Timber:'Subframe',Trim:'Trim',Fixing:'Fixings',Step:'Steps'};
+const DECK_CATS=['Board','Timber','Membrane','Tape','Concrete','Screw','Trim','Fixing','Step'];
+const DECK_CAT_LABEL={Board:'Boards',Timber:'Subframe Timber',Membrane:'Weed Membrane',
+  Tape:'Joist Tape',Concrete:'Concrete Pads',Screw:'Timber Screws',
+  Trim:'Trim',Fixing:'Fixings',Step:'Steps'};
 const DECKING_BOARD_CATS=['Board'];
 
 /* A catalogue saved before the v2 calculator uses the old HD / Embossed / Edge
@@ -1283,7 +1303,19 @@ function healDeckingCatalogue(target){
     }
     return true;
   }
-  return false;
+  return deckingTopUpCatalogue(t.decking);
+}
+/* A catalogue saved before a seed code existed — membrane, joist tape, concrete
+   pads, timber screws — simply has no row for it, so the calculator can never
+   order it. Append the missing codes instead of replacing the catalogue: a price
+   the admin edited on a code that is already there has to survive. Idempotent. */
+function deckingTopUpCatalogue(list){
+  if(!Array.isArray(list))return false;
+  let added=0;
+  DECKING_SEED.forEach(seed=>{
+    if(!list.some(p=>p&&p.code===seed.code)){list.push(clone(seed));added++;}
+  });
+  return added>0;
 }
 function deckingProducts(){return (admin&&admin.decking&&admin.decking.length)?admin.decking:DECKING_SEED;}
 function deckingBoards(){return deckingProducts().filter(p=>p.cat==='Board');}
@@ -3248,6 +3280,77 @@ function deckingDrawCanvas(){
     ctx.fillText('Example shape — enter dimensions above',DK_CANVAS.W/2,DK_CANVAS.H-6);
   }
 }
+/* ── Subframe plan diagram ──────────────────────────────────────────────── */
+/* Overhead view of the grid deckingSubframeCounts() orders: brown joists across
+   the width, tan noggins staggered between each joist pair, red concrete pads.
+   Sized from the real dimensions only — there is no placeholder plan, because a
+   fitter would read one as a layout to build from. */
+const DK_PLAN={W:640,HMAX:460,PAD:36};
+const DK_PLAN_JOIST='#7b4f2a';    /* brown */
+const DK_PLAN_NOGGIN='#d2b48c';   /* tan */
+const DK_PLAN_PAD='#ed1c2d';      /* red */
+function drawSubframePlan(){
+  const card=document.getElementById('dk_plan_card');
+  const cv=document.getElementById('dk_plan_canvas');
+  const pts=deckingPoints();
+  const b=deckingBBox();
+  const ok=!!(pts&&b.w>0&&b.h>0);
+  if(card)card.style.display=ok?'':'none';
+  if(!ok||!cv)return;
+  const ctx=cv.getContext&&cv.getContext('2d');
+  if(!ctx)return;   /* jsdom / no canvas support — the counts still calculate */
+
+  const k=Math.min((DK_PLAN.W-DK_PLAN.PAD*2)/b.w,(DK_PLAN.HMAX-DK_PLAN.PAD*2)/b.h);
+  const W=DK_PLAN.W, H=Math.round(b.h*k+DK_PLAN.PAD*2);
+  cv.width=W;cv.height=H;
+  const ox=(W-b.w*k)/2-b.x0*k, oy=(H-b.h*k)/2-b.y0*k;
+  const X=v=>v*k+ox, Y=v=>v*k+oy;
+  ctx.clearRect(0,0,W,H);
+
+  const outline=()=>{
+    ctx.beginPath();
+    pts.forEach(([x,y],i)=>{const px=X(x),py=Y(y);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    ctx.closePath();
+  };
+  outline();ctx.fillStyle='#f3f7f8';ctx.fill();
+
+  const c=deckingSubframeCounts();
+  /* Clip to the outline so a notched shape shows no grid over the cut-out. */
+  ctx.save();outline();ctx.clip();
+
+  /* Joists — brown bars running the full deck width at 300mm centres */
+  ctx.fillStyle=DK_PLAN_JOIST;
+  c.joistY.forEach(y=>ctx.fillRect(X(b.x0),Y(y)-2,b.w*k,4));
+  /* Noggins — tan bars between each joist pair, staggered half a bay row to row */
+  ctx.fillStyle=DK_PLAN_NOGGIN;
+  c.nogginX.forEach((row,i)=>{
+    const yT=Y(c.joistY[i]),yB=Y(c.joistY[i+1]);
+    row.forEach(x=>ctx.fillRect(X(x)-2,yT,4,Math.max(1,yB-yT)));
+  });
+  /* Concrete pads — red dots on every joist at 1200mm centres */
+  ctx.fillStyle=DK_PLAN_PAD;
+  c.joistY.forEach(y=>c.padX.forEach(x=>{
+    ctx.beginPath();ctx.arc(X(x),Y(y),5,0,Math.PI*2);ctx.fill();
+  }));
+  ctx.restore();
+
+  /* Outline last, so the joist ends do not overrun it */
+  outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
+
+  /* Dimensions and the count note */
+  ctx.fillStyle='#5a6a6e';ctx.textAlign='center';
+  ctx.font='700 11px Helvetica,Arial';ctx.textBaseline='middle';
+  ctx.fillText(Math.round(b.w)+'mm',W/2,Y(b.y0)-15);
+  ctx.save();
+  ctx.translate(X(b.x0)-17,H/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(Math.round(b.h)+'mm',0,0);
+  ctx.restore();
+  ctx.font='600 10px Helvetica,Arial';ctx.textBaseline='alphabetic';
+  ctx.fillText(c.numJoists+' joists at '+JOIST_SPACING_MM+'mm centres · '+
+               c.nogginsTotal+' noggins at '+NOGGING_SPACING_MM+'mm · '+
+               c.pads+' concrete pads at '+PAD_SPACING_MM+'mm',W/2,H-9);
+}
+
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
 function deckingCanvasClick(ev){
   const cv=document.getElementById('dk_canvas');if(!cv)return;
@@ -3264,6 +3367,43 @@ function deckingSideAt(x,y){
   const L=g.X(g.b.x0),R=g.X(g.b.x1),T=g.Y(g.b.y0),B=g.Y(g.b.y1);
   const dist={left:Math.abs(x-L),right:Math.abs(x-R),back:Math.abs(y-T),front:Math.abs(y-B)};
   return Object.keys(dist).reduce((best,k)=>dist[k]<dist[best]?k:best,'front');
+}
+
+/* ── Subframe grid ──────────────────────────────────────────────────────── */
+/* One overhead layout drives both the ordered quantities and the plan diagram,
+   so the two can never disagree. Joists run across the deck width at 300mm
+   centres, noggins stagger between each joist pair at 1220mm, and pads sit on
+   every joist at 1200mm centres. Counted off the bounding box: a notched shape
+   is still built on the full grid and then cut back.
+   The trailing joist / pad lands on the far edge when the span does not divide
+   exactly, which is how it is actually built — no unsupported edge. */
+function deckingSubframeCounts(){
+  const b=deckingBBox();
+  const empty={joistY:[],padX:[],nogginX:[],numJoists:0,padsPerJoist:0,nogginsTotal:0,pads:0};
+  if(!(b.w>0&&b.h>0))return empty;
+  /* Joists across the width; the last one lands on the far edge when the depth
+     does not divide by 300, so the edge is never left unsupported. */
+  const joistY=[];
+  for(let y=b.y0;y<b.y1;y+=JOIST_SPACING_MM)joistY.push(y);
+  joistY.push(b.y1);
+  /* Pads along each joist, same rule at the far end. */
+  const padX=[];
+  for(let x=b.x0;x<b.x1;x+=PAD_SPACING_MM)padX.push(x);
+  padX.push(b.x1);
+  /* Noggins between each joist pair, every other bay offset half a bay so they
+     stagger. A staggered row fits one fewer, so count the positions rather than
+     multiplying bays by a nominal per-bay figure. */
+  const nogginX=[];
+  for(let i=0;i<joistY.length-1;i++){
+    const row=[];
+    for(let x=b.x0+((i%2)?NOGGING_SPACING_MM/2:0)+NOGGING_SPACING_MM;x<b.x1;x+=NOGGING_SPACING_MM)row.push(x);
+    nogginX.push(row);
+  }
+  return {joistY,padX,nogginX,
+          numJoists:joistY.length,
+          padsPerJoist:padX.length,
+          nogginsTotal:nogginX.reduce((n,row)=>n+row.length,0),
+          pads:joistY.length*padX.length};
 }
 
 /* ── Materials ──────────────────────────────────────────────────────────── */
@@ -3312,6 +3452,21 @@ function deckingAutoItems(){
       out[bearer.code]=Math.ceil(stepRunM*2/lenM);
     }
   }
+  /* Ground prep and subframe consumables. Pads and screws come off the joist
+     grid rather than the area, so a long thin deck orders what it really needs. */
+  const sub=deckingSubframeCounts();
+  /* Membrane: perM2 is the roll fraction a square metre uses (0.04 = 25m2/roll). */
+  const membrane=deckingPick('Membrane');
+  if(membrane&&+membrane.perM2>0)out[membrane.code]=Math.ceil(areaM2/(1/(+membrane.perM2)));
+  /* Joist tape: one strip along every joist, so it follows the joist metres. */
+  const tape=deckingPick('Tape');
+  if(tape&&+tape.perJoistM>0)out[tape.code]=Math.ceil(joistM*(+tape.perJoistM));
+  /* Concrete pads: one per grid intersection, two pads to a bag. */
+  const padBag=deckingPick('Concrete');
+  if(padBag&&sub.pads>0)out[padBag.code]=Math.ceil(sub.pads/2);
+  /* Timber screws: six per noggin, boxes of 200. */
+  const screws=deckingPick('Screw');
+  if(screws&&sub.nogginsTotal>0)out[screws.code]=Math.ceil(sub.nogginsTotal*6/200);
   return out;
 }
 /* Refresh calculated quantities. Lines the rep typed over are pinned and kept. */
@@ -3411,6 +3566,7 @@ function deckingCalc(){
   deckingRenderMaterials(res);
   deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
+  drawSubframePlan();
   /* decking is part of the contract price — keep youpay, deposit and finance in step */
   recalc();
   return res;
