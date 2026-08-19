@@ -1982,7 +1982,7 @@ function blankState(){return{
   /* contractParts = parts added at pricing (materials, discountable, part of the contract).
      surveyParts   = on-site survey extras only — never alter the contract totals. */
   fitting:[],contractParts:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
-  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false}
+  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false,sizePinned:false,optimised:null}
 };}
 let state=blankState();
 function today(){return new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -3004,12 +3004,14 @@ function renderPricing(){
 const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Antique Oak':'#a4794b','Chocolate':'#4e352a','Silver Birch':'#b9b2a6'};
 
 function deckingState(){
-  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false};
+  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',boardDirLocked:false,sizePinned:false,optimised:null};
   const d=state.decking;
   /* Which way the boards run: 'a' along the width, 'b' along the projection.
      Anything saved before the optimiser existed ran along A. */
   if(d.boardDir!=='b')d.boardDir='a';
   d.boardDirLocked=!!d.boardDirLocked;
+  d.sizePinned=!!d.sizePinned;
+  if(d.optimised===undefined)d.optimised=null;
   if(!Array.isArray(d.items))d.items=[];
   /* v1 called the rectangle 'rect' */
   if(d.shape==='rect')d.shape='square';
@@ -3056,6 +3058,7 @@ function deckingSetShape(s){
   }
   d.optimised=null;
   d.boardDirLocked=false;
+  d.sizePinned=false;
   deckingOptimiseDirection();
   renderDecking();
 }
@@ -3199,6 +3202,7 @@ function deckingSetDim(k,v){
   if(overruled){
     d.optimised=null;
     d.boardDirLocked=true;   /* the rep has set this side by hand — leave it */
+    d.sizePinned=true;       /* and stop resizing the deck under them */
   }
   /* deckingCalc() refreshes the calculated panel. It deliberately does NOT rebuild
      the input grid: rewriting the field the rep is typing in would destroy the
@@ -3929,26 +3933,41 @@ function deckingOptimiseDirection(){
     d.dims[d.optimised.dim]=d.optimised.original;
   }
   if(!deckingDimsValid()){d.optimised=null;return;}
-  if(d.boardDirLocked&&d.optimised===null)return;   /* pinned direction, no rounding */
   if(!d.boardDirLocked){
     const countA=deckingBoardLayout('a').totalBoards;
     const countB=deckingBoardLayout('b').totalBoards;
     d.boardDir=(countA<=countB)?'a':'b';
     d.boardDirCounts={a:countA,b:countB};
   }
-  /* Round the stacking side up to whole boards and write it back. */
+  /* Flipping the run direction by hand and typing a size by hand are separate
+     calls. A rep who flips the boards still wants the size rounded for the new
+     direction; a rep who has typed a size wants it left exactly as typed. */
+  if(d.sizePinned){d.optimised=null;return;}
+  /* Move the stacking side to the NEAREST whole number of boards, which may mean
+     losing one rather than gaining one. A deck 20mm over a whole board is worth
+     stretching; a deck 20mm short of the next one is not — laying a whole extra
+     board to show 20mm of it wastes a board and leaves a sliver to trim off the
+     length of the deck. Note this is the suggested SIZE. deckingBoardLayout()
+     still covers whatever size the deck actually is by rounding up, so a deck the
+     rep has pinned never ends up with a bare strip along its edge. */
   const lay=deckingBoardLayout(d.boardDir);
   const key=deckingStackDimKey(d.boardDir);
   const raw=+d.dims[key]||0;
-  const trim=Math.round(lay.effectiveStackMm-lay.stackDimMm);
-  if(raw>0&&trim>0){
-    const effective=raw+trim;
-    d.optimised={dim:key,original:raw,effective,trimMm:trim,
-                 runs:lay.runs,pitchMm:Math.round(lay.pitchMm),
+  const pitch=lay.pitchMm;
+  const runs=Math.max(1,Math.round(lay.stackDimMm/pitch));
+  const delta=Math.round(runs*pitch-lay.stackDimMm);   /* + grows the deck, - shrinks it */
+  if(raw>0&&pitch>0&&delta!==0&&raw+delta>0){
+    const effective=raw+delta;
+    const before=d.dims[key];
+    d.dims[key]=effective;
+    /* shrinking can collide with a shape's own rules — a notch has to stay inside
+       the deck — so put it back rather than leave an impossible outline */
+    if(!deckingDimsValid()){d.dims[key]=before;d.optimised=null;return;}
+    d.optimised={dim:key,original:raw,effective,trimMm:delta,
+                 runs,pitchMm:Math.round(pitch),stackMm:Math.round(runs*pitch),
                  /* set once the input has actually shown the rounded number, so a
                     half-typed value is never mistaken for the rep overruling it */
                  shown:false};
-    d.dims[key]=effective;
   }else{
     d.optimised=null;
   }
@@ -3958,6 +3977,8 @@ function deckingFlipDir(){
   const d=deckingState();
   d.boardDir=(d.boardDir==='a')?'b':'a';
   d.boardDirLocked=true;
+  /* the stacking side is the other one now, so the rounding has to be redone */
+  deckingOptimiseDirection();
   deckingCalc();
   drawSubframePlan();
   drawBoardPlan();
@@ -4083,9 +4104,12 @@ function deckingOptimisedNote(){
   const d=deckingState();
   const o=d.optimised;
   if(!o)return '';
+  const why=(o.trimMm>0)
+    ? `${o.trimMm}mm overhang trimmed on site`
+    : `${Math.abs(o.trimMm)}mm smaller — the extra board would have been almost all offcut`;
   return `<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;font-size:12px;margin-top:6px;display:flex;align-items:center;gap:8px">
       <span style="font-size:16px">✓</span>
-      <span><b>Size optimised for full boards</b> — ${o.dim.toUpperCase()} adjusted from <b>${o.original}mm</b> to <b>${o.effective}mm</b> (${o.trimMm}mm overhang trimmed on site · ${o.runs} runs × ${o.pitchMm}mm = ${o.effective>0?Math.round(o.runs*o.pitchMm):0}mm)</span>
+      <span><b>Size optimised for full boards</b> — ${o.dim.toUpperCase()} adjusted from <b>${o.original}mm</b> to <b>${o.effective}mm</b> (${why} · ${o.runs} runs × ${o.pitchMm}mm = ${o.stackMm||Math.round(o.runs*o.pitchMm)}mm across the deck)</span>
     </div>`;
 }
 
