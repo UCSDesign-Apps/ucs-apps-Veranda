@@ -818,7 +818,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="dk-legend" style="margin-top:8px">
               <span><i class="dk-key" style="background:#d9c19a;height:10px"></i><i class="dk-key" style="background:#a9784f;height:10px"></i> Board runs — alternating shades</span>
               <span><i class="dk-key" style="background:repeating-linear-gradient(90deg,#ed1c2d 0 4px,transparent 4px 7px)"></i> Cut line — end of a 3.6m length</span>
-              <span style="color:#8a969a">Boards run across the joists</span>
+              <span style="color:#8a969a">Boards run along the width, across the joists</span>
             </div>
           </div>
 
@@ -1244,7 +1244,6 @@ const JOIST_D_MM=100;
 const JOIST_L_MM=3000;
 const NOGGING_SPACING_MM=1220;   /* staggered every 1220mm between joists */
 const PAD_SPACING_MM=1200;       /* concrete pads at 1200mm centres on joists */
-const BOARD_WASTAGE=1.10;        /* 10% cutting wastage on board lengths */
 const STEP_TREAD_DEPTH_M=0.30;   /* tread depth per step riser — drives step board area */
 
 /* Every board carries its own cover width, so there is no HD/Embossed selector:
@@ -3349,18 +3348,18 @@ function drawSubframePlan(){
   /* Clip to the outline so a notched shape shows no grid over the cut-out. */
   ctx.save();outline();ctx.clip();
 
-  /* Joists — brown bars running the full deck width at 300mm centres */
+  /* Joists — brown bars running the full projection at max 300mm centres */
   ctx.fillStyle=DK_PLAN_JOIST;
-  c.joistY.forEach(y=>ctx.fillRect(X(b.x0),Y(y)-2,b.w*k,4));
+  c.joistX.forEach(x=>ctx.fillRect(X(x)-2,Y(b.y0),4,b.h*k));
   /* Noggins — tan bars between each joist pair, staggered bay to bay */
   ctx.fillStyle=DK_PLAN_NOGGIN;
   c.nogginsByBay.forEach((row,i)=>{
-    const yT=Y(c.joistY[i]),yB=Y(c.joistY[i+1]);
-    row.forEach(x=>ctx.fillRect(X(x)-2,yT,4,Math.max(1,yB-yT)));
+    const xL=X(c.joistX[i]),xR=X(c.joistX[i+1]);
+    row.forEach(y=>ctx.fillRect(xL,Y(y)-2,Math.max(1,xR-xL),4));
   });
   /* Concrete pads — red dots on the bearing joists only */
   ctx.fillStyle=DK_PLAN_PAD;
-  c.padJoistY.forEach(y=>c.padX.forEach(x=>{
+  c.padJoistX.forEach(x=>c.padY.forEach(y=>{
     ctx.beginPath();ctx.arc(X(x),Y(y),5,0,Math.PI*2);ctx.fill();
   }));
   ctx.restore();
@@ -3377,22 +3376,20 @@ function drawSubframePlan(){
   ctx.fillText(Math.round(b.h)+'mm',0,0);
   ctx.restore();
   ctx.font='600 10px Helvetica,Arial';ctx.textBaseline='alphabetic';
-  const jStep=c.joistY.length>1?Math.round(b.h/(c.joistY.length-1)):0;
-  const pStep=c.padX.length>1?Math.round(b.w/(c.padX.length-1)):0;
+  const jStep=c.joistX.length>1?Math.round(b.w/(c.joistX.length-1)):0;
+  const pStep=c.padY.length>1?Math.round(b.h/(c.padY.length-1)):0;
   ctx.fillText(c.numJoists+' joists at '+jStep+'mm · '+
                c.nogginsTotal+' noggins, staggered · '+
-               c.pads+' pads at '+pStep+'mm on '+c.padJoistY.length+' bearing rows',W/2,H-9);
+               c.pads+' pads at '+pStep+'mm on '+c.padJoistX.length+' bearing joists',W/2,H-9);
 }
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
-/* Boards have to cross the joists, and the subframe plan runs its joists across
-   the deck width, so the boards run down the depth. Every 3.6m length ends in a
-   cut: an interior join where the run is longer than a board, and the trim at
-   the far edge either way. Joins are staggered run to run — a brick bond, not a
-   line of butt joints straight down the deck.
-   The note calls it out when laying the whole deck the other way round would
-   take fewer lengths, because that is a decision about the subframe, not the
-   boards, and it belongs to whoever sets the frame out. */
+/* Boards run along dimension A and stack along B, and the joists are set out to
+   cross them. Every 3.6m length ends in a cut: an interior butt joint where the
+   run is longer than a board, and the trim at the far end either way.
+   The joints are NOT staggered run to run. Staggering is the better bond, but it
+   turns some runs into three pieces where the ordered count says two, and this
+   diagram has to show the boards that were actually ordered. */
 const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
@@ -3401,7 +3398,8 @@ function drawBoardPlan(){
   const cv=document.getElementById('dk_board_canvas');
   const pts=deckingPoints();
   const b=deckingBBox();
-  const ok=!!(pts&&b.w>0&&b.h>0);
+  const lay=deckingBoardLayout();
+  const ok=!!(pts&&b.w>0&&b.h>0&&lay.totalBoards>0);
   if(card)card.style.display=ok?'':'none';
   if(!ok||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
@@ -3421,59 +3419,51 @@ function drawBoardPlan(){
   };
   outline();ctx.fillStyle='#f3f7f8';ctx.fill();
 
-  const wMm=Math.max(50,deckingBoardWidthM()*1000);
-  const lenMm=BOARD_LENGTH_M*1000;
-  const runs=Math.ceil(b.w/wMm);
-  const perRun=Math.ceil(b.h/lenMm);
-  const joins=perRun-1;            /* interior butt joints in a straight run */
-
   ctx.save();outline();ctx.clip();
   /* Board runs — alternating shades so each one reads separately */
-  for(let r=0;r<runs;r++){
-    const x0=b.x0+r*wMm, x1=Math.min(x0+wMm,b.x1);
+  for(let r=0;r<lay.runs;r++){
+    const y0=b.y0+r*lay.boardWmm, y1=Math.min(y0+lay.boardWmm,b.y1);
     ctx.fillStyle=(r%2)?DK_BOARD_B:DK_BOARD_A;
-    ctx.fillRect(X(x0),Y(b.y0),Math.max(1,(x1-x0)*k),b.h*k);
+    ctx.fillRect(X(b.x0),Y(y0),b.w*k,Math.max(1,(y1-y0)*k));
     ctx.fillStyle='rgba(0,0,0,0.16)';   /* the gap between boards */
-    ctx.fillRect(X(x1)-0.5,Y(b.y0),1,b.h*k);
+    ctx.fillRect(X(b.x0),Y(y1)-0.5,b.w*k,1);
   }
-  /* Cut lines — staggered joins, then the trim at the far edge */
+  /* Cut lines — the butt joints down each run, then the trim at the far end */
   let cuts=0;
   ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
   if(ctx.setLineDash)ctx.setLineDash([6,4]);
-  for(let r=0;r<runs;r++){
-    const x0=b.x0+r*wMm, x1=Math.min(x0+wMm,b.x1);
-    if(joins>0){
-      const start=b.y0+((r%2)?lenMm/2:lenMm);
-      for(let y=start;y<b.y1;y+=lenMm){
-        ctx.beginPath();ctx.moveTo(X(x0),Y(y));ctx.lineTo(X(x1),Y(y));ctx.stroke();cuts++;
-      }
-    }
-    ctx.beginPath();ctx.moveTo(X(x0),Y(b.y1)-1.5);ctx.lineTo(X(x1),Y(b.y1)-1.5);ctx.stroke();cuts++;
+  const cutX=[];
+  for(let j=1;j<=lay.fullPerRun;j++){
+    const x=b.x0+j*lay.lenMm;
+    if(x<b.x1)cutX.push(x);
   }
+  cutX.push(b.x1);   /* every run is trimmed at the far end */
+  cutX.forEach(x=>{
+    const px=(x>=b.x1)?X(x)-1.5:X(x);
+    ctx.beginPath();ctx.moveTo(px,Y(b.y0));ctx.lineTo(px,Y(b.y1));ctx.stroke();
+    cuts+=lay.runs;
+  });
   if(ctx.setLineDash)ctx.setLineDash([]);
   ctx.restore();
 
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
 
   /* Direction arrow, in the gutter so it never sits over a board */
-  const ax=X(b.x0)-18, aTop=Y(b.y0)+8, aBot=Y(b.y1)-8;
-  if(aBot-aTop>24){
+  const ay=Y(b.y0)-16, aL=X(b.x0)+8, aR=X(b.x1)-8;
+  if(aR-aL>24){
     ctx.strokeStyle='#1f4e57';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(ax,aTop);ctx.lineTo(ax,aBot-6);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(ax-4,aBot-7);ctx.lineTo(ax,aBot);ctx.lineTo(ax+4,aBot-7);
+    ctx.beginPath();ctx.moveTo(aL,ay);ctx.lineTo(aR-6,ay);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(aR-7,ay-4);ctx.lineTo(aR,ay);ctx.lineTo(aR-7,ay+4);
     ctx.closePath();ctx.fillStyle='#1f4e57';ctx.fill();
   }
 
-  /* Count note, plus the orientation hint when it is worth having */
-  const laid=runs*perRun;
-  const alt=Math.ceil(b.h/wMm)*Math.ceil(b.w/lenMm);
-  const offcut=Math.round(perRun*lenMm-b.h);
-  let note=runs+' board runs at '+Math.round(wMm)+'mm cover · '+laid+' × '+BOARD_LENGTH_M+'m lengths · '+
-           cuts+' cuts'+(offcut>0?' · '+offcut+'mm offcut per run':'');
-  if(alt<laid)note+=' · turning the subframe 90° would take '+(laid-alt)+' fewer lengths';
+  /* Count note — the same figures the materials list orders */
+  const offcut=Math.round(lay.boardsPerRun*lay.lenMm-lay.A_mm);
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';ctx.textBaseline='alphabetic';
   ctx.font='600 10px Helvetica,Arial';
-  ctx.fillText(note,W/2,H-9);
+  ctx.fillText(lay.runs+' runs × '+lay.boardsPerRun+' boards = '+lay.totalBoards+' × '+BOARD_LENGTH_M+
+               'm lengths at '+Math.round(lay.boardWmm)+'mm cover · '+cuts+' cuts'+
+               (offcut>0?' · '+offcut+'mm offcut per run':''),W/2,H-9);
 }
 
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
@@ -3518,26 +3508,30 @@ function dkEvenSpan(from,to,maxStep){
 }
 const PAD_JOIST_EVERY=4;      /* pads carry every 4th joist, plus both edges */
 const NOGGIN_END_INSET_MM=300;/* first and last noggin sit 300mm in from the ends */
+/* Joists run down the projection (dimension B) and are spaced across the width
+   (dimension A), because the boards run along A and every board has to cross its
+   joists. Rotate one and you have to rotate the other — deckingBoardLayout()
+   lays the boards along A, so the joists are set out to suit. */
 function deckingSubframeCounts(){
   const b=deckingBBox();
-  const empty={joistY:[],padX:[],padJoistY:[],nogginsByBay:[],numJoists:0,
+  const empty={joistX:[],padY:[],padJoistX:[],nogginsByBay:[],numJoists:0,
                joistLengthMm:0,nogginLengthMm:0,nogginsTotal:0,pads:0,screws:0};
   if(!(b.w>0&&b.h>0))return empty;
 
-  /* Joists run across the width, evenly spaced down the depth at no more than
-     300mm, with one on each edge. */
-  const joistY=dkEvenSpan(b.y0,b.y1,JOIST_SPACING_MM);
-  /* Pads run along each joist, evenly spaced at no more than 1200mm, one at each
-     end. They do not carry every joist: every 4th row bears, and the two edge
-     joists always do whatever the count works out at. */
-  const padX=dkEvenSpan(b.x0,b.x1,PAD_SPACING_MM);
-  const padJoistY=joistY.filter((y,i)=>i%PAD_JOIST_EVERY===0||i===joistY.length-1);
+  /* Joists run the full projection, evenly spaced across the width at no more
+     than 300mm, with one on each edge. */
+  const joistX=dkEvenSpan(b.x0,b.x1,JOIST_SPACING_MM);
+  /* Pads run down each joist, evenly spaced at no more than 1200mm, one at each
+     end. They do not carry every joist: every 4th bears, and the two edge joists
+     always do whatever the count works out at. */
+  const padY=dkEvenSpan(b.y0,b.y1,PAD_SPACING_MM);
+  const padJoistX=joistX.filter((x,i)=>i%PAD_JOIST_EVERY===0||i===joistX.length-1);
 
   /* Noggins sit 300mm in from each end with the middle divided evenly at no more
      than 1220mm. Alternate bays take the midpoints of that division instead, so
      adjacent bays are staggered and every joist can be screwed through its face. */
-  const e0=b.x0+NOGGIN_END_INSET_MM, e1=b.x1-NOGGIN_END_INSET_MM;
-  const flush=(e1>e0)?dkEvenSpan(e0,e1,NOGGING_SPACING_MM):[b.x0+b.w/2];
+  const e0=b.y0+NOGGIN_END_INSET_MM, e1=b.y1-NOGGIN_END_INSET_MM;
+  const flush=(e1>e0)?dkEvenSpan(e0,e1,NOGGING_SPACING_MM):[b.y0+b.h/2];
   const staggered=[];
   if(flush.length>1){
     staggered.push(flush[0]);
@@ -3545,19 +3539,44 @@ function deckingSubframeCounts(){
     staggered.push(flush[flush.length-1]);
   }
   const nogginsByBay=[];
-  for(let i=0;i<joistY.length-1;i++)nogginsByBay.push((i%2&&staggered.length)?staggered:flush);
+  for(let i=0;i<joistX.length-1;i++)nogginsByBay.push((i%2&&staggered.length)?staggered:flush);
 
   const nogginsTotal=nogginsByBay.reduce((n,row)=>n+row.length,0);
-  const bayDepth=(joistY.length>1)?(b.h/(joistY.length-1)):0;
-  const pads=padJoistY.length*padX.length;
-  return {joistY,padX,padJoistY,nogginsByBay,
-          numJoists:joistY.length,
-          joistLengthMm:joistY.length*b.w,
-          nogginLengthMm:nogginsTotal*bayDepth,
+  const bayWidth=(joistX.length>1)?(b.w/(joistX.length-1)):0;
+  const pads=padJoistX.length*padY.length;
+  return {joistX,padY,padJoistX,nogginsByBay,
+          numJoists:joistX.length,
+          joistLengthMm:joistX.length*b.h,
+          nogginLengthMm:nogginsTotal*bayWidth,
           nogginsTotal,pads,
           /* two screws per fixing point: both ends of every noggin, and every
              joist-to-pad bearing */
           screws:nogginsTotal*4+pads*2};
+}
+
+/* ── Board layout ───────────────────────────────────────────────────────── */
+/* Boards run along dimension A and stack along B. The count comes off the layout
+   rather than the area: every board in the plan is a board you buy, whether it
+   goes in whole or gets cut, so there is no wastage percentage on top — the
+   offcut is already paid for inside the length it came from. */
+function deckingBoardLayout(){
+  const d=deckingState();
+  const boardProd=d.colour?deckingProduct(d.colour):null;
+  const A_mm=+d.dims.a||0;                 /* deck width — boards run this way */
+  const B_mm=(+d.dims.b)||(+d.dims.a)||0;  /* projection — boards stack this way */
+  const boardWmm=(boardProd&&+boardProd.widthMm)||DEFAULT_BOARD_WIDTH_MM;
+  const lenMm=BOARD_LENGTH_M*1000;
+  const empty={boardProd,A_mm,B_mm,boardWmm,lenMm,fullPerRun:0,hasRemainder:0,
+               boardsPerRun:0,runs:0,totalBoards:0,joints:0,laidM:0};
+  if(!(A_mm>0&&B_mm>0&&boardWmm>0))return empty;
+  const fullPerRun=Math.floor(A_mm/lenMm);
+  const hasRemainder=(A_mm%lenMm)>0?1:0;
+  const boardsPerRun=fullPerRun+hasRemainder;
+  const runs=Math.ceil(B_mm/boardWmm);
+  return {boardProd,A_mm,B_mm,boardWmm,lenMm,fullPerRun,hasRemainder,boardsPerRun,runs,
+          totalBoards:runs*boardsPerRun,
+          joints:Math.max(0,boardsPerRun-1),   /* butt joints down a single run */
+          laidM:runs*A_mm/1000};
 }
 
 /* ── Materials ──────────────────────────────────────────────────────────── */
@@ -3595,11 +3614,17 @@ function deckingAutoItems(){
     const per=deckingPerimeter()+stepRunM*2;
     if(per>0)out[trim.code]=Math.ceil(per/lenM);
   }
-  /* Clips: one every 300mm down BOTH edges of every board length. */
-  const totalBoards=boardW>0?Math.ceil(boardAreaM2/boardW/BOARD_LENGTH_M*BOARD_WASTAGE):0;
+  /* Clips: one at every joist a board run crosses — the run is clipped down as
+     one line whether it is a single board or several butted end to end — plus a
+     second clip at each butt joint, where two board ends land on the same joist.
+     Counting per board would charge a full board's worth of clips for a 400mm
+     offcut, and counting both sides would charge every clip twice, since one
+     clip holds the two boards either side of it. */
+  const lay=deckingBoardLayout();
   const clip=deckingPick('Fixing',/decking clip/i);
-  if(clip&&totalBoards>0){
-    out[clip.code]=Math.ceil(totalBoards*(BOARD_LENGTH_M/0.3)*2/deckingPackSize(clip,20));
+  if(clip&&lay.runs>0&&sub.numJoists>0){
+    const totalClips=lay.runs*sub.numJoists+lay.runs*lay.joints;
+    out[clip.code]=Math.ceil(totalClips/deckingPackSize(clip,20));
   }
   /* Any other fixing still runs on its perM2 rate. scaleBoard items also scale
      with board cover width, because a narrower board needs more runs. */
@@ -3696,9 +3721,12 @@ function deckingGeom(){
   const stepRunM=deckingStepRunM();
   const boardW=deckingBoardWidthM();
   const boardAreaM2=Math.round((areaM2+stepRunM*STEP_TREAD_DEPTH_M)*100)/100;
-  const runningM=boardAreaM2>0?boardAreaM2/boardW:0;
-  const lengths=runningM>0?Math.ceil(runningM/BOARD_LENGTH_M*BOARD_WASTAGE):0;
-  return {areaM2,perimeterM,stepRunM,boardW,boardAreaM2,runningM,lengths};
+  const lay=deckingBoardLayout();
+  return {areaM2,perimeterM,stepRunM,boardW,boardAreaM2,lay,
+          runningM:lay.laidM,
+          runs:lay.runs,
+          boardsPerRun:lay.boardsPerRun,
+          lengths:lay.totalBoards};
 }
 function deckingCalc(){
   const d=deckingState();
@@ -3722,8 +3750,9 @@ function deckingCalc(){
       ? `<div class="chip" style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600">
            <span>Area: <b>${g.areaM2}m²</b></span>
            <span>Perimeter: <b>${g.perimeterM}m</b></span>
-           <span>Running metres: <b>${g.runningM.toFixed(1)}m</b></span>
-           <span>Board lengths: <b>${g.lengths}</b> <span style="font-weight:500;color:#8a969a">(incl 10% wastage)</span></span>
+           <span>Board runs: <b>${g.runs}</b></span>
+           <span>Boards per run: <b>${g.boardsPerRun}</b></span>
+           <span>Board lengths: <b>${g.lengths}</b> <span style="font-weight:500;color:#8a969a">(laid out, not estimated)</span></span>
            ${g.stepRunM>0?`<span>Step run: <b>${g.stepRunM}m</b></span>`:''}
          </div>`
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
@@ -3782,7 +3811,7 @@ function deckingRenderMaterials(res){
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="4" class="r"><b>Decking total (incl VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
     </table></div>
-    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${(res.boardW*1000).toFixed(0)}mm cover width in ${BOARD_LENGTH_M}m lengths, plus ${Math.round((BOARD_WASTAGE-1)*100)}% cutting wastage. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists spaced evenly at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
+    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${(res.boardW*1000).toFixed(0)}mm cover width in ${BOARD_LENGTH_M}m lengths, counted off the layout — ${res.runs} runs of ${res.boardsPerRun} — so offcuts are already inside the count and no wastage percentage is added. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists run the projection, spaced evenly across the width at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
 }
 
 /* board lengths + every item, priced with `unit` (identity = trade cost, deckSellPrice = customer) */
