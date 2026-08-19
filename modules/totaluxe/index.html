@@ -252,6 +252,9 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .dk-catrow td{background:#f4f7f8;font-weight:800;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#6a777c;}
 .dk-grouprow td{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a969a;padding:8px 0 4px;border-top:1px solid var(--line);}
 .dk-grouprow:first-child td{border-top:0;padding-top:0;}
+/* The plan notes sit under their canvas as ordinary text, so a long one wraps
+   instead of running off the edge of the drawing. */
+.dk-plannote{font-size:10.5px;line-height:1.45;color:#5a6a6e;text-align:center;margin-top:6px;overflow-wrap:break-word;}
 /* Step 2 — dimensions above, large diagram below */
 .dk-dimgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 @media(max-width:520px){.dk-dimgrid{grid-template-columns:1fr;}}
@@ -808,11 +811,13 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_diagrams_grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div id="dk_plan_pane">
                 <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Subframe Plan</div>
-                <canvas id="dk_plan_canvas" onclick="deckingZoomPlan('plan')" title="Tap to enlarge" style="width:100%;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+                <canvas id="dk_plan_canvas" onclick="deckingZoomPlan('plan')" title="Tap to enlarge" style="width:100%;display:block;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+                <div id="dk_plan_note" class="dk-plannote"></div>
               </div>
               <div id="dk_board_pane">
                 <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Board Layout</div>
-                <canvas id="dk_board_canvas" onclick="deckingZoomPlan('board')" title="Tap to enlarge" style="width:100%;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+                <canvas id="dk_board_canvas" onclick="deckingZoomPlan('board')" title="Tap to enlarge" style="width:100%;display:block;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+                <div id="dk_board_note" class="dk-plannote"></div>
               </div>
             </div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:8px;justify-content:center;color:#555">
@@ -3350,10 +3355,37 @@ function deckingDrawCanvas(){
    scaled by CSS. Tapping one drops the other and redraws it big — the internal
    resolution goes up with it, so an enlarged plan is genuinely sharper rather
    than a stretched thumbnail. */
-const DK_PLAN_SMALL={W:400,HMAX:300,PAD:26};
-const DK_PLAN_LARGE={W:880,HMAX:560,PAD:34};
+const DK_PLAN_FALLBACK={small:400,large:880};   /* used before layout exists */
 let dkPlanZoom='';   /* '' | 'plan' | 'board' — view state, never saved */
-function dkPlanSize(which){return (dkPlanZoom===which)?DK_PLAN_LARGE:DK_PLAN_SMALL;}
+/* Measure the width the canvas has actually been given and draw to that, rather
+   than to a fixed number that may be wider or narrower than its column. Returns
+   CSS pixels: the drawing code works in those, and the backing store is scaled
+   up by the device ratio at the end so the result is not soft on a retina
+   screen. Falls back to a nominal width when there is no layout yet — the card
+   is hidden, the view is off screen, or there is no DOM at all. */
+function dkPlanBox(which,cv){
+  const zoom=(dkPlanZoom===which);
+  const measured=(cv&&cv.clientWidth)||0;
+  const W=Math.max(240,Math.round(measured||(zoom?DK_PLAN_FALLBACK.large:DK_PLAN_FALLBACK.small)));
+  const dpr=Math.min(2,(typeof window!=='undefined'&&window.devicePixelRatio)||1);
+  return {W,
+          HMAX:Math.round(W*(zoom?0.60:0.85)),   /* a paired plan may be taller than it is wide */
+          PAD:Math.max(16,Math.round(W*0.055)),
+          dpr:dpr>0?dpr:1};
+}
+/* Give the canvas its backing store at device resolution but keep the drawing
+   in CSS pixels, so text stays the size it says it is. */
+function dkPlanCanvas(cv,ctx,box,W,H){
+  cv.width=Math.round(W*box.dpr);
+  cv.height=Math.round(H*box.dpr);
+  if(cv.style)cv.style.height=H+'px';
+  if(ctx.setTransform)ctx.setTransform(box.dpr,0,0,box.dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+}
+function dkPlanNote(id,text){
+  const el=document.getElementById(id);
+  if(el)el.textContent=text;
+}
 /* Tap to enlarge, tap again to go back to the pair. */
 function deckingZoomPlan(which){
   dkPlanZoom=(dkPlanZoom===which)?'':which;
@@ -3384,17 +3416,17 @@ function drawSubframePlan(){
   const ok=!!(pts&&b.w>0&&b.h>0);
   /* the two plans share a card — only hide it when neither can draw */
   if(card)card.style.display=(ok||deckingBoardLayout().totalBoards>0)?'':'none';
+  if(!ok){dkPlanNote('dk_plan_note','');}
   if(!ok||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support — the counts still calculate */
 
-  const SZ=dkPlanSize('plan');
-  const k=Math.min((SZ.W-SZ.PAD*2)/b.w,(SZ.HMAX-SZ.PAD*2)/b.h);
-  const W=SZ.W, H=Math.round(b.h*k+SZ.PAD*2);
-  cv.width=W;cv.height=H;
+  const psize=dkPlanBox('plan',cv);
+  const k=Math.min((psize.W-psize.PAD*2)/b.w,(psize.HMAX-psize.PAD*2)/b.h);
+  const W=psize.W, H=Math.round(b.h*k+psize.PAD*2);
   const ox=(W-b.w*k)/2-b.x0*k, oy=(H-b.h*k)/2-b.y0*k;
   const X=v=>v*k+ox, Y=v=>v*k+oy;
-  ctx.clearRect(0,0,W,H);
+  dkPlanCanvas(cv,ctx,psize,W,H);
 
   const outline=()=>{
     ctx.beginPath();
@@ -3437,23 +3469,25 @@ function drawSubframePlan(){
   /* Outline last, so the joist ends do not overrun it */
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
 
-  /* Dimensions and the count note */
+  /* Dimensions stay on the drawing — they are short and they point at an edge */
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';
   ctx.font='700 11px Helvetica,Arial';ctx.textBaseline='middle';
-  ctx.fillText(Math.round(b.w)+'mm',W/2,Y(b.y0)-15);
+  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.max(8,Y(b.y0)-13));
   ctx.save();
-  ctx.translate(X(b.x0)-17,H/2);ctx.rotate(-Math.PI/2);
+  ctx.translate(Math.max(8,X(b.x0)-15),H/2);ctx.rotate(-Math.PI/2);
   ctx.fillText(Math.round(b.h)+'mm',0,0);
   ctx.restore();
-  ctx.font='600 10px Helvetica,Arial';ctx.textBaseline='alphabetic';
+
+  /* The counts go underneath in HTML, where a long line wraps */
   const runSpan=(c.dir==='b')?b.h:b.w;
   const jStep=c.numJoists>1?Math.round(runSpan/(c.numJoists-1)):0;
   const pieces=c.joists.reduce((n,j)=>n+j.spans.length,0);
-  ctx.fillText(c.numJoists+' joist lines at '+jStep+'mm'+
-               (pieces>c.numJoists?' ('+pieces+' pieces, cut to the outline)':'')+
-               ' · '+(c.joistLengthMm/1000).toFixed(1)+'m · '+
-               c.nogginsTotal+' noggins, staggered · '+
-               c.pads+' pads on '+c.padJoists.length+' bearing joists',W/2,H-9);
+  dkPlanNote('dk_plan_note',
+    c.numJoists+' joist lines at '+jStep+'mm'+
+    (pieces>c.numJoists?' ('+pieces+' pieces, cut to the outline)':'')+
+    ' · '+(c.joistLengthMm/1000).toFixed(1)+'m · '+
+    c.nogginsTotal+' noggins, staggered · '+
+    c.pads+' pads on '+c.padJoists.length+' bearing joists');
 }
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
@@ -3476,6 +3510,7 @@ function drawBoardPlan(){
   const lay=deckingBoardLayout();
   const ok=!!(pts&&b.w>0&&b.h>0&&lay.totalBoards>0);
   if(card&&ok)card.style.display='';
+  if(!ok){dkPlanNote('dk_board_note','');}
   if(!ok||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support */
@@ -3485,13 +3520,12 @@ function drawBoardPlan(){
   const overW=(lay.dir==='b')?lay.overhangMm:0;
   const overH=(lay.dir==='b')?0:lay.overhangMm;
   const drawW=b.w+overW, drawH=b.h+overH;
-  const SZ=dkPlanSize('board');
-  const k=Math.min((SZ.W-SZ.PAD*2)/drawW,(SZ.HMAX-SZ.PAD*2)/drawH);
-  const W=SZ.W, H=Math.round(drawH*k+SZ.PAD*2);
-  cv.width=W;cv.height=H;
+  const psize=dkPlanBox('board',cv);
+  const k=Math.min((psize.W-psize.PAD*2)/drawW,(psize.HMAX-psize.PAD*2)/drawH);
+  const W=psize.W, H=Math.round(drawH*k+psize.PAD*2);
   const ox=(W-drawW*k)/2-b.x0*k, oy=(H-drawH*k)/2-b.y0*k;
   const X=v=>v*k+ox, Y=v=>v*k+oy;
-  ctx.clearRect(0,0,W,H);
+  dkPlanCanvas(cv,ctx,psize,W,H);
 
   const outline=()=>{
     ctx.beginPath();
@@ -3573,15 +3607,13 @@ function drawBoardPlan(){
 
   /* Count note — the same figures the materials list orders */
   const clipped=lay.rows.some(r=>r.segs.length!==1||r.segs[0][1]-r.segs[0][0]<lay.runLenMm-1);
-  ctx.textAlign='center';
-  ctx.fillStyle='#5a6a6e';ctx.textAlign='center';ctx.textBaseline='alphabetic';
-  ctx.font='600 10px Helvetica,Arial';
-  ctx.fillText('Boards along '+(alongA?'the width (A)':'the projection (B)')+' · '+
-               lay.runs+' runs at '+BOARD_PITCH_MM+'mm pitch ('+BOARD_COVER_MM+'mm cover + '+
-               BOARD_GAP_MM+'mm gap) · '+
-               lay.totalBoards+' × '+BOARD_LENGTH_M+'m lengths · '+cuts+' cuts'+
-               (lay.overhangMm>0?' · '+Math.round(lay.overhangMm)+'mm trimmed off the last run':'')+
-               (clipped?' · runs cut to the outline':''),W/2,H-9);
+  dkPlanNote('dk_board_note',
+    'Boards along '+(alongA?'the width (A)':'the projection (B)')+' · '+
+    lay.runs+' runs at '+BOARD_PITCH_MM+'mm pitch ('+BOARD_COVER_MM+'mm cover + '+
+    BOARD_GAP_MM+'mm gap) · '+
+    lay.totalBoards+' × '+BOARD_LENGTH_M+'m lengths · '+cuts+' cuts'+
+    (lay.overhangMm>0?' · '+Math.round(lay.overhangMm)+'mm trimmed off the last run':'')+
+    (clipped?' · runs cut to the outline':''));
 }
 
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
