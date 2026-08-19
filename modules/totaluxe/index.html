@@ -824,7 +824,7 @@ body.print-internal .internal-notes-only{display:block !important;}
               <span><span style="display:inline-block;width:24px;height:4px;background:#7b4f2a;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Joist @ 300c/c</span>
               <span><span style="display:inline-block;width:14px;height:4px;background:#d2b48c;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Noggin staggered</span>
               <span><span style="display:inline-block;width:10px;height:10px;background:#ed1c2d;vertical-align:middle;margin-right:4px;border-radius:50%"></span>Concrete pad</span>
-              <span><span style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Board @ 155mm pitch</span>
+              <span><span style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Board run</span>
               <span><span style="display:inline-block;width:20px;height:10px;background:rgba(169,120,79,0.22);border:1px dashed #a9784f;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Overhang — trimmed</span>
               <span style="color:#ed1c2d">— — Trim/cut</span>
             </div>
@@ -1016,7 +1016,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="sub">Decking catalogue. <b>HD</b> and <b>Embossed</b> rows appear as selectable board colours; every other category appears as a qty-based extra. Prices are ex-VAT, per unit.</div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th style="width:110px">Code</th><th style="width:100px">Category</th><th>Name</th><th class="r" style="width:90px">Price £</th><th style="width:80px">Unit</th><th class="r" style="width:80px">Width mm</th><th class="r" style="width:80px">Length m</th><th class="r" style="width:80px">Auto /m²</th><th class="c" style="width:60px">Scale</th><th style="width:30px"></th></tr></thead>
+            <thead><tr><th style="width:110px">Code</th><th style="width:100px">Category</th><th>Name</th><th class="r" style="width:90px">Price £</th><th style="width:80px">Unit</th><th class="r" style="width:80px">Width mm</th><th class="r" style="width:80px">Gap mm</th><th class="r" style="width:80px">Length m</th><th class="r" style="width:80px">Auto /m²</th><th class="c" style="width:60px">Scale</th><th style="width:30px"></th></tr></thead>
             <tbody id="adminDeckRows"></tbody>
           </table></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -1025,9 +1025,10 @@ body.print-internal .internal-notes-only{display:block !important;}
             <button class="btn sm" onclick="adminDeckExportCSV()">⬇ Export CSV</button>
             <button class="btn sm" onclick="adminDeckReset()" style="color:#ed1c2d;border-color:#ed1c2d">↺ Reset to seed</button>
           </div>
-          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard</code> — a header row is optional and every column after <code>unit</code> may be omitted. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.
-            <br><b>Width mm</b>: board cover width — the calculator divides the deck area by it to get running metres. Boards only.
-            <br><b>Length m</b>: length of one unit — used to convert perimeter into trim lengths and joist metres into timber lengths.
+          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm</code> — a header row is optional and every column after <code>unit</code> may be omitted. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.
+            <br><b>Width mm</b>: board cover width — the visible face. Boards only.
+            <br><b>Gap mm</b>: expansion gap beside the board. Width + gap is the pitch, and the pitch is what decides how many runs fit the deck. Blank uses 5mm; enter 0 for boards laid tight. Boards only.
+            <br><b>Length m</b>: length of one unit — the board length for boards, and what converts perimeter into trim lengths and joist metres into timber lengths.
             <br><b>Auto /m²</b>: quantity per m² of deck, ordered automatically (clips seed at 1.5/m²). Leave blank for items the rep enters by hand.
             <br><b>Scale</b>: also scale that per-m² rate with the board cover width — a narrower board needs more runs, so more clips.</div>
         </div></div>
@@ -1144,10 +1145,8 @@ const BOARD_LENGTH_M=3.6;
    not the cover width — is what decides how many runs fit. Cover width is still
    carried on each product, but only for display: at 155mm pitch every board in
    the range lays out the same. */
-const BOARD_COVER_MM=150;                              /* visible board face */
-const BOARD_GAP_MM=5;                                  /* gap between boards */
-const BOARD_PITCH_MM=BOARD_COVER_MM+BOARD_GAP_MM;      /* 155mm per run */
-const DEFAULT_BOARD_WIDTH_MM=BOARD_COVER_MM;   /* used until a board is chosen */
+const DEFAULT_BOARD_WIDTH_MM=150;   /* cover width used until a board is chosen */
+const DEFAULT_BOARD_GAP_MM=5;       /* expansion gap used when a product has none */
 
 /* Deck footprints. points() returns the outline in millimetres (origin top-left,
    y increasing downwards) so one function drives the area, the perimeter and the
@@ -1265,14 +1264,14 @@ const STEP_TREAD_DEPTH_M=0.30;   /* tread depth per step riser — drives step b
    the eight products are one flat list and the width travels with the board. */
 const DECKING_SEED=[
   /* ── Boards (8) — cover width in mm, 3.6m lengths ───────────────────────── */
-  {code:'TL0611347',cat:'Board',name:'HD — Dove Grey',price:21.50,unit:'board',widthMm:150},
-  {code:'TL0611348',cat:'Board',name:'HD — Charcoal',price:21.50,unit:'board',widthMm:150},
-  {code:'TL0611349',cat:'Board',name:'HD — Teak',price:22.75,unit:'board',widthMm:150},
-  {code:'TL0611350',cat:'Board',name:'HD — Antique Oak',price:22.75,unit:'board',widthMm:150},
-  {code:'TL0611360',cat:'Board',name:'Embossed — Dove Grey',price:19.25,unit:'board',widthMm:150},
-  {code:'TL0611361',cat:'Board',name:'Embossed — Charcoal',price:19.25,unit:'board',widthMm:150},
-  {code:'TL0611362',cat:'Board',name:'Embossed — Teak',price:20.00,unit:'board',widthMm:150},
-  {code:'TL0611363',cat:'Board',name:'Embossed — Silver Birch',price:20.50,unit:'board',widthMm:150},
+  {code:'TL0611347',cat:'Board',name:'HD — Dove Grey',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611348',cat:'Board',name:'HD — Charcoal',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611349',cat:'Board',name:'HD — Teak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611350',cat:'Board',name:'HD — Antique Oak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611360',cat:'Board',name:'Embossed — Dove Grey',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611361',cat:'Board',name:'Embossed — Charcoal',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611362',cat:'Board',name:'Embossed — Teak',price:20.00,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611363',cat:'Board',name:'Embossed — Silver Birch',price:20.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
   /* ── Trim — quantity = perimeter / lengthM ──────────────────────────────── */
   {code:'TL0611380',cat:'Trim',name:'Angle Trim — Colour Matched',price:16.00,unit:'length',lengthM:3.0},
   /* ── Subframe timber — joists and noggins are counted separately, because the
@@ -1355,7 +1354,7 @@ function deckingTopUpCatalogue(list){
   /* Fields the calculator reads off a row. A catalogue saved before one of them
      existed simply has no value, so fill it from the seed — but never overwrite
      a value that is already there, which is the admin's own edit. */
-  const WIRING=['perM2','perJoistM','lengthM','widthMm','scaleBoard'];
+  const WIRING=['perM2','perJoistM','lengthM','widthMm','gapMm','scaleBoard'];
   DECKING_SEED.forEach(seed=>{
     const row=list.find(p=>p&&p.code===seed.code);
     if(!row){list.push(clone(seed));changed++;return;}
@@ -3118,6 +3117,30 @@ function deckingSideLengthM(side){
   return ((side==='front'||side==='back')?b.w:b.h)/1000;
 }
 /* Cover width of the chosen board, in metres. */
+/* A run takes the board's face plus the expansion gap beside it, and both come
+   off the product rather than a constant: change a width or a gap in Admin →
+   Decking and the run count, the diagram stripes and the order all follow. */
+function deckingBoardCoverMm(){
+  const d=deckingState();
+  const prod=d.colour?deckingProduct(d.colour):null;
+  return (prod&&+prod.widthMm)||DEFAULT_BOARD_WIDTH_MM;
+}
+function deckingBoardGapMm(){
+  const d=deckingState();
+  const prod=d.colour?deckingProduct(d.colour):null;
+  /* a deliberate 0 is a real setting — only a missing value takes the default */
+  return (prod&&prod.gapMm!=null&&prod.gapMm!=='')?(+prod.gapMm||0):DEFAULT_BOARD_GAP_MM;
+}
+function deckingBoardPitchMm(){
+  const pitch=deckingBoardCoverMm()+deckingBoardGapMm();
+  /* a catalogue typo of 0 would divide the deck into infinite runs */
+  return pitch>0?pitch:DEFAULT_BOARD_WIDTH_MM+DEFAULT_BOARD_GAP_MM;
+}
+function deckingBoardLengthMm(){
+  const d=deckingState();
+  const prod=d.colour?deckingProduct(d.colour):null;
+  return (prod&&+prod.lengthM>0)?(+prod.lengthM*1000):(BOARD_LENGTH_M*1000);
+}
 function deckingBoardWidthM(){
   const d=deckingState(),p=d.colour?deckingProduct(d.colour):null;
   return ((p&&+p.widthMm)||DEFAULT_BOARD_WIDTH_MM)/1000;
@@ -3609,9 +3632,9 @@ function drawBoardPlan(){
   const clipped=lay.rows.some(r=>r.segs.length!==1||r.segs[0][1]-r.segs[0][0]<lay.runLenMm-1);
   dkPlanNote('dk_board_note',
     'Boards along '+(alongA?'the width (A)':'the projection (B)')+' · '+
-    lay.runs+' runs at '+BOARD_PITCH_MM+'mm pitch ('+BOARD_COVER_MM+'mm cover + '+
-    BOARD_GAP_MM+'mm gap) · '+
-    lay.totalBoards+' × '+BOARD_LENGTH_M+'m lengths · '+cuts+' cuts'+
+    lay.runs+' runs at '+Math.round(lay.pitchMm)+'mm pitch ('+Math.round(lay.coverMm)+
+    'mm cover + '+Math.round(lay.gapMm)+'mm gap) · '+
+    lay.totalBoards+' × '+(lay.lenMm/1000)+'m lengths · '+cuts+' cuts'+
     (lay.overhangMm>0?' · '+Math.round(lay.overhangMm)+'mm trimmed off the last run':'')+
     (clipped?' · runs cut to the outline':''));
 }
@@ -3804,10 +3827,11 @@ function deckingBoardLayout(dir){
   const b=deckingBBox();
   dir=(dir==='a'||dir==='b')?dir:deckingBoardDir();
   const boardProd=d.colour?deckingProduct(d.colour):null;
-  const coverMm=(boardProd&&+boardProd.widthMm)||DEFAULT_BOARD_WIDTH_MM;
-  const pitchMm=BOARD_PITCH_MM;
-  const lenMm=BOARD_LENGTH_M*1000;
-  const empty={dir,boardProd,coverMm,pitchMm,lenMm,runLenMm:0,stackDimMm:0,
+  const coverMm=deckingBoardCoverMm();
+  const gapMm=deckingBoardGapMm();
+  const pitchMm=deckingBoardPitchMm();
+  const lenMm=deckingBoardLengthMm();
+  const empty={dir,boardProd,coverMm,gapMm,pitchMm,lenMm,runLenMm:0,stackDimMm:0,
                effectiveStackMm:0,overhangMm:0,rows:[],runs:0,
                boardsPerRun:0,totalBoards:0,joints:0,laidM:0};
   if(!(b.w>0&&b.h>0))return empty;
@@ -3838,7 +3862,7 @@ function deckingBoardLayout(dir){
        running past the deck edge on the last run. */
     rows.push({v0,v1,vMid:vScan,vCover:v0+coverMm,vEdge:v0+pitchMm,segs,boards});
   }
-  return {dir,boardProd,coverMm,pitchMm,lenMm,runLenMm:ax.u1-ax.u0,
+  return {dir,boardProd,coverMm,gapMm,pitchMm,lenMm,runLenMm:ax.u1-ax.u0,
           stackDimMm,effectiveStackMm,overhangMm:effectiveStackMm-stackDimMm,
           rows,runs,
           boardsPerRun:rows.reduce((m,r)=>Math.max(m,r.boards),0),
@@ -4010,8 +4034,8 @@ function deckingRenderDirection(){
   const bg=ok?'#e8f5e9':'#fff6e0', bd=ok?'#a5d6a7':'#e6c98a';
   const tag=d.boardDirLocked?'✎ Set by hand':'✓ Optimised';
   const cover=lay.overhangMm>0
-    ? ` — ${lay.runs} runs × ${BOARD_PITCH_MM}mm = ${Math.round(lay.effectiveStackMm)}mm laid across a ${Math.round(lay.stackDimMm)}mm deck, ${Math.round(lay.overhangMm)}mm trimmed`
-    : ` — ${lay.runs} runs × ${BOARD_PITCH_MM}mm fits the ${Math.round(lay.stackDimMm)}mm deck exactly`;
+    ? ` — ${lay.runs} runs × ${Math.round(lay.pitchMm)}mm = ${Math.round(lay.effectiveStackMm)}mm laid across a ${Math.round(lay.stackDimMm)}mm deck, ${Math.round(lay.overhangMm)}mm trimmed`
+    : ` — ${lay.runs} runs × ${Math.round(lay.pitchMm)}mm fits the ${Math.round(lay.stackDimMm)}mm deck exactly`;
   w.innerHTML=`<div class="chip" style="background:${bg};border-color:${bd};font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span>${tag}: boards run along <b>${here}</b> ${esc(tail)}<br><span style="color:#5a6a6e">${esc(cover.replace(/^ — /,''))}</span></span>
       <button onclick="deckingFlipDir()" class="btn sm" title="Run the boards the other way — the choice then sticks until the shape or board changes">↺ Flip board direction</button>
@@ -4143,7 +4167,7 @@ function deckingRenderMaterials(res){
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="4" class="r"><b>Decking total (incl VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
     </table></div>
-    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${(res.boardW*1000).toFixed(0)}mm cover width in ${BOARD_LENGTH_M}m lengths, counted off the layout — ${res.runs} runs, ${res.lengths} lengths, each run cut to the outline — so offcuts are already inside the count and no wastage percentage is added. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists run the projection, spaced evenly across the width at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
+    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${Math.round(res.lay.coverMm)}mm cover + ${Math.round(res.lay.gapMm)}mm gap (${Math.round(res.lay.pitchMm)}mm pitch) in ${res.lay.lenMm/1000}m lengths, counted off the layout — ${res.runs} runs, ${res.lengths} lengths, each run cut to the outline — so offcuts are already inside the count and no wastage percentage is added. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists run the projection, spaced evenly across the width at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
 }
 
 /* board lengths + every item, priced with `unit` (identity = trade cost, deckSellPrice = customer) */
@@ -4458,7 +4482,8 @@ function renderAdmin(){
         <td class="r"><input class="num" value="${p.price}" oninput="admin.decking[${i}].price=+this.value||0"></td>
         <td><input value="${esc(p.unit||'each')}" oninput="admin.decking[${i}].unit=this.value"></td>
         <td class="r"><input class="num" value="${p.widthMm||''}" placeholder="—" title="Board cover width in mm — boards only" oninput="admin.decking[${i}].widthMm=+this.value||0"></td>
-        <td class="r"><input class="num" value="${p.lengthM||''}" placeholder="—" title="Length of one unit in metres — trim and timber" oninput="admin.decking[${i}].lengthM=+this.value||0"></td>
+        <td class="r"><input class="num" value="${p.gapMm==null?'':p.gapMm}" placeholder="${p.cat==='Board'?DEFAULT_BOARD_GAP_MM:'—'}" title="Expansion gap beside the board in mm — boards only. Blank uses ${DEFAULT_BOARD_GAP_MM}mm; 0 means no gap." oninput="admin.decking[${i}].gapMm=+this.value||0"></td>
+        <td class="r"><input class="num" value="${p.lengthM||''}" placeholder="—" title="Length of one unit in metres — for a board this is the board length" oninput="admin.decking[${i}].lengthM=+this.value||0"></td>
         <td class="r"><input class="num" value="${p.perM2||''}" placeholder="—" title="Quantity per m² — leave blank for manual entry" oninput="admin.decking[${i}].perM2=+this.value||0"></td>
         <td class="c"><input type="checkbox" ${p.scaleBoard?'checked':''} title="Also scale with board cover width (clips)" onchange="admin.decking[${i}].scaleBoard=this.checked"></td>
         <td><button class="chiprm" onclick="admin.decking.splice(${i},1);renderAdmin()">×</button></td>`;
@@ -4713,19 +4738,21 @@ function adminDeckImportCSV(input){
       const out=[],bad=[];
       const num=v=>{const n=parseFloat(String(v).replace(/[£,\s]/g,''));return isNaN(n)?null:n;};
       body.forEach((r,ix)=>{
-        const [code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard]=
-          [0,1,2,3,4,5,6,7,8].map(i=>String(r[i]==null?'':r[i]).trim());
+        const [code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm]=
+          [0,1,2,3,4,5,6,7,8,9].map(i=>String(r[i]==null?'':r[i]).trim());
         const p=num(price);
         if(!code||!cat||!name||p===null){bad.push(ix+1);return;}
         const row={code,cat,name,price:Math.round(p*100)/100,unit:unit||'each'};
-        const rate=num(perM2), wmm=num(widthMm), lm=num(lengthM);   /* optional columns */
+        const rate=num(perM2), wmm=num(widthMm), lm=num(lengthM), gap=num(gapMm);   /* optional columns */
         if(rate!==null&&rate>0)row.perM2=rate;
         if(wmm!==null&&wmm>0)row.widthMm=wmm;
         if(lm!==null&&lm>0)row.lengthM=lm;
+        /* 0 is a real gap — a board laid tight — so only a blank cell is dropped */
+        if(gap!==null&&gap>=0)row.gapMm=gap;
         if(/^(1|true|yes|y)$/i.test(scaleBoard))row.scaleBoard=true;
         out.push(row);
       });
-      if(!out.length)throw new Error('No valid rows found. Expected columns: code,cat,name,price,unit[,perM2,widthMm,lengthM,scaleBoard]');
+      if(!out.length)throw new Error('No valid rows found. Expected columns: code,cat,name,price,unit[,perM2,widthMm,lengthM,scaleBoard,gapMm]');
       admin.decking=out;
       /* a board that no longer exists must not stay selected on the open quote */
       const d=deckingState();
@@ -4742,8 +4769,9 @@ function adminDeckImportCSV(input){
 }
 function adminDeckExportCSV(){
   const q=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
-  const csv=['code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard'].concat(
-    (admin.decking||[]).map(p=>[p.code,p.cat,p.name,p.price,p.unit,p.perM2||'',p.widthMm||'',p.lengthM||'',p.scaleBoard?1:''].map(q).join(','))
+  const csv=['code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm'].concat(
+    (admin.decking||[]).map(p=>[p.code,p.cat,p.name,p.price,p.unit,p.perM2||'',p.widthMm||'',p.lengthM||'',p.scaleBoard?1:'',
+                                p.gapMm==null?'':p.gapMm].map(q).join(','))
   ).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
