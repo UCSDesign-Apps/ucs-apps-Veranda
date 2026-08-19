@@ -3049,7 +3049,12 @@ function deckingSetShape(s){
   d.shape=s;
   if(s==='square'){d.dims.c=0;d.dims.d=0;}
   /* a different outline is a different job — the rep's pinned direction was for
-     the old one, so hand the choice back to the optimiser */
+     the old one, so hand the choice back to the optimiser, and give back the
+     size they typed before anything was rounded onto it */
+  if(d.optimised&&d.optimised.dim&&d.dims[d.optimised.dim]===d.optimised.effective){
+    d.dims[d.optimised.dim]=d.optimised.original;
+  }
+  d.optimised=null;
   d.boardDirLocked=false;
   deckingOptimiseDirection();
   renderDecking();
@@ -3187,12 +3192,19 @@ function deckingStepRunM(){
 /* ── Step 2: dimensions ─────────────────────────────────────────────────── */
 function deckingSetDim(k,v){
   const d=deckingState();
+  /* Only count it as an override once the rounded value has been on screen —
+     otherwise the first keystroke of a fresh number would pin the direction. */
+  const overruled=!!(d.optimised&&d.optimised.dim===k&&d.optimised.shown);
   d.dims[k]=Math.max(0,+v||0);
+  if(overruled){
+    d.optimised=null;
+    d.boardDirLocked=true;   /* the rep has set this side by hand — leave it */
+  }
   /* deckingCalc() refreshes the calculated panel. It deliberately does NOT rebuild
      the input grid: rewriting the field the rep is typing in would destroy the
      caret on every keystroke. */
   deckingDrawCanvas();   /* also refreshes the step pills (side lengths changed) */
-  deckingOptimiseDirection();   /* a new size can flip which way is cheaper */
+  if(!overruled)deckingOptimiseDirection();   /* a new size can flip which way is cheaper */
   deckingCalc();
   drawSubframePlan();
   drawBoardPlan();
@@ -3203,12 +3215,36 @@ function deckingRenderDims(){
     const letter=label.match(/\(([A-D])\)/);
     const pretty=label.replace(/\s*\([A-D]\)/,'');
     return `<div class="field">
-      <label><span class="dk-let">${letter?letter[1]:''}</span>${pretty} <span style="font-weight:400;color:#8a969a">(mm)</span></label>
-      <input type="number" min="0" step="10" value="${d.dims[k]||''}" oninput="deckingSetDim('${k}',this.value)">
+      <label><span class="dk-let">${letter?letter[1]:''}</span>${pretty} <span style="font-weight:400;color:#8a969a">(mm)</span><span id="dk_dimtag_${k}"></span></label>
+      <input id="dk_dim_${k}" type="number" min="0" step="10" value="${d.dims[k]||''}" oninput="deckingSetDim('${k}',this.value)" onblur="deckingSyncOptimisedDim()">
       <div class="hint">${hint}</div>
     </div>`;
   }).join('');
+  deckingSyncOptimisedDim();
   deckingRenderDerived();
+}
+
+/* Push the rounded size onto its input and tag the label. Deliberately NOT a
+   rebuild of the dims grid: that runs on every keystroke and would take the
+   rep's focus with it. The field under the caret is left alone and picks the
+   value up on blur. */
+const DK_OPT_TAG='<span style="font-size:10px;background:#c8e6c9;color:#2e7d32;border-radius:4px;padding:1px 6px;margin-left:6px">optimised</span>';
+function deckingSyncOptimisedDim(){
+  const d=deckingState();
+  if(typeof document==='undefined')return;
+  ['a','b','c','d'].forEach(k=>{
+    const tag=document.getElementById('dk_dimtag_'+k);
+    const on=!!(d.optimised&&d.optimised.dim===k);
+    if(tag)tag.innerHTML=on?DK_OPT_TAG:'';
+    const el=document.getElementById('dk_dim_'+k);
+    if(!el||!on)return;
+    if(document.activeElement===el)return;   /* they are typing in it */
+    const want=String(d.optimised.effective);
+    if(el.value!==want)el.value=want;
+    /* now that the rounded number is on screen, a later edit of this field is a
+       genuine override rather than a half-finished entry */
+    d.optimised.shown=true;
+  });
 }
 /* Read-only panel for the edges the rep does not measure — their letters appear on
    the diagram too, so every labelled edge has a value somewhere on the page. */
@@ -3875,14 +3911,47 @@ function deckingBoardLayout(dir){
    on the order. A tie stays on A. Once the rep flips it by hand the choice is
    locked, because they will have a site reason — the fall, a view line, a board
    they want running with the house — that no arithmetic here can see. */
+/* Rounding the stack up has to be written into the dim that really governs that
+   side of the bounding box. Across the deck that is always A. Down the deck it
+   is B for every shape except the T, whose depth is B + D — there the stem
+   length is what has to grow, or the top section would silently get deeper. */
+function deckingStackDimKey(dir){
+  const acrossTheWidth=(dir==='b');   /* boards run down B, so they stack across A */
+  if(acrossTheWidth)return 'a';
+  return (deckingState().shape==='tshape')?'d':'b';
+}
 function deckingOptimiseDirection(){
   const d=deckingState();
-  if(!deckingDimsValid())return;
-  if(d.boardDirLocked)return;
-  const countA=deckingBoardLayout('a').totalBoards;
-  const countB=deckingBoardLayout('b').totalBoards;
-  d.boardDir=(countA<=countB)?'a':'b';
-  d.boardDirCounts={a:countA,b:countB};
+  /* Measure from the size the rep actually entered. Without this the deck grows
+     every time anything re-optimises: 3500 rounds to 3528, then 3528 rounds
+     again the moment the pitch changes, and it ratchets up on each pass. */
+  if(d.optimised&&d.optimised.dim&&d.dims[d.optimised.dim]===d.optimised.effective){
+    d.dims[d.optimised.dim]=d.optimised.original;
+  }
+  if(!deckingDimsValid()){d.optimised=null;return;}
+  if(d.boardDirLocked&&d.optimised===null)return;   /* pinned direction, no rounding */
+  if(!d.boardDirLocked){
+    const countA=deckingBoardLayout('a').totalBoards;
+    const countB=deckingBoardLayout('b').totalBoards;
+    d.boardDir=(countA<=countB)?'a':'b';
+    d.boardDirCounts={a:countA,b:countB};
+  }
+  /* Round the stacking side up to whole boards and write it back. */
+  const lay=deckingBoardLayout(d.boardDir);
+  const key=deckingStackDimKey(d.boardDir);
+  const raw=+d.dims[key]||0;
+  const trim=Math.round(lay.effectiveStackMm-lay.stackDimMm);
+  if(raw>0&&trim>0){
+    const effective=raw+trim;
+    d.optimised={dim:key,original:raw,effective,trimMm:trim,
+                 runs:lay.runs,pitchMm:Math.round(lay.pitchMm),
+                 /* set once the input has actually shown the rounded number, so a
+                    half-typed value is never mistaken for the rep overruling it */
+                 shown:false};
+    d.dims[key]=effective;
+  }else{
+    d.optimised=null;
+  }
 }
 /* Manual override. Pins the choice until the shape or the board changes. */
 function deckingFlipDir(){
@@ -4008,6 +4077,18 @@ function deckingExtraAuto(code){
   deckingCalc();
 }
 
+/* The deck was resized to land on whole boards, so say so plainly and in the
+   rep's own units — this changes the size on the contract, not just the drawing. */
+function deckingOptimisedNote(){
+  const d=deckingState();
+  const o=d.optimised;
+  if(!o)return '';
+  return `<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;font-size:12px;margin-top:6px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:16px">✓</span>
+      <span><b>Size optimised for full boards</b> — ${o.dim.toUpperCase()} adjusted from <b>${o.original}mm</b> to <b>${o.effective}mm</b> (${o.trimMm}mm overhang trimmed on site · ${o.runs} runs × ${o.pitchMm}mm = ${o.effective>0?Math.round(o.runs*o.pitchMm):0}mm)</span>
+    </div>`;
+}
+
 /* Tells the rep which way the boards ended up running and what it saved. The
    counts are the real layout counts for each direction, so the figure quoted
    here is the figure on the order. */
@@ -4111,10 +4192,11 @@ function deckingCalc(){
            <span>Boards per run: <b>${g.boardsPerRun}</b> <span style="font-weight:500;color:#8a969a">(longest run)</span></span>
            <span>Board lengths: <b>${g.lengths}</b> <span style="font-weight:500;color:#8a969a">(laid out, not estimated)</span></span>
            ${g.stepRunM>0?`<span>Step run: <b>${g.stepRunM}m</b></span>`:''}
-         </div>`
+         </div>${deckingOptimisedNote()}`
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingSyncOptimisedDim();
   deckingRenderDirection();
   deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
