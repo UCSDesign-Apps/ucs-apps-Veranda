@@ -3385,11 +3385,13 @@ function drawSubframePlan(){
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
 /* Boards run along dimension A and stack along B, and the joists are set out to
-   cross them. Every 3.6m length ends in a cut: an interior butt joint where the
-   run is longer than a board, and the trim at the far end either way.
-   The joints are NOT staggered run to run. Staggering is the better bond, but it
-   turns some runs into three pieces where the ordered count says two, and this
-   diagram has to show the boards that were actually ordered. */
+   cross them. Each run is drawn from the same clipped segments the calculator
+   counts, so a stripe stops at a notch instead of running over the cut-out, and
+   the boards on the page are the boards on the order.
+   Every 3.6m length ends in a cut: an interior butt joint where a segment is
+   longer than a board, and the trim at the end of the segment either way. The
+   joints are NOT staggered run to run. Staggering is the better bond, but it
+   turns some runs into an extra piece the ordered count does not carry. */
 const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
@@ -3420,30 +3422,28 @@ function drawBoardPlan(){
   outline();ctx.fillStyle='#f3f7f8';ctx.fill();
 
   ctx.save();outline();ctx.clip();
-  /* Board runs — alternating shades so each one reads separately */
-  for(let r=0;r<lay.runs;r++){
-    const y0=b.y0+r*lay.boardWmm, y1=Math.min(y0+lay.boardWmm,b.y1);
-    ctx.fillStyle=(r%2)?DK_BOARD_B:DK_BOARD_A;
-    ctx.fillRect(X(b.x0),Y(y0),b.w*k,Math.max(1,(y1-y0)*k));
-    ctx.fillStyle='rgba(0,0,0,0.16)';   /* the gap between boards */
-    ctx.fillRect(X(b.x0),Y(y1)-0.5,b.w*k,1);
-  }
-  /* Cut lines — the butt joints down each run, then the trim at the far end */
   let cuts=0;
-  ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
-  if(ctx.setLineDash)ctx.setLineDash([6,4]);
-  const cutX=[];
-  for(let j=1;j<=lay.fullPerRun;j++){
-    const x=b.x0+j*lay.lenMm;
-    if(x<b.x1)cutX.push(x);
-  }
-  cutX.push(b.x1);   /* every run is trimmed at the far end */
-  cutX.forEach(x=>{
-    const px=(x>=b.x1)?X(x)-1.5:X(x);
-    ctx.beginPath();ctx.moveTo(px,Y(b.y0));ctx.lineTo(px,Y(b.y1));ctx.stroke();
-    cuts+=lay.runs;
+  lay.rows.forEach((row,r)=>{
+    const top=Y(row.y0), hgt=Math.max(1,(row.y1-row.y0)*k);
+    row.segs.forEach(sg=>{
+      /* the board run itself — alternating shades so each one reads separately */
+      ctx.fillStyle=(r%2)?DK_BOARD_B:DK_BOARD_A;
+      ctx.fillRect(X(sg[0]),top,Math.max(1,(sg[1]-sg[0])*k),hgt);
+      ctx.fillStyle='rgba(0,0,0,0.16)';   /* the gap between boards */
+      ctx.fillRect(X(sg[0]),Y(row.y1)-0.5,Math.max(1,(sg[1]-sg[0])*k),1);
+      /* cuts: the butt joints down this segment, then the trim at its end */
+      ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
+      if(ctx.setLineDash)ctx.setLineDash([6,4]);
+      const xcuts=[];
+      for(let x=sg[0]+lay.lenMm;x<sg[1];x+=lay.lenMm)xcuts.push(x);
+      xcuts.push(sg[1]);
+      xcuts.forEach(x=>{
+        const px=(x>=sg[1])?X(x)-1.5:X(x);
+        ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,top+hgt);ctx.stroke();cuts++;
+      });
+      if(ctx.setLineDash)ctx.setLineDash([]);
+    });
   });
-  if(ctx.setLineDash)ctx.setLineDash([]);
   ctx.restore();
 
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
@@ -3458,12 +3458,13 @@ function drawBoardPlan(){
   }
 
   /* Count note — the same figures the materials list orders */
-  const offcut=Math.round(lay.boardsPerRun*lay.lenMm-lay.A_mm);
+  const clipped=lay.rows.some(r=>r.segs.length!==1||r.segs[0][1]-r.segs[0][0]<b.w-1);
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';ctx.textBaseline='alphabetic';
   ctx.font='600 10px Helvetica,Arial';
-  ctx.fillText(lay.runs+' runs × '+lay.boardsPerRun+' boards = '+lay.totalBoards+' × '+BOARD_LENGTH_M+
-               'm lengths at '+Math.round(lay.boardWmm)+'mm cover · '+cuts+' cuts'+
-               (offcut>0?' · '+offcut+'mm offcut per run':''),W/2,H-9);
+  ctx.fillText(lay.runs+' runs at '+Math.round(lay.boardWmm)+'mm cover · '+
+               lay.totalBoards+' × '+BOARD_LENGTH_M+'m lengths · '+cuts+' cuts · '+
+               lay.laidM.toFixed(1)+'m laid'+
+               (clipped?' · runs cut to the outline':''),W/2,H-9);
 }
 
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
@@ -3554,29 +3555,64 @@ function deckingSubframeCounts(){
           screws:nogginsTotal*4+pads*2};
 }
 
-/* ── Board layout ───────────────────────────────────────────────────────── */
-/* Boards run along dimension A and stack along B. The count comes off the layout
-   rather than the area: every board in the plan is a board you buy, whether it
-   goes in whole or gets cut, so there is no wastage percentage on top — the
-   offcut is already paid for inside the length it came from. */
+/* ── Board layout ──────────────────────────────────────────────────────── */
+/* Where a board run at height yMid actually lands on the deck. Casts a ray
+   across the outline and pairs the crossings, so a run through the gap of a
+   U-shape comes back as two separate segments and a run through the notch of an
+   L-shape comes back short. Segments, not one total, because a board cannot
+   bridge a cut-out: each run of deck needs its own boards. */
+function dkScanSegments(yMid){
+  const pts=deckingPoints();
+  if(!pts)return [];
+  const n=pts.length,xs=[];
+  for(let i=0;i<n;i++){
+    const [x1,y1]=pts[i],[x2,y2]=pts[(i+1)%n];
+    /* half-open test: a vertex counts for the edge below it only, so a ray
+       grazing a corner is not counted twice */
+    if((y1<=yMid&&y2>yMid)||(y2<=yMid&&y1>yMid))xs.push(x1+(yMid-y1)*(x2-x1)/(y2-y1));
+  }
+  xs.sort((a,b)=>a-b);
+  const segs=[];
+  for(let i=0;i+1<xs.length;i+=2)if(xs[i+1]>xs[i])segs.push([xs[i],xs[i+1]]);
+  return segs;
+}
+/* Total covered length of one run, in mm. */
+function boardRunCoverage(yMid){
+  return dkScanSegments(yMid).reduce((t,sg)=>t+(sg[1]-sg[0]),0);
+}
+/* Boards run along dimension A and stack along B, and the joists are set out to
+   cross them. Each run is clipped to the outline before it is counted, so a
+   notched shape orders the boards it lays rather than the boards its bounding
+   rectangle would take. Every board in the plan is a board you buy, whole or
+   cut, so there is no wastage percentage on top — the offcut is already paid for
+   inside the length it came from. */
 function deckingBoardLayout(){
   const d=deckingState();
+  const b=deckingBBox();
   const boardProd=d.colour?deckingProduct(d.colour):null;
-  const A_mm=+d.dims.a||0;                 /* deck width — boards run this way */
-  const B_mm=(+d.dims.b)||(+d.dims.a)||0;  /* projection — boards stack this way */
   const boardWmm=(boardProd&&+boardProd.widthMm)||DEFAULT_BOARD_WIDTH_MM;
   const lenMm=BOARD_LENGTH_M*1000;
-  const empty={boardProd,A_mm,B_mm,boardWmm,lenMm,fullPerRun:0,hasRemainder:0,
-               boardsPerRun:0,runs:0,totalBoards:0,joints:0,laidM:0};
-  if(!(A_mm>0&&B_mm>0&&boardWmm>0))return empty;
-  const fullPerRun=Math.floor(A_mm/lenMm);
-  const hasRemainder=(A_mm%lenMm)>0?1:0;
-  const boardsPerRun=fullPerRun+hasRemainder;
-  const runs=Math.ceil(B_mm/boardWmm);
-  return {boardProd,A_mm,B_mm,boardWmm,lenMm,fullPerRun,hasRemainder,boardsPerRun,runs,
-          totalBoards:runs*boardsPerRun,
-          joints:Math.max(0,boardsPerRun-1),   /* butt joints down a single run */
-          laidM:runs*A_mm/1000};
+  const empty={boardProd,boardWmm,lenMm,A_mm:0,B_mm:0,rows:[],runs:0,
+               boardsPerRun:0,totalBoards:0,joints:0,laidM:0};
+  if(!(b.w>0&&b.h>0&&boardWmm>0))return empty;
+
+  const runs=Math.ceil(b.h/boardWmm);
+  const rows=[];
+  let totalBoards=0,joints=0,laidMm=0;
+  for(let r=0;r<runs;r++){
+    const y0=b.y0+r*boardWmm, y1=Math.min(y0+boardWmm,b.y1);
+    const segs=dkScanSegments((y0+y1)/2);
+    /* per segment, never on the sum: two 1800mm segments either side of a gap
+       need a board each, not one board between them */
+    const boards=segs.reduce((t,sg)=>t+Math.ceil((sg[1]-sg[0])/lenMm),0);
+    segs.forEach(sg=>{laidMm+=sg[1]-sg[0];});
+    joints+=Math.max(0,boards-segs.length);   /* butt joints within the segments */
+    totalBoards+=boards;
+    rows.push({y0,y1,yMid:(y0+y1)/2,segs,boards});
+  }
+  return {boardProd,boardWmm,lenMm,A_mm:b.w,B_mm:b.h,rows,runs,
+          boardsPerRun:rows.reduce((m,r)=>Math.max(m,r.boards),0),
+          totalBoards,joints,laidM:laidMm/1000};
 }
 
 /* ── Materials ──────────────────────────────────────────────────────────── */
@@ -3622,9 +3658,14 @@ function deckingAutoItems(){
      clip holds the two boards either side of it. */
   const lay=deckingBoardLayout();
   const clip=deckingPick('Fixing',/decking clip/i);
-  if(clip&&lay.runs>0&&sub.numJoists>0){
-    const totalClips=lay.runs*sub.numJoists+lay.runs*lay.joints;
-    out[clip.code]=Math.ceil(totalClips/deckingPackSize(clip,20));
+  if(clip&&lay.totalBoards>0&&sub.numJoists>0){
+    /* only the joists a run actually crosses — a run stopped by a notch is not
+       clipped to the joists beyond it */
+    let crossings=0;
+    lay.rows.forEach(row=>row.segs.forEach(sg=>{
+      crossings+=sub.joistX.filter(x=>x>=sg[0]-1&&x<=sg[1]+1).length;
+    }));
+    out[clip.code]=Math.ceil((crossings+lay.joints)/deckingPackSize(clip,20));
   }
   /* Any other fixing still runs on its perM2 rate. scaleBoard items also scale
      with board cover width, because a narrower board needs more runs. */
@@ -3751,7 +3792,7 @@ function deckingCalc(){
            <span>Area: <b>${g.areaM2}m²</b></span>
            <span>Perimeter: <b>${g.perimeterM}m</b></span>
            <span>Board runs: <b>${g.runs}</b></span>
-           <span>Boards per run: <b>${g.boardsPerRun}</b></span>
+           <span>Boards per run: <b>${g.boardsPerRun}</b> <span style="font-weight:500;color:#8a969a">(longest run)</span></span>
            <span>Board lengths: <b>${g.lengths}</b> <span style="font-weight:500;color:#8a969a">(laid out, not estimated)</span></span>
            ${g.stepRunM>0?`<span>Step run: <b>${g.stepRunM}m</b></span>`:''}
          </div>`
@@ -3811,7 +3852,7 @@ function deckingRenderMaterials(res){
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="4" class="r"><b>Decking total (incl VAT)</b></td><td class="r"><b>£${money(res.total)}</b></td></tr></tfoot>
     </table></div>
-    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${(res.boardW*1000).toFixed(0)}mm cover width in ${BOARD_LENGTH_M}m lengths, counted off the layout — ${res.runs} runs of ${res.boardsPerRun} — so offcuts are already inside the count and no wastage percentage is added. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists run the projection, spaced evenly across the width at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
+    <div style="font-size:10.5px;color:#8a969a;margin-top:6px">${DK_SHAPES[d.shape].label} · ${res.areaM2}m² · perimeter ${res.perimeterM}m. Boards at ${(res.boardW*1000).toFixed(0)}mm cover width in ${BOARD_LENGTH_M}m lengths, counted off the layout — ${res.runs} runs, ${res.lengths} lengths, each run cut to the outline — so offcuts are already inside the count and no wastage percentage is added. Subframe is 4×2 (${JOIST_W_MM}×${JOIST_D_MM}mm) C24: joists run the projection, spaced evenly across the width at no more than ${JOIST_SPACING_MM}mm, staggered noggins at no more than ${NOGGING_SPACING_MM}mm, and pads at no more than ${PAD_SPACING_MM}mm under every ${PAD_JOIST_EVERY}th joist. Confirm on site before ordering. Any offer discount is applied on the Pricing page.</div>${costNote}`;
 }
 
 /* board lengths + every item, priced with `unit` (identity = trade cost, deckSellPrice = customer) */
