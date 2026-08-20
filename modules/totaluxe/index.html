@@ -803,9 +803,43 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_step_labels" style="margin-top:10px"></div>
           </div>
 
-          <!-- STEP 3 — COLOUR -->
+          <!-- STEP 3 — FINISHING OPTIONS -->
+          <div class="card" id="dk_finishing_card">
+            <div class="dk-step"><span class="dk-num">3</span> Finishing Options</div>
+
+            <!-- Picture frame border -->
+            <div style="margin-bottom:16px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;font-size:14px">
+                <input type="checkbox" id="dk_picture_frame" onchange="deckingSetPictureFrame(this.checked)" style="width:18px;height:18px;accent-color:var(--brand)">
+                Picture Frame Border
+              </label>
+              <div class="sub" style="margin:4px 0 0 28px">One row of boards laid perpendicular around the perimeter before the main field. Adds boards and is shown on the layout diagram.</div>
+            </div>
+
+            <!-- Fascia boards -->
+            <div style="margin-bottom:16px">
+              <div style="font-weight:600;font-size:14px;margin-bottom:6px">Fascia Boards</div>
+              <div class="sub" style="margin-bottom:8px">Select which sides of the deck get a fascia board to hide the subframe edge. Uses the same board as the deck surface.</div>
+              <div id="dk_fascia_sides" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+            </div>
+
+            <!-- Deck height / raised deck -->
+            <div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Deck Height</div>
+              <div class="sub" style="margin-bottom:8px">If the deck is raised, 600mm timber posts are added at each pad location (cut from 2.4m 4×4 stock, 4 posts per length).</div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <input type="number" id="dk_height" min="0" step="10" placeholder="0 (ground level)"
+                  oninput="deckingSetHeight(+this.value)"
+                  style="width:160px;padding:8px;border:1px solid #cfd8da;border-radius:8px;font-size:14px">
+                <span style="font-size:13px;color:#555">mm above ground</span>
+                <span id="dk_height_note" style="font-size:12px;color:#ed1c2d;display:none">⚠ Posts required at each pad location</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 4 — COLOUR -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">3</span> Board Colour</div>
+            <div class="dk-step"><span class="dk-num">4</span> Board Colour</div>
             <div class="sub" style="margin-bottom:10px">Each board carries its own cover width, so the board you pick sets the running metres.</div>
             <div class="imgbank" id="dk_colours"></div>
           </div>
@@ -832,13 +866,14 @@ body.print-internal .internal-notes-only{display:block !important;}
               <span><span style="display:inline-block;width:10px;height:10px;background:#ed1c2d;vertical-align:middle;margin-right:4px;border-radius:50%"></span>Concrete pad</span>
               <span><span style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Board run</span>
               <span><span style="display:inline-block;width:20px;height:10px;background:rgba(169,120,79,0.22);border:1px dashed #a9784f;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Overhang — trimmed</span>
+              <span><span style="display:inline-block;width:20px;height:10px;background:#8a5f38;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Picture frame</span>
               <span style="color:#ed1c2d">— — Trim/cut</span>
             </div>
           </div>
 
-          <!-- STEP 4 — MATERIALS -->
+          <!-- STEP 5 — MATERIALS -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">4</span> Materials Summary</div>
+            <div class="dk-step"><span class="dk-num">5</span> Materials Summary</div>
             <div class="sub" style="margin-bottom:10px">Everything below is calculated from the shape, board and steps. Type over any quantity to pin it — the calculator then leaves that line alone.</div>
             <div id="dk_materials"></div>
           </div>
@@ -1297,10 +1332,18 @@ const DECKING_SEED=[
   {code:'TL0611430',cat:'Membrane',name:'Weed Membrane (roll covers 25m²)',price:18.50,unit:'roll',perM2:0.04},
   {code:'TL0611431',cat:'Tape',name:'Joist Tape 50mm × 50m roll',price:12.00,unit:'roll',perJoistM:0.02},
   {code:'TL0611432',cat:'Concrete',name:'Concrete Pad Bag (25kg, 2 pads per bag)',price:8.50,unit:'bag'},
-  {code:'TL0611433',cat:'Screw',name:'Timber Screw 80mm — Joist/Noggin (box 200)',price:14.00,unit:'box'}
+  {code:'TL0611433',cat:'Screw',name:'Timber Screw 80mm — Joist/Noggin (box 200)',price:14.00,unit:'box'},
+  /* ── Fascia boards — same composite board, cut to fit visible edges ──────── */
+  {code:'TL0611440',cat:'Fascia',name:'Fascia Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
+  /* ── Picture frame border — boards laid perpendicular around perimeter ───── */
+  {code:'TL0611441',cat:'Frame',name:'Picture Frame Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
+  /* ── Raised deck posts — 100×100mm 4×4 timber, 2.4m cut to 600mm lengths ── */
+  {code:'TL0611442',cat:'Post',name:'4×4 Timber Post 100×100mm × 2.4m (4 posts per length)',price:24.00,unit:'length'}
 ];
+const POST_HEIGHT_TRIGGER_MM=150;   /* below this the deck sits on its pads */
+const POSTS_PER_LENGTH=4;           /* 2.4m stock cut into 600mm posts */
 /* Categories the calculator drives automatically, and the order they group in */
-const DECK_CATS=['Board','Joist','Noggin','Membrane','Tape','Concrete','Screw','Trim','Fixing','Step'];
+const DECK_CATS=['Board','Joist','Noggin','Membrane','Tape','Concrete','Screw','Trim','Fixing','Fascia','Frame','Post','Step'];
 /* How the summary reads on the page: the rep quotes by trade, not by category,
    so joists and noggins belong together, and everything that gets screwed or
    taped down sits under Fixings. Every category above has to appear in exactly
@@ -1310,12 +1353,15 @@ const DECK_GROUPS=[
   {label:'Subframe Timber',  cats:['Joist','Noggin']},
   {label:'Ground Preparation',cats:['Membrane','Concrete']},
   {label:'Fixings',          cats:['Fixing','Screw','Tape']},
-  {label:'Perimeter Trim',   cats:['Trim']},
+  {label:'Finishing & Edging',cats:['Fascia','Frame','Trim']},
+  /* only ever has a line when the deck is raised, and a group with no lines is
+     not drawn — so no extra condition is needed here */
+  {label:'Raised Deck Posts',cats:['Post']},
   {label:'Steps',            cats:['Step']}
 ];
 const DECK_CAT_LABEL={Board:'Boards',Joist:'Joists',Noggin:'Noggins',Membrane:'Weed Membrane',
   Tape:'Joist Tape',Concrete:'Concrete Pads',Screw:'Timber Screws',
-  Trim:'Trim',Fixing:'Fixings',Step:'Steps'};
+  Trim:'Trim',Fixing:'Fixings',Fascia:'Fascia',Frame:'Picture Frame',Post:'Posts',Step:'Steps'};
 const DECKING_BOARD_CATS=['Board'];
 
 /* A catalogue saved before the v2 calculator uses the old HD / Embossed / Edge
@@ -1988,7 +2034,8 @@ function blankState(){return{
   /* contractParts = parts added at pricing (materials, discountable, part of the contract).
      surveyParts   = on-site survey extras only — never alter the contract totals. */
   fitting:[],contractParts:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
-  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null}
+  decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null,
+    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,deckHeightMm:0}
 };}
 let state=blankState();
 function today(){return new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -3010,7 +3057,8 @@ function renderPricing(){
 const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Antique Oak':'#a4794b','Chocolate':'#4e352a','Silver Birch':'#b9b2a6'};
 
 function deckingState(){
-  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null};
+  if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null,
+    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,deckHeightMm:0};
   const d=state.decking;
   /* Which way the boards run: 'a' along the width, 'b' along the projection.
      Anything saved before the optimiser existed ran along A. */
@@ -3018,6 +3066,11 @@ function deckingState(){
   if(d.optimised===undefined)d.optimised=null;
   /* pre-button quotes carried locks that no longer mean anything */
   delete d.boardDirLocked;delete d.sizePinned;
+  /* finishing options, absent from any quote saved before they existed */
+  if(!d.fasciaSides)d.fasciaSides={};
+  DECK_SIDES.forEach(k=>{d.fasciaSides[k]=!!d.fasciaSides[k];});
+  d.pictureFrame=!!d.pictureFrame;
+  d.deckHeightMm=Math.max(0,+d.deckHeightMm||0);
   if(!Array.isArray(d.items))d.items=[];
   /* v1 called the rectangle 'rect' */
   if(d.shape==='rect')d.shape='square';
@@ -3059,6 +3112,7 @@ function deckingSetShape(s){
   /* a different outline is a different job, so the last result no longer
      describes it — clear it and let the rep optimise again when ready */
   deckingClearOptimised();
+  deckingRenderFasciaSides();   /* the sides on offer follow the shape */
   renderDecking();
 }
 function deckingRenderShapes(){
@@ -3542,6 +3596,7 @@ function drawSubframePlan(){
 const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
+const DK_BOARD_FRAME='#8a5f38';   /* picture frame — a shade under the field */
 function drawBoardPlan(){
   const card=document.getElementById('dk_diagrams_card');
   const cv=document.getElementById('dk_board_canvas');
@@ -3623,6 +3678,17 @@ function drawBoardPlan(){
       if(ctx.setLineDash)ctx.setLineDash([]);
     });
   });
+  /* Picture frame — one board laid perpendicular all the way round. Drawn last
+     so it reads as sitting in place of the field along the edges. Stroking the
+     outline at twice the pitch puts half the stroke outside the clip, leaving
+     exactly one board's width showing inside — the one construction that follows
+     a notched outline round its corners without any per-shape geometry. */
+  if(deckingState().pictureFrame){
+    const bandPx=Math.max(2,lay.pitchMm*k);
+    ctx.lineJoin='miter';
+    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=bandPx*2+2;outline();ctx.stroke();
+    ctx.strokeStyle=DK_BOARD_FRAME; ctx.lineWidth=bandPx*2;  outline();ctx.stroke();
+  }
   ctx.restore();
 
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
@@ -3652,6 +3718,7 @@ function drawBoardPlan(){
     lay.runs+' runs at '+Math.round(lay.pitchMm)+'mm pitch ('+Math.round(lay.coverMm)+
     'mm cover + '+Math.round(lay.gapMm)+'mm gap) · '+
     lay.totalBoards+' × '+(lay.lenMm/1000)+'m lengths · '+cuts+' cuts'+
+    (deckingState().pictureFrame?' · picture frame border':'')+
     (lay.overhangMm>0?' · '+Math.round(lay.overhangMm)+'mm trimmed off the last run':'')+
     (clipped?' · runs cut to the outline':''));
 }
@@ -4066,6 +4133,37 @@ function deckingAutoItems(){
       out[bearer.code]=Math.ceil(stepRunM*2/lenM);
     }
   }
+  /* ── Picture frame border ─────────────────────────────────────────────── */
+  /* One ring of boards laid perpendicular round the outline. Counted as extra
+     boards on top of the field — the field is NOT reduced by the band the frame
+     occupies, so this is a slight over-order rather than an exact cut list. */
+  if(d.pictureFrame){
+    const frameProd=deckingPick('Frame');
+    const perimM=deckingPerimeter();
+    if(frameProd&&perimM>0){
+      const lenM=(+frameProd.lengthM)||(BOARD_LENGTH_M);
+      if(lenM>0)out[frameProd.code]=Math.ceil(perimM/lenM);
+    }
+  }
+  /* ── Fascia boards, per selected side ─────────────────────────────────── */
+  const fasciaProd=deckingPick('Fascia');
+  if(fasciaProd&&d.fasciaSides){
+    const lenM=(+fasciaProd.lengthM)||(BOARD_LENGTH_M);
+    let fasciaTotal=0;
+    if(lenM>0)DECK_SIDES.forEach(side=>{
+      if(!d.fasciaSides[side])return;
+      const sideLenM=deckingSideLengthM(side);
+      if(sideLenM>0)fasciaTotal+=Math.ceil(sideLenM/lenM);
+    });
+    if(fasciaTotal>0)out[fasciaProd.code]=fasciaTotal;
+  }
+  /* ── Timber posts for a raised deck ───────────────────────────────────── */
+  if(deckingNeedsPosts()&&sub.pads>0){
+    const postProd=deckingPick('Post');
+    /* one post per pad, four 600mm posts out of each 2.4m length */
+    if(postProd)out[postProd.code]=Math.ceil(sub.pads/POSTS_PER_LENGTH);
+  }
+
   /* Ground prep and the rest of the subframe consumables. */
   /* Membrane: perM2 is the roll fraction a square metre uses (0.04 = 25m2/roll). */
   const membrane=deckingPick('Membrane');
@@ -4125,6 +4223,59 @@ function deckingRenderDirection(){
       <span>Boards run along <b>${here}</b> — ${lay.runs} runs × ${Math.round(lay.pitchMm)}mm, ${lay.totalBoards} lengths${lay.overhangMm>0?`, ${Math.round(lay.overhangMm)}mm trimmed`:''}</span>
       <button onclick="deckingFlipDir()" class="btn sm" title="Run the boards the other way">↺ Flip board direction</button>
     </div>`;
+}
+
+/* ── Step 3: finishing options ──────────────────────────────────────────── */
+function deckingSetPictureFrame(on){
+  deckingState().pictureFrame=!!on;
+  deckingCalc();   /* redraws both plans itself */
+}
+function deckingSetHeight(mm){
+  const d=deckingState();
+  d.deckHeightMm=Math.max(0,+mm||0);
+  const note=document.getElementById('dk_height_note');
+  if(note)note.style.display=deckingNeedsPosts()?'':'none';
+  deckingCalc();
+}
+/* Below the trigger the deck sits straight on its pads and needs no legs. */
+function deckingNeedsPosts(){
+  return (+deckingState().deckHeightMm||0)>POST_HEIGHT_TRIGGER_MM;
+}
+function deckingSetFascia(side,on){
+  const d=deckingState();
+  if(!d.fasciaSides)d.fasciaSides={};
+  d.fasciaSides[side]=!!on;
+  deckingRenderFasciaSides();
+  deckingCalc();
+}
+/* Every deck has four bounding-box sides, the same four the step pills use. */
+function deckingRenderFasciaSides(){
+  const el=document.getElementById('dk_fascia_sides');if(!el)return;
+  const d=deckingState();
+  const sh=DK_SHAPES[d.shape];
+  const sides=(sh&&sh.sides)?Object.keys(sh.sides):DECK_SIDES;
+  const labels={front:'Front',right:'Right',back:'Back',left:'Left'};
+  const valid=deckingDimsValid();
+  el.innerHTML=sides.map(side=>{
+    const on=!!(d.fasciaSides&&d.fasciaSides[side]);
+    const len=valid?deckingSideLengthM(side):0;
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1.5px solid ${on?'var(--brand)':'var(--line)'};border-radius:8px;background:${on?'#f0f8f0':'#fff'}">
+      <input type="checkbox" ${on?'checked':''} onchange="deckingSetFascia('${side}',this.checked)" style="accent-color:var(--brand)">
+      <span style="font-size:13px;font-weight:600">${labels[side]||side}</span>
+      ${len>0?`<span style="font-size:11px;color:#8a969a">${len.toFixed(2)}m</span>`:''}
+    </label>`;
+  }).join('');
+}
+/* Put the saved finishing options back on the controls when a quote loads. */
+function deckingRenderFinishing(){
+  const d=deckingState();
+  const pf=document.getElementById('dk_picture_frame');
+  if(pf)pf.checked=!!d.pictureFrame;
+  const h=document.getElementById('dk_height');
+  if(h)h.value=d.deckHeightMm||'';
+  const note=document.getElementById('dk_height_note');
+  if(note)note.style.display=deckingNeedsPosts()?'':'none';
+  deckingRenderFasciaSides();
 }
 
 /* ── Step 4: colour ─────────────────────────────────────────────────────── */
@@ -4199,6 +4350,7 @@ function deckingCalc(){
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingRenderFasciaSides();   /* the side lengths on the chips follow the dims */
   deckingRenderDirection();
   deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
@@ -4289,7 +4441,7 @@ function renderDecking(){
   const d=deckingState();
   const en=document.getElementById('dk_enable');if(en)en.checked=!!d.enabled;
   const cfg=document.getElementById('dk_cfg');if(cfg)cfg.style.display=d.enabled?'':'none';
-  deckingRenderShapes();deckingRenderDims();deckingRenderColours();
+  deckingRenderShapes();deckingRenderDims();deckingRenderFinishing();deckingRenderColours();
   deckingCalc();   /* syncs auto items, renders materials, draws canvas, calls recalc() */
   drawSubframePlan();
   drawBoardPlan();
