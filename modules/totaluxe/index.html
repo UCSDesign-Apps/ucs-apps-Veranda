@@ -784,12 +784,6 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram. <b>Tap an edge of the diagram</b> to add steps to that side.</div>
             <div class="dk-dimgrid" id="dk_dims"></div>
             <div id="dk_derived"></div>
-            <div style="margin:12px 0 4px">
-              <button class="btn primary" onclick="deckingOptimise()" id="dk_optimise_btn" style="width:100%">
-                ✦ Optimise Layout
-              </button>
-            </div>
-            <div id="dk_optimise_result" style="display:none"></div>
             <div id="dk_summary" style="margin-top:12px"></div>
             <div id="dk_dir" style="margin-top:8px"></div>
             <div class="dk-canvasbox">
@@ -826,15 +820,23 @@ body.print-internal .internal-notes-only{display:block !important;}
             <!-- Deck height / raised deck -->
             <div>
               <div style="font-weight:600;font-size:14px;margin-bottom:4px">Deck Height</div>
-              <div class="sub" style="margin-bottom:8px">If the deck is raised, 600mm timber posts are added at each pad location (cut from 2.4m 4×4 stock, 4 posts per length).</div>
+              <div class="sub" style="margin-bottom:8px">A 4×4 timber post carries every pad whatever the height — it is what lifts the joist clear of the ground. The height here only sets how long each post is cut.</div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <label for="dk_height" style="font-size:13px;color:#555">Deck height above ground (mm)</label>
                 <input type="number" id="dk_height" min="0" step="10" placeholder="0 (ground level)"
                   oninput="deckingSetHeight(+this.value)"
                   style="width:160px;padding:8px;border:1px solid #cfd8da;border-radius:8px;font-size:14px">
-                <span style="font-size:13px;color:#555">mm above ground</span>
-                <span id="dk_height_note" style="font-size:12px;color:#ed1c2d;display:none">⚠ Posts required at each pad location</span>
               </div>
+              <div id="dk_height_note" class="sub" style="margin-top:6px"></div>
             </div>
+
+            <!-- Optimise last: the frame and the sizes both feed it -->
+            <div style="margin:12px 0 4px">
+              <button class="btn primary" onclick="deckingOptimise()" id="dk_optimise_btn" style="width:100%">
+                ✦ Optimise Layout
+              </button>
+            </div>
+            <div id="dk_optimise_result" style="display:none"></div>
           </div>
 
           <!-- STEP 4 — COLOUR -->
@@ -1340,7 +1342,7 @@ const DECKING_SEED=[
   /* ── Raised deck posts — 100×100mm 4×4 timber, 2.4m cut to 600mm lengths ── */
   {code:'TL0611442',cat:'Post',name:'4×4 Timber Post 100×100mm × 2.4m (4 posts per length)',price:24.00,unit:'length'}
 ];
-const POST_HEIGHT_TRIGGER_MM=150;   /* below this the deck sits on its pads */
+const POST_MIN_CUT_MM=150;          /* shortest post — a ground-level deck */
 const POSTS_PER_LENGTH=4;           /* 2.4m stock cut into 600mm posts */
 /* Categories the calculator drives automatically, and the order they group in */
 const DECK_CATS=['Board','Joist','Noggin','Membrane','Tape','Concrete','Screw','Trim','Fixing','Fascia','Frame','Post','Step'];
@@ -3652,6 +3654,17 @@ function drawBoardPlan(){
     });
   }
   ctx.save();outline();ctx.clip();
+  /* Frame first, field inside it — the way it is laid. Stroking the outline at
+     twice the pitch puts half the stroke outside the clip, leaving exactly one
+     board's width showing inside, and it follows a notched outline round its
+     corners without any per-shape geometry. */
+  if(lay.frameInsetMm>0){
+    const bandPx=Math.max(2,lay.frameInsetMm*k);
+    ctx.lineJoin='miter';
+    ctx.strokeStyle=DK_BOARD_FRAME;ctx.lineWidth=bandPx*2;outline();ctx.stroke();
+    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=1;
+    ctx.stroke();   /* thin inner edge where the field meets the frame */
+  }
   let cuts=0;
   lay.rows.forEach((row,r)=>{
     row.segs.forEach(sg=>{
@@ -3678,17 +3691,6 @@ function drawBoardPlan(){
       if(ctx.setLineDash)ctx.setLineDash([]);
     });
   });
-  /* Picture frame — one board laid perpendicular all the way round. Drawn last
-     so it reads as sitting in place of the field along the edges. Stroking the
-     outline at twice the pitch puts half the stroke outside the clip, leaving
-     exactly one board's width showing inside — the one construction that follows
-     a notched outline round its corners without any per-shape geometry. */
-  if(deckingState().pictureFrame){
-    const bandPx=Math.max(2,lay.pitchMm*k);
-    ctx.lineJoin='miter';
-    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=bandPx*2+2;outline();ctx.stroke();
-    ctx.strokeStyle=DK_BOARD_FRAME; ctx.lineWidth=bandPx*2;  outline();ctx.stroke();
-  }
   ctx.restore();
 
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
@@ -3718,7 +3720,7 @@ function drawBoardPlan(){
     lay.runs+' runs at '+Math.round(lay.pitchMm)+'mm pitch ('+Math.round(lay.coverMm)+
     'mm cover + '+Math.round(lay.gapMm)+'mm gap) · '+
     lay.totalBoards+' × '+(lay.lenMm/1000)+'m lengths · '+cuts+' cuts'+
-    (deckingState().pictureFrame?' · picture frame border':'')+
+    (lay.frameInsetMm>0?' + '+deckingFrameBoards()+' frame lengths':'')+
     (lay.overhangMm>0?' · '+Math.round(lay.overhangMm)+'mm trimmed off the last run':'')+
     (clipped?' · runs cut to the outline':''));
 }
@@ -3921,21 +3923,27 @@ function deckingBoardLayout(dir){
   if(!(b.w>0&&b.h>0))return empty;
 
   const ax=dkAxes(dir,b);
-  /* The last run is never ripped down the middle to fit — you lay a whole board
-     and trim the overhang on site — so the stacking dimension rounds up to a
-     whole number of pitches. */
-  const stackDimMm=ax.v1-ax.v0;
+  /* A picture frame takes one board all the way round, so the field it encloses
+     starts a pitch in from every edge. Insetting the SCAN rather than the
+     bounding box keeps it right on a notched outline: the ends of each scanned
+     segment are the real edges at that height, notch faces included. */
+  const inset=d.pictureFrame?pitchMm:0;
+  const fieldV0=ax.v0+inset, fieldV1=ax.v1-inset;
+  const stackDimMm=Math.max(0,fieldV1-fieldV0);
+  if(!(stackDimMm>0))return Object.assign(empty,{frameInsetMm:inset});
   const runs=Math.ceil(stackDimMm/pitchMm);
   const effectiveStackMm=runs*pitchMm;
   const rows=[];
   let totalBoards=0,joints=0,laidMm=0;
   for(let r=0;r<runs;r++){
-    const v0=ax.v0+r*pitchMm, v1=Math.min(v0+pitchMm,ax.v1);
+    const v0=fieldV0+r*pitchMm, v1=Math.min(v0+pitchMm,fieldV1);
     /* Read the run where it still sits on the deck. The last run can start
        beyond the edge once the deck is a whisker over a pitch; scanning out
        there would find nothing and lose a board that is genuinely laid. */
-    const vScan=Math.min(Math.max((v0+v1)/2,ax.v0),ax.v1-Math.min(1,stackDimMm/1000));
-    const segs=ax.scan(vScan);
+    const vScan=Math.min(Math.max((v0+v1)/2,fieldV0),fieldV1-Math.min(1,stackDimMm/1000));
+    const segs=ax.scan(vScan)
+      .map(sg=>[sg[0]+inset,sg[1]-inset])
+      .filter(sg=>sg[1]>sg[0]);
     /* per segment, never on the sum: two 1800mm segments either side of a gap
        need a board each, not one board between them */
     const boards=segs.reduce((t,sg)=>t+Math.ceil((sg[1]-sg[0])/lenMm),0);
@@ -3946,7 +3954,9 @@ function deckingBoardLayout(dir){
        running past the deck edge on the last run. */
     rows.push({v0,v1,vMid:vScan,vCover:v0+coverMm,vEdge:v0+pitchMm,segs,boards});
   }
-  return {dir,boardProd,coverMm,gapMm,pitchMm,lenMm,runLenMm:ax.u1-ax.u0,
+  return {dir,boardProd,coverMm,gapMm,pitchMm,lenMm,
+          frameInsetMm:inset,
+          runLenMm:Math.max(0,(ax.u1-ax.u0)-inset*2),
           stackDimMm,effectiveStackMm,overhangMm:effectiveStackMm-stackDimMm,
           rows,runs,
           boardsPerRun:rows.reduce((m,r)=>Math.max(m,r.boards),0),
@@ -3968,6 +3978,19 @@ function deckingStackDimKey(dir){
   if(acrossTheWidth)return 'a';
   return (deckingState().shape==='tshape')?'d':'b';
 }
+/* The ring of boards round the outline, counted the same way the order counts
+   them: off the Frame product's own length, so the panel and the materials list
+   can never quote different numbers. */
+function deckingFrameBoards(){
+  const d=deckingState();
+  if(!d.pictureFrame)return 0;
+  const perimM=deckingPerimeter();
+  if(!(perimM>0))return 0;
+  const frameProd=deckingPick('Frame');
+  const lenM=(frameProd&&+frameProd.lengthM)||(deckingBoardLengthMm()/1000);
+  return lenM>0?Math.ceil(perimM/lenM):0;
+}
+
 /* Runs only when the rep presses the button. Nothing here happens while they
    are typing: a size they enter is the size they get until they ask for it to
    be optimised. */
@@ -4005,7 +4028,9 @@ function deckingOptimise(){
   }
   /* re-read the layout at the size just set, so the panel quotes the order */
   const fin=deckingBoardLayout(best.dir);
+  const frameBoards=deckingFrameBoards();
   d.optimised={dim:key,original:raw,effective:+d.dims[key]||raw,trimMm:Math.round(d.dims[key]-raw),
+               frameBoards,totalWithFrame:fin.totalBoards+frameBoards,
                dir:best.dir,runs:fin.runs,pitchMm:Math.round(pitch),
                stackMm:Math.round(fin.effectiveStackMm),overhangMm:Math.round(fin.overhangMm),
                runLenMm:Math.round(fin.runLenMm),boardLenMm:Math.round(fin.lenMm),
@@ -4044,8 +4069,13 @@ function deckingRenderOptimised(){
                `${o.runLenMm}mm — ${perRun<=1?'no joins needed':perRun+' lengths per run'}`)}
         ${cell('Runs required',`${o.runs} rows × ${o.pitchMm}mm`,
                `= ${o.stackMm}mm laid${o.overhangMm>0?' ('+o.overhangMm+'mm trimmed on site)':' — exact fit'}`)}
-        ${cell('Total boards',`${o.boards} lengths`,
-               `vs ${o.otherBoards} running the other way${o.saving>0?' (saves '+o.saving+')':''}`,true)}
+        ${cell('Total boards',
+               o.frameBoards>0
+                 ? `${o.boards} + ${o.frameBoards} = ${o.totalWithFrame} lengths`
+                 : `${o.boards} lengths`,
+               o.frameBoards>0
+                 ? `field ${o.boards} + picture frame ${o.frameBoards} · field vs ${o.otherBoards} the other way${o.saving>0?' (saves '+o.saving+')':''}`
+                 : `vs ${o.otherBoards} running the other way${o.saving>0?' (saves '+o.saving+')':''}`,true)}
         ${cell(`Adjusted ${o.dim.toUpperCase()} dimension`,`${o.effective}mm`,sizeSub)}
       </div>
       ${o.saving===0?'<div style="font-size:12px;color:#555;margin-top:8px;padding-top:8px;border-top:1px solid #c8e6c9">Both directions use the same number of boards — the layout shown is the one with fewer cuts.</div>':''}
@@ -4157,10 +4187,10 @@ function deckingAutoItems(){
     });
     if(fasciaTotal>0)out[fasciaProd.code]=fasciaTotal;
   }
-  /* ── Timber posts for a raised deck ───────────────────────────────────── */
-  if(deckingNeedsPosts()&&sub.pads>0){
+  /* ── Timber posts — one per pad, whatever the deck height ─────────────── */
+  if(sub.pads>0){
     const postProd=deckingPick('Post');
-    /* one post per pad, four 600mm posts out of each 2.4m length */
+    /* four posts out of each 2.4m length, whatever length they are cut to */
     if(postProd)out[postProd.code]=Math.ceil(sub.pads/POSTS_PER_LENGTH);
   }
 
@@ -4233,13 +4263,22 @@ function deckingSetPictureFrame(on){
 function deckingSetHeight(mm){
   const d=deckingState();
   d.deckHeightMm=Math.max(0,+mm||0);
-  const note=document.getElementById('dk_height_note');
-  if(note)note.style.display=deckingNeedsPosts()?'':'none';
+  deckingRenderHeightNote();
   deckingCalc();
 }
-/* Below the trigger the deck sits straight on its pads and needs no legs. */
-function deckingNeedsPosts(){
-  return (+deckingState().deckHeightMm||0)>POST_HEIGHT_TRIGGER_MM;
+function deckingRenderHeightNote(){
+  const note=document.getElementById('dk_height_note');if(!note)return;
+  const pads=deckingSubframeCounts().pads;
+  const cut=deckingPostCutMm();
+  note.innerHTML=pads>0
+    ? `Posts cut to <b>${cut}mm</b> — ${pads} post${pads===1?'':'s'}, ${POSTS_PER_LENGTH} per 2.4m length`
+    : `Posts cut to <b>${cut}mm</b> (${POSTS_PER_LENGTH} per 2.4m length)`;
+}
+/* Every pad gets a post: it is what lifts the joist clear of the ground and the
+   membrane. The deck height does not decide whether there are posts, only how
+   long each one is cut. */
+function deckingPostCutMm(){
+  return Math.max(POST_MIN_CUT_MM,+deckingState().deckHeightMm||0);
 }
 function deckingSetFascia(side,on){
   const d=deckingState();
@@ -4273,8 +4312,7 @@ function deckingRenderFinishing(){
   if(pf)pf.checked=!!d.pictureFrame;
   const h=document.getElementById('dk_height');
   if(h)h.value=d.deckHeightMm||'';
-  const note=document.getElementById('dk_height_note');
-  if(note)note.style.display=deckingNeedsPosts()?'':'none';
+  deckingRenderHeightNote();
   deckingRenderFasciaSides();
 }
 
@@ -4351,6 +4389,7 @@ function deckingCalc(){
   }
   deckingRenderMaterials(res);
   deckingRenderFasciaSides();   /* the side lengths on the chips follow the dims */
+  deckingRenderHeightNote();    /* pad count moves with the deck */
   deckingRenderDirection();
   deckingRenderDerived();   /* calculated sides follow the dims, whatever changed them */
   deckingDrawCanvas();
@@ -4373,9 +4412,13 @@ function deckingRenderMaterials(res){
     const qtyCell=fixed
       ? `<b>${qty}</b>`
       : `<input class="num" type="number" min="0" step="1" value="${qty}" style="width:74px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)">${tag}`;
+    /* the fitter needs the cut length on the picking line, not just the count */
+    const extra=(p.cat==='Post')
+      ? ` <span style="color:#8a969a;font-size:11px">— cut to ${deckingPostCutMm()}mm · ${deckingSubframeCounts().pads} posts needed</span>`
+      : '';
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${p.code}</td>
-      <td>${esc(p.name)} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
+      <td>${esc(p.name)}${extra} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
       <td class="r">£${money(sell)}</td>
       <td class="c">${qtyCell}</td>
       <td class="r">£${money(Math.round(qty*sell*100)/100)}</td>
