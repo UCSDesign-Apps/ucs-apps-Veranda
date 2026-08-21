@@ -3699,38 +3699,66 @@ function drawSubframePlan(){
     ctx.fillText(label,0,0);
     ctx.restore();
   };
+  /* Every one of these is a centreline-to-centreline figure: the position
+     arrays hold the centre of each member, so the difference between two
+     neighbours IS the c/c spacing joinery is always specified in.
+     Zones: the two grid spacings take the margins the grid runs out into (which
+     swap when the board direction rotates), and the overall deck size takes the
+     opposite two — so a spacing label can never land on a size label. Anything
+     with no room to sit is dropped; the written summary below the drawing always
+     carries all three, so nothing is ever lost. */
+  const uSpanPx=(alongA?b.w:b.h)*k, vSpanPx=(alongA?b.h:b.w)*k;
+
   /* joist centres — measured along U, pushed out across V */
   let jStepMm=0;
   if(c.joistU.length>=2){
     jStepMm=Math.round(c.joistU[1]-c.joistU[0]);
-    dim(P(c.joistU[0],vMin),P(c.joistU[1],vMin),[outV[0]*16,outV[1]*16],
-        '#6b4f2a',jStepMm+'mm');
+    if(uSpanPx>120)dim(P(c.joistU[0],vMin),P(c.joistU[1],vMin),[outV[0]*13,outV[1]*13],
+        '#6b4f2a',jStepMm+'mm c/c');
   }
   /* pad centres — measured along V, pushed out across U */
   let pStepMm=0;
   const firstPadJoist=c.padJoists[0];
   if(firstPadJoist&&firstPadJoist.vs.length>=2){
     pStepMm=Math.round(firstPadJoist.vs[1]-firstPadJoist.vs[0]);
-    dim(P(uMin,firstPadJoist.vs[0]),P(uMin,firstPadJoist.vs[1]),[outU[0]*18,outU[1]*18],
-        '#c0392b','pads '+pStepMm+'mm');
+    if(vSpanPx>80)dim(P(uMin,firstPadJoist.vs[0]),P(uMin,firstPadJoist.vs[1]),[outU[0]*13,outU[1]*13],
+        '#c0392b','pads '+pStepMm+'mm c/c');
   }
-  /* noggin centres — labelled inside the first bay, where they are */
+  /* noggin centres — labelled inside the first bay, where they are, but only
+     when the bay is deep enough to hold the text without sitting on a member */
   let nStepMm=0;
   const bay0=c.nogginsByBay[0], run0=bay0&&bay0.runs[0];
   if(run0&&run0.vs.length>=2){
     nStepMm=Math.round(run0.vs[1]-run0.vs[0]);
-    const pt=P((bay0.u0+bay0.u1)/2,(run0.vs[0]+run0.vs[1])/2);
-    ctx.fillStyle='#8a6a2a';ctx.font='8px Helvetica,Arial';
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('noggins '+nStepMm+'mm',pt[0],pt[1]);
+    const bayPx=Math.abs(bay0.u1-bay0.u0)*k;
+    const txt='noggins '+nStepMm+'mm c/c';
+    ctx.font='8px Helvetica,Arial';
+    /* measureText is guarded: a context that does not return metrics would
+       otherwise take the whole drawing down */
+    const tm=ctx.measureText&&ctx.measureText(txt);
+    const halfW=((tm&&tm.width)||txt.length*8*0.55)/2;
+    /* The first bay hugs the deck edge, so this label would otherwise hang out
+       into the margin and land on the pad dimension. Keep it inside the deck,
+       and drop it altogether if the deck is too narrow to hold it. */
+    const dx0=Math.min(X(b.x0),X(b.x1)), dx1=Math.max(X(b.x0),X(b.x1));
+    const dy0=Math.min(Y(b.y0),Y(b.y1)), dy1=Math.max(Y(b.y0),Y(b.y1));
+    if(bayPx>16&&uSpanPx>140&&(dx1-dx0)>halfW*2+8){
+      const pt=P((bay0.u0+bay0.u1)/2,(run0.vs[0]+run0.vs[1])/2);
+      const lx=Math.max(dx0+halfW+4,Math.min(dx1-halfW-4,pt[0]));
+      const ly=Math.max(dy0+6,Math.min(dy1-6,pt[1]));
+      ctx.fillStyle='#8a6a2a';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(txt,lx,ly);
+    }
   }
 
-  /* Overall size, out past the spacing dimensions */
+  /* Overall deck size — in the two margins the spacings do not use, so the
+     rings never stack: width along the bottom, depth up the right-hand side. */
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';
   ctx.font='700 11px Helvetica,Arial';ctx.textBaseline='middle';
-  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.max(8,Y(b.y0)-24));
+  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.min(H-8,Y(b.y1)+18));
   ctx.save();
-  ctx.translate(Math.max(8,X(b.x0)-30),H/2);ctx.rotate(-Math.PI/2);
+  ctx.translate(Math.min(W-8,X(b.x1)+18),H/2);ctx.rotate(-Math.PI/2);
   ctx.fillText(Math.round(b.h)+'mm',0,0);
   ctx.restore();
 
@@ -3740,11 +3768,11 @@ function drawSubframePlan(){
   const pStep=pStepMm||PAD_SPACING_MM;
   const pieces=c.joists.reduce((n,j)=>n+j.spans.length,0);
   dkPlanNote('dk_plan_note',
-    c.numJoists+' joists @ '+jStep+'mm'+
+    c.numJoists+' joists @ '+jStep+'mm c/c'+
     (pieces>c.numJoists?' ('+pieces+' pieces, cut to the outline)':'')+
     ' · '+(c.joistLengthMm/1000).toFixed(1)+'m · '+
-    c.nogginsTotal+' noggins'+(nStepMm?' @ '+nStepMm+'mm':'')+', staggered · '+
-    c.pads+' pads @ '+pStep+'mm on '+c.padJoists.length+' bearing joists');
+    c.nogginsTotal+' noggins'+(nStepMm?' @ '+nStepMm+'mm c/c':'')+', staggered · '+
+    c.pads+' pads @ '+pStep+'mm c/c on '+c.padJoists.length+' bearing joists');
 }
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
