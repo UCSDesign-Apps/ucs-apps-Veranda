@@ -2851,7 +2851,11 @@ function autoFitting(manual){
   const dkRemoved=dkBefore-state.fitting.length;
   const dkFit=deckingFitTotal();
   if(dkFit>0){
-    state.fitting.push({desc:`${DECK_FIT_DESC} — ${deckingArea()}m² @ £${money(deckingFitRate())}/m²`,
+    /* Area only. The £/m² rate still drives dkFit and still lives in Admin, but
+       it is not spelled out on a line the customer reads. The filter above
+       matches on the DECK_FIT_DESC prefix, so a quote saved with the older
+       "@ £45/m²" wording is picked up and rewritten on its next sync. */
+    state.fitting.push({desc:`${DECK_FIT_DESC} — ${deckingArea()}m²`,
                         price:dkFit,qty:1});
     if(!dkRemoved)dkAdded=1;
   }
