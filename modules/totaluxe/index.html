@@ -819,13 +819,14 @@ body.print-internal .internal-notes-only{display:block !important;}
               <div id="dk_fascia_sides" style="display:flex;gap:8px;flex-wrap:wrap"></div>
             </div>
 
-            <!-- Deck height / raised deck -->
+            <!-- Maximum fall depth (was "deck height"): same measurement, same
+                 post-cut maths — deckHeightMm/deckingPostCutMm are unchanged. -->
             <div>
-              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Deck Height</div>
-              <div class="sub" style="margin-bottom:8px">A 4×4 timber post carries every pad whatever the height — it is what lifts the joist clear of the ground. The height here only sets how long each post is cut.</div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Maximum Fall Depth</div>
+              <div class="sub" style="margin-bottom:8px">A 4×4 timber post carries every pad whatever the fall — it is what lifts the joist clear of the ground. The figure here only sets how long each post is cut.</div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <label for="dk_height" style="font-size:13px;color:#555">Deck height above ground (mm)</label>
-                <input type="number" id="dk_height" min="0" step="10" placeholder="0 (ground level)"
+                <label for="dk_height" style="font-size:13px;color:#555">Maximum fall depth (mm)</label>
+                <input type="number" id="dk_height" min="0" step="10" placeholder="0 (level)"
                   oninput="deckingSetHeight(+this.value)"
                   style="width:160px;padding:8px;border:1px solid #cfd8da;border-radius:8px;font-size:14px">
               </div>
@@ -2777,7 +2778,13 @@ function pushOrIncrement(arr,item){
   if(ex)ex.qty=(ex.qty||1)+1;
   else arr.push(item);
 }
-function autoFitting(){
+/* `manual` = the rep pressed the button and means "add another one of these".
+   No argument = a background sync from applyConfig(), which runs on every config
+   change AND on every quote recall (loadQuote -> initConfig -> onModel ->
+   applyConfig). That path MUST be idempotent: the old code bumped qty on every
+   matching line, so simply opening a saved quote four times charged the customer
+   four times the install. */
+function autoFitting(manual){
   if(!state.config.model)return;
   const cf=state.config;
   const suggested=[];
@@ -2849,15 +2856,34 @@ function autoFitting(){
     if(!dkRemoved)dkAdded=1;
   }
 
-  /* Merge into the fitting list — an existing line gains qty rather than repeating */
   let added=dkAdded,bumped=0;
-  suggested.forEach(s=>{
-    const ex=state.fitting.find(f=>f.desc===s.desc);
-    if(ex){ex.qty=(ex.qty||1)+1;bumped++;}
-    else{state.fitting.push(s);added++;}
-  });
-  if(added||bumped||dkRemoved){
-    renderPricing();
+  if(manual){
+    /* Explicit press: an existing line gains qty — the rep is stacking a second
+       side, a second set of doors, and so on. */
+    suggested.forEach(s=>{
+      const ex=state.fitting.find(f=>f.desc===s.desc);
+      if(ex){ex.qty=(ex.qty||1)+1;bumped++;}
+      else{state.fitting.push(s);added++;}
+    });
+  }else{
+    /* Background sync: add only what is genuinely missing and never touch an
+       existing line's qty. Suggested quantities are summed per description first
+       (splitBands can suggest the same band twice, e.g. 7m = 3m + 4m), so a line
+       that has to be created starts at the right qty rather than at 1. */
+    const target={};
+    suggested.forEach(s=>{target[s.desc]=(target[s.desc]||0)+(s.qty||1);});
+    Object.keys(target).forEach(desc=>{
+      if(state.fitting.some(f=>f.desc===desc))return;
+      const s=suggested.find(x=>x.desc===desc);
+      state.fitting.push({desc,price:s.price,qty:target[desc]});
+      added++;
+    });
+  }
+  if(added||bumped||dkRemoved)renderPricing();
+  /* Only the button talks back. The auto path re-writes the decking line on every
+     run by design, so toasting here would pop "Fitting costs updated" every time
+     a quote is opened. */
+  if(manual&&(added||bumped||dkRemoved)){
     toast('Fitting costs updated ('+added+' line'+(added===1?'':'s')+' added'+(bumped?', '+bumped+' qty increased':'')+')');
   }
 }
@@ -3748,15 +3774,10 @@ function drawSubframePlan(){
     }
   }
 
-  /* Overall deck size — in the two margins the spacings do not use, so the
-     rings never stack: width along the bottom, depth up the right-hand side. */
-  ctx.fillStyle='#5a6a6e';ctx.textAlign='center';
-  ctx.font='700 11px Helvetica,Arial';ctx.textBaseline='middle';
-  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.min(H-8,Y(b.y1)+18));
-  ctx.save();
-  ctx.translate(Math.min(W-8,X(b.x1)+18),H/2);ctx.rotate(-Math.PI/2);
-  ctx.fillText(Math.round(b.h)+'mm',0,0);
-  ctx.restore();
+  /* The overall deck size is deliberately NOT drawn here. It is already on the
+     document page in the Specification block and beside the shape on screen, and
+     repeating it on the plan only competed with the spacing dimensions, which are
+     the numbers an installer actually works to. */
 
   /* The counts go underneath in HTML, where a long line wraps */
   const runSpan=(c.dir==='b')?b.h:b.w;
@@ -4999,7 +5020,16 @@ function renderCostings(){
     brkHTML+=`<tr><td>${sideNames[s]} side — ${hesc(opt)}</td><td class="r">${money2(sc)}</td></tr>`;
   });
   brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Materials subtotal (ex-VAT, ex-markup)</td><td class="r">${money2(Math.round(materialCostTotal*100)/100)}</td></tr>`;
-  brkHTML+=`<tr><td>Installation &amp; Fitting</td><td class="r">${money2(fittingContract)}</td></tr>`;
+  /* Itemised, not a lump sum: state.fitting carries the veranda install bands,
+     any per-side charges AND the composite decking install, and the rep needs to
+     see the decking line here rather than take the total on trust. This is the
+     same list Pricing totals, so the two figures cannot drift. */
+  brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Installation &amp; Fitting</td><td class="r"></td></tr>`;
+  state.fitting.forEach(f=>{
+    const q=+f.qty||1, line=Math.round((+f.price||0)*q*100)/100;
+    brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(f.desc||'Fitting')}${q>1?` × ${q}`:''}</td><td class="r">${money2(line)}</td></tr>`;
+  });
+  brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Installation subtotal</td><td class="r">${money2(fittingContract)}</td></tr>`;
   if(svParts>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — parts</td><td class="r">${money2(svParts)}</td></tr>`;
   if(svLabour>0)brkHTML+=`<tr style="color:#666"><td>Survey extras — labour</td><td class="r">${money2(svLabour)}</td></tr>`;
   if(addCostsTotal>0){
@@ -6411,7 +6441,7 @@ function renderDocuments(){
           <div>Fascia<br><b style="color:#2b323a">${anyFascia?esc(dkFasciaTxt):'None'}</b></div>
           <div>Picture frame<br><b style="color:#2b323a">${dk.pictureFrame?esc(dkFrameTxt):'None'}</b></div>
           <div>Steps<br><b style="color:#2b323a">${dkSteps?esc(dkSteps):'None'}</b></div>
-          <div>Height above ground<br><b style="color:#2b323a">${dk.deckHeightMm>0?dk.deckHeightMm+'mm':'Ground level'}</b></div>
+          <div>Maximum fall depth<br><b style="color:#2b323a">${dk.deckHeightMm>0?dk.deckHeightMm+'mm':'Level'}</b></div>
         </div>
       </div>
 
@@ -6425,10 +6455,11 @@ function renderDocuments(){
         <div style="min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">
           ${docImg('decklifestyle','1','COMPOSITE DECKING',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')}
         </div>
-        <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:#333">
+        <div style="display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:#333">
           <div style="flex:0 0 auto;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--brand)">Why Composite Decking?</div>
           <p style="margin:0 0 6px;font-size:11.5px;line-height:1.5">Our composite boards combine recycled wood fibre and polymer for a surface that won't rot, warp, splinter or fade like traditional timber.</p>
-          <p style="margin:0;font-size:11.5px;line-height:1.5">Virtually maintenance-free &mdash; no sanding, staining or sealing. Just an occasional wash keeps it looking its best, backed by a manufacturer warranty.</p>
+          <p style="margin:0 0 6px;font-size:11.5px;line-height:1.5">Each board is <b>foil-wrapped</b> for a durable, realistic woodgrain finish that resists scratches, stains and moisture &mdash; and carries a <b>30-year colourfast guarantee</b> against fading.</p>
+          <p style="margin:0;font-size:11.5px;line-height:1.5">Virtually maintenance-free: no sanding, staining or sealing. An occasional wash keeps it looking its best, season after season.</p>
         </div>
       </div>
 
