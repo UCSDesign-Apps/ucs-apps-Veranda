@@ -874,9 +874,9 @@ body.print-internal .internal-notes-only{display:block !important;}
               <span><span style="display:inline-block;width:24px;height:4px;background:#7b4f2a;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Joist @ 300c/c</span>
               <span><span style="display:inline-block;width:14px;height:4px;background:#d2b48c;vertical-align:middle;margin-right:4px;border-radius:1px"></span>Noggin staggered</span>
               <span><span style="display:inline-block;width:10px;height:10px;background:#ed1c2d;vertical-align:middle;margin-right:4px;border-radius:50%"></span>Concrete pad</span>
-              <span><span style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Board run</span>
-              <span><span style="display:inline-block;width:20px;height:10px;background:rgba(169,120,79,0.22);border:1px dashed #a9784f;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Overhang — trimmed</span>
-              <span><span style="display:inline-block;width:20px;height:10px;background:#8a5f38;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Picture frame</span>
+              <span><span id="dk_lg_board" style="display:inline-block;width:20px;height:10px;background:#c8a46e;vertical-align:middle;margin-right:4px;border-radius:2px;border:1px solid rgba(0,0,0,.12)"></span><span id="dk_lg_board_txt">Board run</span></span>
+              <span><span id="dk_lg_over" style="display:inline-block;width:20px;height:10px;background:rgba(169,120,79,0.22);border:1px dashed #a9784f;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Overhang — trimmed</span>
+              <span id="dk_lg_frame_wrap"><span id="dk_lg_frame" style="display:inline-block;width:20px;height:10px;background:#8a5f38;vertical-align:middle;margin-right:4px;border-radius:2px;border:1px solid rgba(0,0,0,.12)"></span><span id="dk_lg_frame_txt">Picture frame</span></span>
               <span style="color:#ed1c2d">— — Trim/cut</span>
             </div>
           </div>
@@ -1068,7 +1068,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="sub">Decking catalogue. <b>HD</b> and <b>Embossed</b> rows appear as selectable board colours; every other category appears as a qty-based extra. Prices are ex-VAT, per unit.</div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th style="width:110px">Code</th><th style="width:100px">Category</th><th>Name</th><th class="r" style="width:90px">Price £</th><th style="width:80px">Unit</th><th class="r" style="width:80px">Width mm</th><th class="r" style="width:80px">Gap mm</th><th class="r" style="width:80px">Length m</th><th class="r" style="width:80px">Auto /m²</th><th class="c" style="width:60px">Scale</th><th style="width:30px"></th></tr></thead>
+            <thead><tr><th style="width:110px">Code</th><th style="width:100px">Category</th><th>Name</th><th class="r" style="width:90px">Price £</th><th style="width:80px">Unit</th><th class="c" style="width:60px">Colour</th><th class="r" style="width:80px">Width mm</th><th class="r" style="width:80px">Gap mm</th><th class="r" style="width:80px">Length m</th><th class="r" style="width:80px">Auto /m²</th><th class="c" style="width:60px">Scale</th><th style="width:30px"></th></tr></thead>
             <tbody id="adminDeckRows"></tbody>
           </table></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -1077,8 +1077,9 @@ body.print-internal .internal-notes-only{display:block !important;}
             <button class="btn sm" onclick="adminDeckExportCSV()">⬇ Export CSV</button>
             <button class="btn sm" onclick="adminDeckReset()" style="color:#ed1c2d;border-color:#ed1c2d">↺ Reset to seed</button>
           </div>
-          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm</code> — a header row is optional and every column after <code>unit</code> may be omitted. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.
+          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm,hex</code> — a header row is optional and every column after <code>unit</code> may be omitted. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards to bake the change into the file.
             <br><b>Width mm</b>: board cover width — the visible face. Boards only.
+            <br><b>Colour</b>: the shade this board is drawn in on the layout diagram and the colour tiles. Boards only — left alone it is picked from the board name.
             <br><b>Gap mm</b>: expansion gap beside the board. Width + gap is the pitch, and the pitch is what decides how many runs fit the deck. Blank uses 5mm; enter 0 for boards laid tight. Boards only.
             <br><b>Length m</b>: length of one unit — the board length for boards, and what converts perimeter into trim lengths and joist metres into timber lengths.
             <br><b>Auto /m²</b>: quantity per m² of deck, ordered automatically (clips seed at 1.5/m²). Leave blank for items the rep enters by hand.
@@ -1321,14 +1322,14 @@ function deckingStepTreadDepthM(){
    the eight products are one flat list and the width travels with the board. */
 const DECKING_SEED=[
   /* ── Boards (8) — cover width in mm, 3.6m lengths ───────────────────────── */
-  {code:'TL0611347',cat:'Board',name:'HD — Dove Grey',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611348',cat:'Board',name:'HD — Charcoal',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611349',cat:'Board',name:'HD — Teak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611350',cat:'Board',name:'HD — Antique Oak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611360',cat:'Board',name:'Embossed — Dove Grey',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611361',cat:'Board',name:'Embossed — Charcoal',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611362',cat:'Board',name:'Embossed — Teak',price:20.00,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
-  {code:'TL0611363',cat:'Board',name:'Embossed — Silver Birch',price:20.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6},
+  {code:'TL0611347',cat:'Board',name:'HD — Dove Grey',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#9a9a94'},
+  {code:'TL0611348',cat:'Board',name:'HD — Charcoal',price:21.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#3f4245'},
+  {code:'TL0611349',cat:'Board',name:'HD — Teak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#8a5a34'},
+  {code:'TL0611350',cat:'Board',name:'HD — Antique Oak',price:22.75,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#a5734a'},
+  {code:'TL0611360',cat:'Board',name:'Embossed — Dove Grey',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#9a9a94'},
+  {code:'TL0611361',cat:'Board',name:'Embossed — Charcoal',price:19.25,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#3f4245'},
+  {code:'TL0611362',cat:'Board',name:'Embossed — Teak',price:20.00,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#8a5a34'},
+  {code:'TL0611363',cat:'Board',name:'Embossed — Silver Birch',price:20.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#b8b0a4'},
   /* ── Trim — quantity = perimeter / lengthM ──────────────────────────────── */
   {code:'TL0611380',cat:'Trim',name:'Angle Trim — Colour Matched',price:16.00,unit:'length',lengthM:3.0},
   /* ── Subframe timber — joists and noggins are counted separately, because the
@@ -1422,7 +1423,7 @@ function deckingTopUpCatalogue(list){
   /* Fields the calculator reads off a row. A catalogue saved before one of them
      existed simply has no value, so fill it from the seed — but never overwrite
      a value that is already there, which is the admin's own edit. */
-  const WIRING=['perM2','perJoistM','lengthM','widthMm','gapMm','scaleBoard'];
+  const WIRING=['perM2','perJoistM','lengthM','widthMm','gapMm','hex','scaleBoard'];
   DECKING_SEED.forEach(seed=>{
     const row=list.find(p=>p&&p.code===seed.code);
     if(!row){list.push(clone(seed));changed++;return;}
@@ -3089,6 +3090,45 @@ function renderPricing(){
 }
 /* ===== COMPOSITE DECKING ===================================================== */
 const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Antique Oak':'#a4794b','Chocolate':'#4e352a','Silver Birch':'#b9b2a6'};
+/* What colour to draw a board. The product's own hex wins — that is the one an
+   admin can tune — then the shade table by colour name, then a guess from the
+   name so a board added by CSV still draws as something sensible. */
+function deckingBoardHex(prod){
+  if(prod&&/^#[0-9a-f]{6}$/i.test(String(prod.hex||'')))return prod.hex;
+  const raw=(prod&&prod.name)||'';
+  const tail=raw.split('—').pop().trim();
+  if(DECK_HEX[tail])return DECK_HEX[tail];
+  const name=raw.toLowerCase();
+  if(name.includes('charcoal')||name.includes('anthracite'))return '#3f4245';
+  if(name.includes('dove')||name.includes('grey')||name.includes('gray'))return '#9a9a94';
+  if(name.includes('teak'))return '#8a5a34';
+  if(name.includes('oak'))return '#a5734a';
+  if(name.includes('birch')||name.includes('silver'))return '#b8b0a4';
+  if(name.includes('walnut')||name.includes('brown'))return '#6b4a2f';
+  return '#c8a46e';   /* generic composite tan */
+}
+/* pct negative = darker, positive = lighter — used for the alternate board run */
+function shadeHex(hex,pct){
+  if(!/^#[0-9a-f]{6}$/i.test(String(hex||'')))hex='#c8a46e';
+  const n=parseInt(hex.slice(1),16);
+  const f=v=>Math.max(0,Math.min(255,Math.round(v+255*pct/100)));
+  return '#'+((1<<24)+(f((n>>16)&255)<<16)+(f((n>>8)&255)<<8)+f(n&255)).toString(16).slice(1);
+}
+/* A dark board needs a light hairline between runs and vice versa. */
+function hexIsDark(hex){
+  const n=parseInt(String(hex||'').slice(1),16);
+  if(isNaN(n))return false;
+  /* perceived brightness, so mid greens/browns land on the right side */
+  return (((n>>16)&255)*299+((n>>8)&255)*587+(n&255)*114)/1000<140;
+}
+/* The board the deck is laid in, and the board its border is cut from. */
+function deckingFieldHex(){
+  const d=deckingState();
+  return deckingBoardHex(d.colour?deckingProduct(d.colour):null);
+}
+function deckingFrameHex(){
+  return deckingBoardHex(deckingFrameProduct()||null);
+}
 
 function deckingState(){
   if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null,
@@ -3655,6 +3695,7 @@ function drawSubframePlan(){
    longer than a board, and the trim at the end of the segment either way. The
    joints are NOT staggered run to run. Staggering is the better bond, but it
    turns some runs into an extra piece the ordered count does not carry. */
+/* Fallbacks only — the live colours come from the chosen board. */
 const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
@@ -3705,9 +3746,9 @@ function drawBoardPlan(){
     const last=lay.rows[lay.rows.length-1];
     last.segs.forEach(sg=>{
       const bx=box(sg[0],ax.v1,sg[1],last.vCover);
-      ctx.fillStyle='rgba(169,120,79,0.22)';
-      ctx.fillRect(bx[0],bx[1],bx[2],bx[3]);
-      ctx.strokeStyle='#a9784f';ctx.lineWidth=1;
+      ctx.fillStyle=shadeHex(deckingFieldHex(),18);
+      ctx.globalAlpha=0.35;ctx.fillRect(bx[0],bx[1],bx[2],bx[3]);ctx.globalAlpha=1;
+      ctx.strokeStyle=deckingFieldHex();ctx.lineWidth=1;
       if(ctx.setLineDash)ctx.setLineDash([4,3]);
       ctx.strokeRect(bx[0]+0.5,bx[1]+0.5,bx[2]-1,bx[3]-1);
       if(ctx.setLineDash)ctx.setLineDash([]);
@@ -3718,12 +3759,20 @@ function drawBoardPlan(){
      twice the pitch puts half the stroke outside the clip, leaving exactly one
      board's width showing inside, and it follows a notched outline round its
      corners without any per-shape geometry. */
+  /* Drawn in the actual board colours, so the plan reads as the deck the
+     customer chose rather than as a generic tan. */
+  const baseHex=deckingFieldHex();
+  /* 8% darker reads well on a light board but vanishes on charcoal, so a dark
+     board gets a lighter alternate instead */
+  const altHex=shadeHex(baseHex,hexIsDark(baseHex)?10:-8);
   if(lay.frameInsetMm>0){
+    const frameHex=deckingFrameHex();
     const bandPx=Math.max(2,lay.frameInsetMm*k);
     ctx.lineJoin='miter';
-    ctx.strokeStyle=DK_BOARD_FRAME;ctx.lineWidth=bandPx*2;outline();ctx.stroke();
-    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=1;
-    ctx.stroke();   /* thin inner edge where the field meets the frame */
+    ctx.strokeStyle=frameHex;ctx.lineWidth=bandPx*2;outline();ctx.stroke();
+    /* the seam where the field meets the border, in whichever ink shows on it */
+    ctx.strokeStyle=hexIsDark(frameHex)?'rgba(255,255,255,0.25)':'rgba(0,0,0,0.28)';
+    ctx.lineWidth=1;ctx.stroke();
   }
   let cuts=0;
   lay.rows.forEach((row,r)=>{
@@ -3732,7 +3781,9 @@ function drawBoardPlan(){
          to the cover width, so the 5mm gap beside it stays open. */
       const bx=box(sg[0],row.v0,sg[1],Math.min(row.vCover,ax.v1));
       const rx=bx[0],ry=bx[1],rw=bx[2],rh=bx[3];
-      ctx.fillStyle=(r%2)?DK_BOARD_B:DK_BOARD_A;
+      /* alternate by run, not by segment — the pieces either side of a notch are
+         the same board and must not come out two different shades */
+      ctx.fillStyle=(r%2)?altHex:baseHex;
       ctx.fillRect(rx,ry,rw,rh);
       /* cuts: the butt joints down this segment, then the trim at its end */
       ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
@@ -3823,6 +3874,25 @@ function drawStepElevation(canvasId,treads,hasBorder){
   ctx.fillStyle='#555';ctx.font='10px Helvetica,Arial';ctx.textAlign='left';
   ctx.fillText(`${treads} step${treads>1?'s':''} · ${STEP_BOARDS_PER_TREAD} boards/tread (${depth}mm)`+
                (hasBorder?' · border nosing':''),10,122);
+}
+/* The legend swatches show the colours actually on the drawing, so a customer
+   looking at a charcoal plan does not see a tan key beside it. */
+function deckingRenderPlanLegend(){
+  const d=deckingState();
+  const base=deckingFieldHex();
+  const sw=(id,css)=>{const el=document.getElementById(id);if(el)Object.assign(el.style,css);};
+  const tx=(id,t)=>{const el=document.getElementById(id);if(el)el.textContent=t;};
+  const boardProd=d.colour?deckingProduct(d.colour):null;
+  sw('dk_lg_board',{background:base});
+  tx('dk_lg_board_txt',boardProd?`Board run — ${boardProd.name}`:'Board run');
+  sw('dk_lg_over',{background:shadeHex(base,18),borderColor:base});
+  const wrap=document.getElementById('dk_lg_frame_wrap');
+  if(wrap)wrap.style.display=d.pictureFrame?'':'none';
+  if(d.pictureFrame){
+    const fp=deckingFrameProduct();
+    sw('dk_lg_frame',{background:deckingFrameHex()});
+    tx('dk_lg_frame_txt',fp?`Picture frame — ${fp.name}`:'Picture frame');
+  }
 }
 function deckingRenderStepProfiles(){
   const card=document.getElementById('dk_step_profiles_card');
@@ -4493,11 +4563,11 @@ function deckingRenderFrameColour(){
       <span style="font-size:12px;font-weight:600">${esc(label)}${sub?`<br><span style="font-weight:400;color:#8a969a;font-size:11px">${esc(sub)}</span>`:''}</span>
     </label>`;
   const deckBoard=d.colour?deckingProduct(d.colour):null;
-  const matchedBg=deckBoard?(DECK_HEX[deckBoard.name.split('—').pop().trim()]||'#cccccc'):'#e3e8e9';
+  const matchedBg=deckBoard?deckingBoardHex(deckBoard):'#e3e8e9';
   const rows=[chip('','Match deck boards',deckBoard?deckBoard.name:'pick a board in Step 4',!d.frameColour,matchedBg,
                    deckBoard?((admin.imgmap.decking||{})[deckBoard.code]||''):'')]
     .concat(boards.map(pr=>chip(pr.code,pr.name,'',d.frameColour===pr.code,
-      DECK_HEX[pr.name.split('—').pop().trim()]||'#cccccc',(admin.imgmap.decking||{})[pr.code]||'')));
+      deckingBoardHex(pr),(admin.imgmap.decking||{})[pr.code]||'')));
   w.innerHTML=`<div style="font-size:12px;font-weight:600;margin-bottom:6px">Border colour</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${rows.join('')}</div>`;
 }
@@ -4581,7 +4651,7 @@ function deckingRenderColours(){
   if(!boards.length){w.innerHTML='<div style="color:#8a969a;font-size:12px">No boards configured. Add them in Admin → Decking.</div>';return;}
   w.innerHTML=boards.map(p=>{
     const src=(admin.imgmap.decking||{})[p.code]||'';
-    const bg=DECK_HEX[p.name.split('—').pop().trim()]||'#cccccc';
+    const bg=deckingBoardHex(p);
     const sel=d.colour===p.code;
     return `<label class="imgcard" style="cursor:pointer;border-width:${sel?'2px':'1px'};border-color:${sel?'var(--brand)':'var(--line)'}" onclick="deckingSetColour('${p.code}')">
       <div style="height:64px;background:${src?'#fff':bg};display:flex;align-items:center;justify-content:center;overflow:hidden">${src?`<img src="${src}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
@@ -4637,6 +4707,7 @@ function deckingCalc(){
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingRenderPlanLegend();
   deckingRenderStepProfiles();
   deckingRenderFasciaSides();   /* the side lengths on the chips follow the dims */
   deckingRenderHeightNote();    /* pad count moves with the deck */
@@ -5039,6 +5110,9 @@ function renderAdmin(){
         <td><input value="${esc(p.name)}" oninput="admin.decking[${i}].name=this.value"></td>
         <td class="r"><input class="num" value="${p.price}" oninput="admin.decking[${i}].price=+this.value||0"></td>
         <td><input value="${esc(p.unit||'each')}" oninput="admin.decking[${i}].unit=this.value"></td>
+        <td class="c">${p.cat==='Board'
+          ? `<input type="color" value="${deckingBoardHex(p)}" title="Colour used for this board on the layout diagram" oninput="admin.decking[${i}].hex=this.value;renderDecking()" style="width:44px;height:30px;border:none;background:none;cursor:pointer;padding:0">`
+          : '<span style="color:#c9d1d3">—</span>'}</td>
         <td class="r"><input class="num" value="${p.widthMm||''}" placeholder="—" title="Board cover width in mm — boards only" oninput="admin.decking[${i}].widthMm=+this.value||0"></td>
         <td class="r"><input class="num" value="${p.gapMm==null?'':p.gapMm}" placeholder="${p.cat==='Board'?DEFAULT_BOARD_GAP_MM:'—'}" title="Expansion gap beside the board in mm — boards only. Blank uses ${DEFAULT_BOARD_GAP_MM}mm; 0 means no gap." oninput="admin.decking[${i}].gapMm=+this.value||0"></td>
         <td class="r"><input class="num" value="${p.lengthM||''}" placeholder="—" title="Length of one unit in metres — for a board this is the board length" oninput="admin.decking[${i}].lengthM=+this.value||0"></td>
@@ -5299,8 +5373,8 @@ function adminDeckImportCSV(input){
       const out=[],bad=[];
       const num=v=>{const n=parseFloat(String(v).replace(/[£,\s]/g,''));return isNaN(n)?null:n;};
       body.forEach((r,ix)=>{
-        const [code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm]=
-          [0,1,2,3,4,5,6,7,8,9].map(i=>String(r[i]==null?'':r[i]).trim());
+        const [code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm,hex]=
+          [0,1,2,3,4,5,6,7,8,9,10].map(i=>String(r[i]==null?'':r[i]).trim());
         const p=num(price);
         if(!code||!cat||!name||p===null){bad.push(ix+1);return;}
         const row={code,cat,name,price:Math.round(p*100)/100,unit:unit||'each'};
@@ -5310,6 +5384,7 @@ function adminDeckImportCSV(input){
         if(lm!==null&&lm>0)row.lengthM=lm;
         /* 0 is a real gap — a board laid tight — so only a blank cell is dropped */
         if(gap!==null&&gap>=0)row.gapMm=gap;
+        if(/^#[0-9a-f]{6}$/i.test(hex))row.hex=hex;
         if(/^(1|true|yes|y)$/i.test(scaleBoard))row.scaleBoard=true;
         out.push(row);
       });
@@ -5330,9 +5405,9 @@ function adminDeckImportCSV(input){
 }
 function adminDeckExportCSV(){
   const q=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
-  const csv=['code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm'].concat(
+  const csv=['code,cat,name,price,unit,perM2,widthMm,lengthM,scaleBoard,gapMm,hex'].concat(
     (admin.decking||[]).map(p=>[p.code,p.cat,p.name,p.price,p.unit,p.perM2||'',p.widthMm||'',p.lengthM||'',p.scaleBoard?1:'',
-                                p.gapMm==null?'':p.gapMm].map(q).join(','))
+                                p.gapMm==null?'':p.gapMm,p.hex||''].map(q).join(','))
   ).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
