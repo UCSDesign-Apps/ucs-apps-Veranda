@@ -3767,9 +3767,12 @@ function drawBoardPlan(force){
   /* Drawn in the actual board colours, so the plan reads as the deck the
      customer chose rather than as a generic tan. */
   const baseHex=deckingFieldHex();
-  /* 8% darker reads well on a light board but vanishes on charcoal, so a dark
-     board gets a lighter alternate instead */
-  const altHex=shadeHex(baseHex,hexIsDark(baseHex)?10:-8);
+  /* Every field board is the one colour the customer chose — a real deck does
+     not alternate. What separates one board from the next is the gap, so the
+     boards are painted to their cover width and a hairline is run down the edge
+     that faces it: light ink on a dark board, dark on a light one, since at this
+     scale the 5mm gap itself is well under a pixel. */
+  const edgeInk=hexIsDark(baseHex)?'rgba(255,255,255,0.22)':'rgba(0,0,0,0.18)';
   if(lay.frameInsetMm>0){
     const frameHex=deckingFrameHex();
     const bandPx=Math.max(2,lay.frameInsetMm*k);
@@ -3782,14 +3785,18 @@ function drawBoardPlan(force){
   let cuts=0;
   lay.rows.forEach((row,r)=>{
     row.segs.forEach(sg=>{
-      /* the board face — alternating shades so each run reads separately. Drawn
-         to the cover width, so the 5mm gap beside it stays open. */
+      /* the board face, drawn to the cover width so the gap beside it stays open */
       const bx=box(sg[0],row.v0,sg[1],Math.min(row.vCover,ax.v1));
       const rx=bx[0],ry=bx[1],rw=bx[2],rh=bx[3];
-      /* alternate by run, not by segment — the pieces either side of a notch are
-         the same board and must not come out two different shades */
-      ctx.fillStyle=(r%2)?altHex:baseHex;
+      ctx.fillStyle=baseHex;
       ctx.fillRect(rx,ry,rw,rh);
+      /* the long edge against the gap — the line that makes one board read as
+         separate from the next now they are the same colour */
+      ctx.strokeStyle=edgeInk;ctx.lineWidth=0.75;
+      ctx.beginPath();
+      if(alongA){ctx.moveTo(rx,ry+rh);ctx.lineTo(rx+rw,ry+rh);}
+      else      {ctx.moveTo(rx+rw,ry);ctx.lineTo(rx+rw,ry+rh);}
+      ctx.stroke();
       /* cuts: the butt joints down this segment, then the trim at its end */
       ctx.strokeStyle=DK_BOARD_CUT;ctx.lineWidth=2;ctx.lineCap='butt';
       if(ctx.setLineDash)ctx.setLineDash([6,4]);
