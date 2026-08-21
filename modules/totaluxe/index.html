@@ -771,18 +771,12 @@ body.print-internal .internal-notes-only{display:block !important;}
         </div>
 
         <div id="dk_cfg" style="display:none">
-          <!-- STEP 1 — SHAPE -->
+          <!-- STEP 1 — SHAPE, DIMENSIONS & STEPS -->
           <div class="card">
-            <div class="dk-step"><span class="dk-num">1</span> Deck Shape</div>
-            <div class="sub" style="margin-bottom:10px">Pick the shape that matches the deck footprint. The dimensions you need appear in Step 2.</div>
+            <div class="dk-step"><span class="dk-num">1</span> Deck Shape &amp; Dimensions</div>
+            <div class="sub" style="margin-bottom:10px">Pick the shape that matches the deck footprint, then enter its dimensions. All measurements in millimetres and the letters match the diagram. <b>Tap an edge of the diagram</b> to add steps to that side.</div>
             <div class="dk-shapes" id="dk_shapes"></div>
-          </div>
-
-          <!-- STEP 2 — DIMENSIONS + CANVAS -->
-          <div class="card">
-            <div class="dk-step"><span class="dk-num">2</span> Dimensions &amp; Steps</div>
-            <div class="sub" style="margin-bottom:10px">All measurements in millimetres. Letters match the diagram. <b>Tap an edge of the diagram</b> to add steps to that side.</div>
-            <div class="dk-dimgrid" id="dk_dims"></div>
+            <div class="dk-dimgrid" id="dk_dims" style="margin-top:14px"></div>
             <div id="dk_derived"></div>
             <div id="dk_summary" style="margin-top:12px"></div>
             <div id="dk_dir" style="margin-top:8px"></div>
@@ -804,7 +798,14 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_step_profiles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
           </div>
 
-          <!-- STEP 3 — FINISHING OPTIONS -->
+          <!-- STEP 2 — COLOUR -->
+          <div class="card">
+            <div class="dk-step"><span class="dk-num">2</span> Board Colour</div>
+            <div class="sub" style="margin-bottom:10px">Each board carries its own cover width, so the board you pick sets the running metres.</div>
+            <div class="imgbank" id="dk_colours"></div>
+          </div>
+
+          <!-- STEP 3 — FINISHING OPTIONS + OPTIMISE -->
           <div class="card" id="dk_finishing_card">
             <div class="dk-step"><span class="dk-num">3</span> Finishing Options</div>
 
@@ -847,16 +848,9 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_optimise_result" style="display:none"></div>
           </div>
 
-          <!-- STEP 4 — COLOUR -->
-          <div class="card">
-            <div class="dk-step"><span class="dk-num">4</span> Board Colour</div>
-            <div class="sub" style="margin-bottom:10px">Each board carries its own cover width, so the board you pick sets the running metres.</div>
-            <div class="imgbank" id="dk_colours"></div>
-          </div>
-
-          <!-- LAYOUT PLANS -->
+          <!-- STEP 4 — LAYOUT PLANS -->
           <div class="card" id="dk_diagrams_card" style="display:none">
-            <div class="dk-step" style="margin-bottom:6px">Layout Plans</div>
+            <div class="dk-step" style="margin-bottom:6px"><span class="dk-num">4</span> Subframe &amp; Board Layouts</div>
             <div class="sub" style="margin-bottom:10px">Subframe plan (left) and board layout plan (right). Tap either to enlarge.</div>
             <div id="dk_diagrams_grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div id="dk_plan_pane">
@@ -867,6 +861,7 @@ body.print-internal .internal-notes-only{display:block !important;}
               <div id="dk_board_pane">
                 <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Board Layout</div>
                 <canvas id="dk_board_canvas" onclick="deckingZoomPlan('board')" title="Tap to enlarge" style="width:100%;display:block;cursor:zoom-in;border:1px solid var(--line);border-radius:8px;background:#fafafa"></canvas>
+                <div id="dk_board_wait" style="display:none;border:1px dashed var(--line);border-radius:8px;background:#f6f7f8;color:#8a969a;font-size:11.5px;text-align:center;padding:26px 12px;line-height:1.5">Press <b>✦ Optimise Layout</b> in Step 3<br>to work out the board run</div>
                 <div id="dk_board_note" class="dk-plannote"></div>
               </div>
             </div>
@@ -3700,16 +3695,26 @@ const DK_BOARD_A='#d9c19a';     /* tan */
 const DK_BOARD_B='#a9784f';     /* brown */
 const DK_BOARD_CUT='#ed1c2d';
 const DK_BOARD_FRAME='#8a5f38';   /* picture frame — a shade under the field */
-function drawBoardPlan(){
+/* `force` draws the layout whatever the optimiser has or has not been asked to
+   do — the documents use it, because a contract still has to show the boards
+   that will be laid even if the rep never pressed the button. */
+function drawBoardPlan(force){
   const card=document.getElementById('dk_diagrams_card');
   const cv=document.getElementById('dk_board_canvas');
+  const wait=document.getElementById('dk_board_wait');
   const pts=deckingPoints();
   const b=deckingBBox();
   const lay=deckingBoardLayout();
   const ok=!!(pts&&b.w>0&&b.h>0&&lay.totalBoards>0);
+  /* The run direction is the optimiser's answer, so until it has been run there
+     is nothing honest to draw here. The subframe plan does not depend on it and
+     carries on regardless. */
+  const ready=!!(force||deckingState().optimised);
   if(card&&ok)card.style.display='';
-  if(!ok){dkPlanNote('dk_board_note','');}
-  if(!ok||!cv)return;
+  if(cv&&cv.style)cv.style.display=(ok&&ready)?'':'none';
+  if(wait)wait.style.display=(ok&&!ready)?'':'none';
+  if(!ok||!ready){dkPlanNote('dk_board_note','');}
+  if(!ok||!ready||!cv)return;
   const ctx=cv.getContext&&cv.getContext('2d');
   if(!ctx)return;   /* jsdom / no canvas support */
 
@@ -4325,9 +4330,9 @@ function deckingPlanImages(){
   const wasZoom=dkPlanZoom;
   dkPlanZoom='';
   drawSubframePlan();
-  drawBoardPlan();
+  drawBoardPlan(true);   /* the document shows the layout either way */
   const out={subframe:deckingPlanDataURL('subframe'),board:deckingPlanDataURL('board')};
-  if(wasZoom){dkPlanZoom=wasZoom;deckingApplyPlanZoom();drawSubframePlan();drawBoardPlan();}
+  if(wasZoom){dkPlanZoom=wasZoom;deckingApplyPlanZoom();drawSubframePlan();drawBoardPlan(true);}
   return out;
 }
 
@@ -4527,6 +4532,8 @@ function deckingRenderDirection(){
 /* ── Step 3: finishing options ──────────────────────────────────────────── */
 function deckingSetPictureFrame(on){
   deckingState().pictureFrame=!!on;
+  /* the border insets the field, so any previous optimisation is out of date */
+  deckingClearOptimised();
   deckingRenderFrameColour();
   deckingCalc();   /* redraws both plans and the step profiles itself */
 }
@@ -4547,6 +4554,7 @@ function deckingFrameColourName(){
 function deckingSetFrameColour(code){
   const d=deckingState();
   d.frameColour=(d.frameColour===code)?'':code;
+  deckingClearOptimised();
   deckingRenderFrameColour();
   deckingCalc();
 }
@@ -4574,6 +4582,7 @@ function deckingRenderFrameColour(){
 function deckingSetHeight(mm){
   const d=deckingState();
   d.deckHeightMm=Math.max(0,+mm||0);
+  deckingClearOptimised();
   deckingRenderHeightNote();
   deckingCalc();
 }
@@ -4595,6 +4604,9 @@ function deckingSetFascia(side,on){
   const d=deckingState();
   if(!d.fasciaSides)d.fasciaSides={};
   d.fasciaSides[side]=!!on;
+  /* fascia does not move the field, but the rep is mid-way through the options
+     and a stale "Optimised Layout" panel above them reads as still current */
+  deckingClearOptimised();
   deckingRenderFasciaSides();
   deckingCalc();
 }
