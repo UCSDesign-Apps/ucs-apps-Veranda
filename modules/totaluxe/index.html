@@ -797,6 +797,13 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_step_labels" style="margin-top:10px"></div>
           </div>
 
+          <!-- STEP PROFILES — only while a side actually has steps -->
+          <div class="card" id="dk_step_profiles_card" style="display:none">
+            <div class="dk-step" style="margin-bottom:6px">Step Profiles</div>
+            <div class="sub" style="margin-bottom:10px" id="dk_step_profiles_sub">Side elevation of each stepped edge.</div>
+            <div id="dk_step_profiles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+          </div>
+
           <!-- STEP 3 — FINISHING OPTIONS -->
           <div class="card" id="dk_finishing_card">
             <div class="dk-step"><span class="dk-num">3</span> Finishing Options</div>
@@ -1303,7 +1310,12 @@ const JOIST_D_MM=100;
 const JOIST_L_MM=3000;
 const NOGGING_SPACING_MM=1220;   /* staggered every 1220mm between joists */
 const PAD_SPACING_MM=1200;       /* concrete pads at 1200mm centres on joists */
-const STEP_TREAD_DEPTH_M=0.30;   /* tread depth per step riser — drives step board area */
+const STEP_BOARDS_PER_TREAD=2;   /* each tread is two deck boards deep */
+/* Tread depth is whatever two boards measure, so it moves with the board the
+   deck is laid in: 2 x 155mm pitch = 310mm on the seed range. */
+function deckingStepTreadDepthM(){
+  return STEP_BOARDS_PER_TREAD*deckingBoardPitchMm()/1000;
+}
 
 /* Every board carries its own cover width, so there is no HD/Embossed selector:
    the eight products are one flat list and the width travels with the board. */
@@ -3248,7 +3260,6 @@ function deckingCycleStep(side){
   deckingSetStep(side,((d.steps[side]||0)+1)%3);
 }
 const DECK_STEP_LABEL=['None','Single','Double'];
-/* Sides are lettered clockwise from the front: A front, B right, C back, D left. */
 /* Which letter the drawing puts on a given bounding-box side. This is NOT the
    same for every shape and cannot be a fixed map: a rectangle's front edge is C,
    an L-left's is F, and a U-shape's front is split either side of the gap into E
@@ -3774,6 +3785,66 @@ function drawBoardPlan(){
     (clipped?' · runs cut to the outline':''));
 }
 
+/* ── Step elevations ────────────────────────────────────────────────────── */
+/* A side-on section through a stepped edge — the view an installer reads a step
+   detail from. Each tread is drawn two boards deep with the division showing,
+   and where the deck has a picture frame the tread nose carries the border. */
+const STEP_RISE_MM=150;   /* nominal rise per tread, for the caption */
+function drawStepElevation(canvasId,treads,hasBorder){
+  const cv=document.getElementById(canvasId);if(!cv)return;
+  const ctx=cv.getContext&&cv.getContext('2d');if(!ctx)return;
+  const W=220,H=130;
+  cv.width=W;cv.height=H;
+  if(cv.style)cv.style.width='100%';
+  ctx.clearRect(0,0,W,H);
+  const TREAD_PX=40,RISE_PX=28,deckTop=20,startX=30;
+  /* the deck itself */
+  ctx.fillStyle='#c8a46e';ctx.fillRect(startX,deckTop,60,12);
+  ctx.strokeStyle='#3c4650';ctx.lineWidth=1.5;ctx.strokeRect(startX,deckTop,60,12);
+  /* treads stepping down away from it */
+  let x=startX+60,y=deckTop;
+  for(let i=0;i<treads;i++){
+    y+=RISE_PX;
+    ctx.fillStyle='#a8863a';ctx.fillRect(x,y-RISE_PX,4,RISE_PX);          /* riser */
+    ctx.fillStyle='#c8a46e';ctx.fillRect(x,y,TREAD_PX,12);                /* tread */
+    ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=0.5;                  /* two boards */
+    ctx.beginPath();ctx.moveTo(x+TREAD_PX/2,y);ctx.lineTo(x+TREAD_PX/2,y+12);ctx.stroke();
+    ctx.strokeStyle='#3c4650';ctx.lineWidth=1.5;ctx.strokeRect(x,y,TREAD_PX,12);
+    if(hasBorder){ctx.fillStyle='#3c4650';ctx.fillRect(x+TREAD_PX-3,y,3,12);}   /* nosing */
+    x+=TREAD_PX;
+  }
+  /* ground */
+  ctx.strokeStyle='#8a969a';ctx.lineWidth=1;
+  if(ctx.setLineDash)ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(10,y+14);ctx.lineTo(210,y+14);ctx.stroke();
+  if(ctx.setLineDash)ctx.setLineDash([]);
+  /* caption — the tread depth is whatever two of the chosen boards measure */
+  const depth=Math.round(deckingStepTreadDepthM()*1000);
+  ctx.fillStyle='#555';ctx.font='10px Helvetica,Arial';ctx.textAlign='left';
+  ctx.fillText(`${treads} step${treads>1?'s':''} · ${STEP_BOARDS_PER_TREAD} boards/tread (${depth}mm)`+
+               (hasBorder?' · border nosing':''),10,122);
+}
+function deckingRenderStepProfiles(){
+  const card=document.getElementById('dk_step_profiles_card');
+  const el=document.getElementById('dk_step_profiles');
+  if(!card||!el)return;
+  const d=deckingState();
+  const stepped=DECK_SIDES.filter(sd=>(d.steps&&d.steps[sd]||0)>0);
+  if(!stepped.length){card.style.display='none';el.innerHTML='';return;}
+  card.style.display='';
+  const sub=document.getElementById('dk_step_profiles_sub');
+  if(sub)sub.textContent=`Side elevation of each stepped edge — ${STEP_BOARDS_PER_TREAD} boards per tread `+
+    `(${Math.round(deckingStepTreadDepthM()*1000)}mm), ${STEP_RISE_MM}mm rise.`;
+  el.innerHTML=stepped.map(sd=>{
+    const letter=deckSideLetters(sd);
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">${letter?`Side ${letter} (${DECK_SIDE_LABEL[sd]})`:DECK_SIDE_LABEL[sd]}</div>
+      <canvas id="dk_stepcv_${sd}" style="width:100%"></canvas>
+    </div>`;
+  }).join('');
+  stepped.forEach(sd=>drawStepElevation('dk_stepcv_'+sd,d.steps[sd],!!d.pictureFrame));
+}
+
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
 function deckingCanvasClick(ev){
   const cv=document.getElementById('dk_canvas');if(!cv)return;
@@ -4162,6 +4233,20 @@ function deckingPlanDataURL(which){
   if(!cv||!cv.width||!cv.height||!cv.toDataURL)return '';
   try{return cv.toDataURL('image/png');}catch(e){return '';}
 }
+/* The step elevations as PNGs, for the decking page in the documents. Same
+   approach as the plans: render them into the live canvases, then read those. */
+function deckingStepElevationImages(){
+  const d=deckingState();
+  if(!d.enabled)return [];
+  deckingRenderStepProfiles();
+  return DECK_SIDES.filter(sd=>(d.steps&&d.steps[sd]||0)>0).map(sd=>{
+    const cv=document.getElementById('dk_stepcv_'+sd);
+    let url='';
+    if(cv&&cv.width&&cv.height&&cv.toDataURL){try{url=cv.toDataURL('image/png');}catch(e){url='';}}
+    return {side:sd,letter:deckSideLetters(sd),label:DECK_SIDE_LABEL[sd],treads:d.steps[sd],url};
+  }).filter(x=>x.url);
+}
+
 /* Redraw both plans at their normal paired size and hand back the images.
    Any enlargement the rep left on screen is put back afterwards, so a document
    never comes out with one plan blown up and the other small. */
@@ -4191,6 +4276,13 @@ function deckingFlipDir(){
 /* Everything the calculator orders, as {code -> qty}. Boards are NOT included:
    deckingTotal() prices them straight from the geometry, so adding them here
    too would charge the customer twice. */
+/* Quantities accumulate. The deck board, the fascia and the border are each
+   ordered from more than one place now, so a plain assignment would silently
+   drop whichever ran first. */
+function addToProduct(out,code,qty){
+  if(!code||!(qty>0))return;
+  out[code]=(out[code]||0)+qty;
+}
 function deckingAutoItems(){
   const d=deckingState();
   const areaM2=deckingArea();
@@ -4198,7 +4290,7 @@ function deckingAutoItems(){
   if(!areaM2)return out;
   const boardW=deckingBoardWidthM();
   const stepRunM=deckingStepRunM();
-  const boardAreaM2=areaM2+stepRunM*STEP_TREAD_DEPTH_M;
+  const boardAreaM2=areaM2+stepRunM*deckingStepTreadDepthM();
 
   /* Subframe: measured off the plan, not off the area, so an evenly spaced grid
      orders exactly the metres it sets out. Joists and noggins are separate
@@ -4247,24 +4339,39 @@ function deckingAutoItems(){
     const factor=p.scaleBoard?(DEFAULT_BOARD_WIDTH_MM/1000)/boardW:1;
     out[p.code]=Math.ceil(rate*boardAreaM2*factor);
   });
-  /* Steps: a kit per metre of run, and two bearers per metre. */
-  if(stepRunM>0){
-    const kit=deckingPick('Step',/kit|set/i);
-    if(kit)out[kit.code]=Math.ceil(stepRunM);
-    const bearer=deckingPick('Step',/bearer|timber/i);
-    if(bearer&&bearer!==kit){
-      const lenM=(+bearer.lengthM)||(JOIST_L_MM/1000);
-      out[bearer.code]=Math.ceil(stepRunM*2/lenM);
-    }
-  }
+  /* Steps, side by side. A step runs the full width of the edge it sits on, and
+     each tread is two boards deep with a riser fascia below it. The old single
+     "step kit" line is gone: the tread boards, the riser and the nosing are now
+     the same products as the deck itself, so they have to be counted as those
+     products or the same board would be bought twice under two codes. */
+  const stepBoard=d.colour?deckingProduct(d.colour):null;
+  const stepFascia=deckingPick('Fascia');
+  const stepFrame=deckingPick('Frame');
+  const stepBearer=deckingPick('Step',/bearer|timber/i);
+  const stepBoardLmm=deckingBoardLengthMm();
+  DECK_SIDES.forEach(side=>{
+    const n=d.steps&&d.steps[side]||0;   /* 0, 1 or 2 treads */
+    if(!n)return;
+    const sideWmm=deckingSideLengthM(side)*1000;
+    if(!(sideWmm>0&&stepBoardLmm>0))return;
+    const runsPerRow=Math.ceil(sideWmm/stepBoardLmm);   /* lengths to span the edge */
+    /* tread boards — two deep per tread, the same board as the field */
+    if(stepBoard)addToProduct(out,stepBoard.code,runsPerRow*STEP_BOARDS_PER_TREAD*n);
+    /* one fascia along each riser face */
+    if(stepFascia)addToProduct(out,stepFascia.code,runsPerRow*n);
+    /* a nosing along each tread front, only where the deck has a border */
+    if(d.pictureFrame&&stepFrame)addToProduct(out,stepFrame.code,runsPerRow*n);
+    /* two bearers under every tread */
+    if(stepBearer)addToProduct(out,stepBearer.code,runsPerRow*STEP_BOARDS_PER_TREAD*n);
+  });
   /* ── Picture frame border ─────────────────────────────────────────────── */
   /* One ring of boards laid perpendicular round the outline. Counted as extra
      boards on top of the field — the field is NOT reduced by the band the frame
      occupies, so this is a slight over-order rather than an exact cut list. */
   if(d.pictureFrame){
-    const frameRow=deckingPick('Frame');
-    const qty=deckingFrameBoards();
-    if(frameRow&&qty>0)out[frameRow.code]=qty;
+    /* add, never assign: the steps above have already booked a nosing per tread
+       against this same product */
+    addToProduct(out,(deckingPick('Frame')||{}).code,deckingFrameBoards());
   }
   /* ── Fascia boards, per selected side ─────────────────────────────────── */
   const fasciaProd=deckingPick('Fascia');
@@ -4276,7 +4383,8 @@ function deckingAutoItems(){
       const sideLenM=deckingSideLengthM(side);
       if(sideLenM>0)fasciaTotal+=Math.ceil(sideLenM/lenM);
     });
-    if(fasciaTotal>0)out[fasciaProd.code]=fasciaTotal;
+    /* add, never assign: the step risers above use this same product */
+    addToProduct(out,fasciaProd.code,fasciaTotal);
   }
   /* ── Timber posts — one per pad, whatever the deck height ─────────────── */
   if(sub.pads>0){
@@ -4350,7 +4458,7 @@ function deckingRenderDirection(){
 function deckingSetPictureFrame(on){
   deckingState().pictureFrame=!!on;
   deckingRenderFrameColour();
-  deckingCalc();   /* redraws both plans itself */
+  deckingCalc();   /* redraws both plans and the step profiles itself */
 }
 /* The board the border is cut from: whatever was picked for it, or the deck's
    own board when it is left matched. */
@@ -4491,7 +4599,7 @@ function deckingGeom(){
   const perimeterM=deckingPerimeter();
   const stepRunM=deckingStepRunM();
   const boardW=deckingBoardWidthM();
-  const boardAreaM2=Math.round((areaM2+stepRunM*STEP_TREAD_DEPTH_M)*100)/100;
+  const boardAreaM2=Math.round((areaM2+stepRunM*deckingStepTreadDepthM())*100)/100;
   const lay=deckingBoardLayout();
   return {areaM2,perimeterM,stepRunM,boardW,boardAreaM2,lay,
           runningM:lay.laidM,
@@ -4529,6 +4637,7 @@ function deckingCalc(){
       : `<div style="color:#8a969a;font-size:12px">Enter the dimensions above to calculate materials.</div>`;
   }
   deckingRenderMaterials(res);
+  deckingRenderStepProfiles();
   deckingRenderFasciaSides();   /* the side lengths on the chips follow the dims */
   deckingRenderHeightNote();    /* pad count moves with the deck */
   deckingRenderDirection();
@@ -4539,6 +4648,16 @@ function deckingCalc(){
   /* decking is part of the contract price — keep youpay, deposit and finance in step */
   recalc();
   return res;
+}
+/* Board lengths ordered as line items rather than off the geometry — step
+   treads. deckingTotal() already charges them; the Boards row has to show them
+   or the table will not add up to the total underneath it. */
+function deckingBoardItemQty(){
+  const d=deckingState();
+  return d.items.reduce((t,i)=>{
+    const p=deckingProduct(i.code);
+    return t+((p&&p.cat==='Board')?(+i.qty||0):0);
+  },0);
 }
 /* Grouped by category: Boards, Subframe, Trim, Fixings, Steps. */
 function deckingRenderMaterials(res){
@@ -4572,7 +4691,7 @@ function deckingRenderMaterials(res){
   let rows='';
   DECK_GROUPS.forEach(g=>{
     const body=g.cats.map(cat=>{
-      if(cat==='Board')return line(res.board,res.lengths,true,true);
+      if(cat==='Board')return line(res.board,res.lengths+deckingBoardItemQty(),true,true);
       return deckingByCat(cat).map(p=>{
         const it=d.items.find(i=>i.code===p.code);
         if(!it||it.qty<=0)return '';
@@ -4624,7 +4743,8 @@ function deckingPickingRows(){
   const rows=[];
   const {lengths}=deckingGeom();
   const board=d.colour?deckingProduct(d.colour):null;
-  if(board&&lengths>0)rows.push([`Composite Board — ${board.name}`,board.code,lengths]);
+  const boardQty=lengths+deckingBoardItemQty();   /* field plus any step treads */
+  if(board&&boardQty>0)rows.push([`Composite Board — ${board.name}`,board.code,boardQty]);
   DECK_CATS.forEach(cat=>{
     if(cat==='Board')return;
     deckingByCat(cat).forEach(p=>{
@@ -5882,6 +6002,7 @@ function renderDocuments(){
   /* Redraw the plans so the embedded pictures match the dimensions on the page. */
   const dkPlanImg=(dk.enabled&&dkSell>0)?deckingPlanImages():{subframe:'',board:''};
   const dkSubframeImg=dkPlanImg.subframe, dkBoardImg=dkPlanImg.board;
+  const dkStepImgs=(dk.enabled&&dkSell>0)?deckingStepElevationImages():[];
   /* The board swatch has lived under imgmap 'decking' since the colour grid was
      built, so a new 'deckboard' slot falls back to it rather than making the
      admin upload the same picture twice. Fascia is colour matched, so it falls
@@ -6093,6 +6214,17 @@ function renderDocuments(){
         <div style="border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">Board Layout</div>
           ${dkBoardImg?`<img src="${dkBoardImg}" style="max-width:100%;max-height:150px">`:''}
+        </div>
+      </div>`:''}
+
+      <!-- step elevations, only where the deck actually has steps -->
+      ${dkStepImgs.length?`<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Step Profiles — side elevation</div>
+        <div style="display:grid;grid-template-columns:repeat(${Math.min(dkStepImgs.length,4)},1fr);gap:10px">
+          ${dkStepImgs.map(st=>`<div style="text-align:center">
+            <img src="${st.url}" style="max-width:100%;max-height:80px">
+            <div style="font-size:10px;color:#555;margin-top:2px">${st.letter?`Side ${esc(st.letter)} (${esc(st.label)})`:esc(st.label)} · ${st.treads===2?'double':'single'}</div>
+          </div>`).join('')}
         </div>
       </div>`:''}
 
