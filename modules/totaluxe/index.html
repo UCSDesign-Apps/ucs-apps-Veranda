@@ -6266,7 +6266,10 @@ function renderDocuments(){
      <tbody>${doorMerged.map((r,i)=>`<tr><td class="c">D${i+1}</td><td>${r[0]}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
 
   const confirmRow=(name,detail,imgHTML,on)=>`<tr><td><b>${name}</b></td><td>${detail}</td><td class="c">${imgHTML}</td><td class="c tickwrap"><span class="ck${on?' on':''}" onclick="this.classList.toggle('on')"></span></td></tr>`;
-  /* must come after confirmRow — it is a const, so referencing it earlier hits the TDZ */
+  /* Currently unused: the decking row was taken off Confirmation of Finishes once
+     decking got its own page. Kept because it is the row builder to reuse if it is
+     ever wanted back. Must come after confirmRow — it is a const, so referencing
+     it earlier hits the TDZ. */
   const deckingSpecRow=(dk.enabled&&dkSell>0&&dkBoard)
     ? confirmRow('Composite Decking',`${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²${dkSteps?` · steps: ${esc(dkSteps)}`:''}`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
     : '';
@@ -6364,7 +6367,6 @@ function renderDocuments(){
         ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto'),true)}
         ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto'),true)}
         ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',64,40,'margin:0 auto'),false)}
-        ${deckingSpecRow}
       </tbody></table>
     </div></div>${pfoot()}
   </section>
@@ -6446,12 +6448,13 @@ function renderDocuments(){
       </div>
 
       <!-- ROW 3 — lifestyle photo and why composite.
-           Rows 3 and 4 share the leftover height 3:4. That has to be expressed as
-           grow factors on a zero basis, NOT flex-basis percentages: .fill sits in
-           a chain of auto-height flex parents, so a percentage basis resolves
-           against an indefinite height, falls back to auto, and the ratio is
-           silently ignored (every percentage pair lays out identically). -->
-      <div style="flex:3 1 0;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;min-height:0">
+           Rows 3 and 4 share the leftover height 4:3 — lifestyle and benefits take
+           the larger share, the plans the smaller. That has to be expressed as grow
+           factors on a zero basis, NOT flex-basis percentages: .fill sits in a chain
+           of auto-height flex parents, so a percentage basis resolves against an
+           indefinite height, falls back to auto, and the ratio is silently ignored
+           (every percentage pair lays out identically). -->
+      <div style="flex:4 1 0;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;min-height:0">
         <div style="min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">
           ${docImg('decklifestyle','1','COMPOSITE DECKING',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')}
         </div>
@@ -6464,7 +6467,7 @@ function renderDocuments(){
       </div>
 
       <!-- ROW 4 — the two layout plans, anchored at the foot of the sheet. -->
-      ${(dkSubframeImg||dkBoardImg)?`<div style="flex:4 1 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0">
+      ${(dkSubframeImg||dkBoardImg)?`<div style="flex:3 1 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0">
         ${dkDiagramBox('Subframe Plan',dkSubframeImg)}
         ${dkDiagramBox('Board Layout',dkBoardImg)}
       </div>`:''}
