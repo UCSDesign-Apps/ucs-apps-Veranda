@@ -313,8 +313,15 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .terms2 h4{margin:7px 0 2px;font-size:9px;color:var(--brand-d);break-after:avoid;}
 .terms2 p{margin:0 0 4px;break-inside:avoid;}
 .dl{display:grid;grid-template-columns:1fr 1fr;gap:0 30px;}
-.dl .li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #eef1f2;}
-.dl .li .k{color:#6a777c;} .dl .li .v{font-weight:700;text-align:right;}
+/* Unscoped on purpose. These rows are used both inside .dl and in the plain
+   3-column grids on quote/contract, and only the .dl copy used to be styled —
+   so in the grids the key and value spans sat flush against each other and read
+   as one run-together word ("Model / SuiteVoya Veranda"). */
+.li{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f2;flex-wrap:wrap;}
+.li .k{flex:0 0 auto;white-space:nowrap;}
+.li .v{flex:1 1 auto;text-align:right;min-width:0;word-break:normal;}
+.dl .li{gap:10px;}
+.dl .li .k{color:#6a777c;} .dl .li .v{font-weight:700;}
 .mt{width:100%;border-collapse:collapse;font-size:10.5px;}
 .mt th{background:var(--brand-l);color:var(--brand-d);text-align:left;padding:8px 11px;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;}
 .mt td{padding:8px 11px;border-bottom:1px solid #eef1f2;vertical-align:top;}
@@ -5617,11 +5624,16 @@ async function sendSurveyToCustomer(){
   const c=state.customer,j=state.job;
   const custEmail=c.cemail||'';
   if(!custEmail){alert('Customer email required.');return;}
-  /* A box out or a roof notch is cut on site from this photo — going without one
-     is how the wrong opening gets cut. */
+  /* A box out or a roof notch is cut on site from these photos — going without
+     one is how the wrong opening gets cut. Checked separately: a job can need one
+     and not the other. */
   const cf=state.config;
-  if((cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')&&!state.images['boxnotchphoto']){
-    alert('A box out / notch out photo is required. Please add a photo of the area (with the box out / notch marked up) before sending the survey.');
+  if(cf.boxOutReq==='Yes'&&!state.images['boxoutphoto']){
+    alert('A box out photo is required. Please add a photo of the box out area (marked up) before sending the survey.');
+    return;
+  }
+  if(cf.roofNotch==='Yes'&&!state.images['notchphoto']){
+    alert('A notch out photo is required. Please add a photo of the notch out area (marked up) before sending the survey.');
     return;
   }
   toast('Generating survey PDF…');
@@ -5984,6 +5996,14 @@ function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
      already taken on site would vanish from its saved job. */
   if(!state.images)state.images={};
   if(!state.images.sitephoto&&state.images.survey_sitephoto)state.images.sitephoto=state.images.survey_sitephoto;
+  /* The box-out and notch photos were one shared `boxnotchphoto` slot for a day.
+     Carry it to whichever option the job actually has, or a quote saved in that
+     window loses its photo and can no longer pass the survey-send check. */
+  if(state.images.boxnotchphoto){
+    const _c=state.config;
+    if(_c.boxOutReq==='Yes'&&!state.images.boxoutphoto)state.images.boxoutphoto=state.images.boxnotchphoto;
+    else if(_c.roofNotch==='Yes'&&!state.images.notchphoto)state.images.notchphoto=state.images.boxnotchphoto;
+  }
   /* decking added after earlier quotes were saved — backfill so older quotes open cleanly.
      Quotes saved before the shape calculator carried only width x length: those are
      rectangles, so map them onto the rect shape rather than losing the deck. */
@@ -6415,22 +6435,40 @@ function renderDocuments(){
       </div>`}
       <!-- SITE & GROUNDWORKS — all four ALWAYS shown, on all three documents (see siteGroundVals).
            Placed outside the survey/quote ternary above so both layout branches get it. -->
-      <div class="sh">Site &amp; Groundworks</div>
-      ${state.doc==='survey'
-        ? `<div class="dl">${siteGroundRows(cf)}</div>`
-        : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
-      <!-- Box out / notch photo. Sits here rather than beside the site photo because
-           there are two of those, one per layout branch — this way it is written once
-           and appears on all three documents, next to the fields that ask for it.
+      <!-- Site detail on the left, one photo per option stacked on the right. Each
+           photo appears only when its own option is Yes, so a job with a notch and
+           no box out never carries an empty box-out slot.
            object-fit:contain: the whole point is the markup, and cover would crop it. -->
+      <div class="sh">Site &amp; Groundworks</div>
       ${(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?`
-      <div style="margin-top:10px">
-        <div class="sh" style="font-size:12px;color:var(--brand-d)">Box Out / Notch Out &mdash; Site Photo${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:11px">(required &mdash; mark up the area)</span>':''}</div>
-        <div style="position:relative;border-radius:10px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['boxnotchphoto'])?'#ed1c2d':'var(--line)'}">
-          <div class="gimg" style="height:180px">${ph('boxnotchphoto','BOX OUT / NOTCH PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
-          <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:11px;font-weight:600;text-align:center;padding:4px 8px;letter-spacing:.3px">SITE IMAGE &mdash; BOX OUT / NOTCH OUT</div>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;align-items:start;margin-top:2px">
+        <div>
+          ${state.doc==='survey'
+            ? `<div class="dl">${siteGroundRows(cf)}</div>`
+            : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
         </div>
-      </div>`:''}
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${cf.boxOutReq==='Yes'?`
+          <div>
+            <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Box Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
+            <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['boxoutphoto'])?'#ed1c2d':'var(--line)'}">
+              <div class="gimg" style="height:120px">${ph('boxoutphoto','BOX OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; BOX OUT</div>
+            </div>
+          </div>`:''}
+          ${cf.roofNotch==='Yes'?`
+          <div>
+            <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Notch Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
+            <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['notchphoto'])?'#ed1c2d':'var(--line)'}">
+              <div class="gimg" style="height:120px">${ph('notchphoto','NOTCH OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; NOTCH OUT</div>
+            </div>
+          </div>`:''}
+        </div>
+      </div>`
+      : (state.doc==='survey'
+          ? `<div class="dl">${siteGroundRows(cf)}</div>`
+          : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`)}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
@@ -6713,7 +6751,7 @@ function renderDocuments(){
   </section>`;
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
-const UPLOADABLE_IMG_KEYS=['sitephoto','boxnotchphoto'];
+const UPLOADABLE_IMG_KEYS=['sitephoto','boxoutphoto','notchphoto'];
 function ph(key,label,w,h,extra,src,tint){
   const extraStr=extra||'';
   const fitMatch=extraStr.match(/object-fit:\s*([\w-]+)/);
@@ -6724,7 +6762,7 @@ function ph(key,label,w,h,extra,src,tint){
   /* The per-quote images a rep/surveyor can upload. `sitephoto` was renamed from
      `survey_sitephoto` on 2026-08-17 when it started appearing on quote + contract
      too; loadQuote carries the old key across so existing jobs keep their photo.
-     `boxnotchphoto` joined on 2026-08-21. Anything NOT in this set renders
+     `boxoutphoto`/`notchphoto` joined on 2026-08-21. Anything NOT in this set renders
      no-click with pointer-events:none and its file input hidden — a required
      photo left out of it could never be added, and its send gate would lock the
      survey for good. */
