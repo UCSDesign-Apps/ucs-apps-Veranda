@@ -690,8 +690,8 @@ body.print-internal .internal-notes-only{display:block !important;}
           <h2>Order Summary</h2>
           <!-- Materials, fitting breakdown and discount: admin only -->
           <div class="admin-only">
-            <div class="totbar"><span>Materials (incl VAT)</span><span>£<span id="s_mat">0.00</span></span></div>
-            <div class="totbar" id="row_decking" style="display:none"><span>Composite Decking (incl VAT)</span><span>£<span id="s_decking">0.00</span></span></div>
+            <div class="totbar"><span>Materials</span><span>£<span id="s_mat">0.00</span></span></div>
+            <div class="totbar" id="row_decking" style="display:none"><span>Composite Decking</span><span>£<span id="s_decking">0.00</span></span></div>
             <div class="totbar"><span>Fitting &amp; Survey</span><span>£<span id="s_fit">0.00</span></span></div>
             <div class="totbar" id="row_ext" style="display:none"><span>Job Extras (survey parts)</span><span>£<span id="s_ext">0.00</span></span></div>
             <div class="totbar big"><span>Order Total (full price)</span><span>£<span id="s_tot">0.00</span></span></div>
@@ -6230,9 +6230,12 @@ function renderDocuments(){
      ||'<div style="color:#8a969a;font-size:10.5px">No side infills or notes.</div>';
   const sideCardsBig=relSides.filter(sideHas).map(s=>`<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column">${(cf.sides[s]&&cf.sides[s]!=='None')?`<div class="gimg grow" style="min-height:120px">${docImg('side',cf.sides[s],cf.sides[s],0,0,'width:100%;height:100%;border-radius:0;border:none;object-fit:contain;background:#f6f7f8')}</div>`:''}<div style="padding:12px 14px"><div style="font-weight:800;color:var(--brand-d);font-size:14.5px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13.5px;margin-top:3px">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div>`).join('')||'<div style="color:#8a969a;font-size:11px">No side infills or notes recorded.</div>';
   const sideCount=relSides.filter(sideHas).length;
+  /* Card: option and any per-side note at the TOP so the surveyor reads the brief
+     before the picture, then the infill image. The old render on the right is
+     replaced by an open graph-paper box to sketch actual site conditions into. */
   const sideRows=relSides.filter(sideHas).map(s=>{const opt=cf.sides[s]||'None';
     const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8'):'<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">No infill</div>';
-    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div class="gimg" style="height:130px;flex-shrink:0">${infill}</div><div style="padding:11px 13px"><div style="font-weight:800;color:var(--brand-d);font-size:13px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:11.5px;margin-top:2px;line-height:1.35">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div><div class="gimg" style="border-radius:12px;border:1px solid var(--line);min-height:120px">${docImg('siderender',s,SIDE_LBL[s]+' RENDER',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>`;
+    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div style="padding:9px 13px 6px"><div style="font-weight:800;color:var(--brand-d);font-size:13px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:11.5px;margin-top:2px;line-height:1.35">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:4px;padding:5px 8px;background:#f6f7f8;border-left:3px solid var(--brand);border-radius:0 6px 6px 0">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div><div class="gimg" style="height:120px;flex-shrink:0;margin:0 13px 6px;border-radius:8px;border:1px solid var(--line)">${infill}</div></div><div style="display:flex;flex-direction:column;min-height:0"><div style="font-size:10px;font-weight:600;color:#6a777c;margin-bottom:3px">${SIDE_LBL[s]} &mdash; site sketch</div><div style="flex:1;border-radius:12px;border:1px dashed #b8c2c5;background-color:#fff;background-image:repeating-linear-gradient(0deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px);min-height:150px;position:relative"><span style="position:absolute;top:6px;left:8px;font-size:9px;color:#aab4b7">Sketch / measurements</span></div></div>`;
   }).join('')||'<div style="color:#8a969a;grid-column:1/3">No side infills or notes recorded.</div>';
 
   const fitOrder=state.fitting;
@@ -6300,6 +6303,7 @@ function renderDocuments(){
   const dkCard=(title,sub,inner)=>`<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden">
       <div style="flex:0 0 auto;height:80px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">${inner}</div>
       <div style="flex:1 1 auto;padding:5px 8px;font-size:10.5px;font-weight:600;text-align:center">${title}<br><span style="font-weight:400;color:#666">${sub}</span></div>
+      ${state.doc==='survey'?`<div style="flex:0 0 auto;border-top:1px solid var(--line);padding:4px;display:flex;align-items:center;justify-content:center;gap:6px"><span style="font-size:9.5px;color:#6a777c">Confirmed</span><span class="ck" onclick="this.classList.toggle('on')"></span></div>`:''}
     </div>`;
   /* The step photo scales to fit — a cropped tread tells the customer nothing.
      Double is shown in preference to single: it is the bigger build. */
@@ -6329,8 +6333,8 @@ function renderDocuments(){
   const deckingOrderBlock=(dk.enabled&&dkSell>0)
     ? `<div class="sh">Order Breakdown</div>
        <table class="mt"><tbody>
-         <tr><td>Veranda materials <span style="color:#6a777c">(incl VAT)</span></td><td class="r">£${money(calc.materials)}</td></tr>
-         <tr><td>Composite decking${dkBoard?' — '+esc(dkBoard.name):''} <span style="color:#6a777c">(${esc(dkShape)}, ${dkArea}m²${dkSteps?', steps: '+esc(dkSteps):''}, incl VAT)</span></td><td class="r">£${money(dkSell)}</td></tr>
+         <tr><td>Veranda materials</td><td class="r">£${money(calc.materials)}</td></tr>
+         <tr><td>Composite decking${dkBoard?' — '+esc(dkBoard.name):''} <span style="color:#6a777c">(${esc(dkShape)}, ${dkArea}m²${dkSteps?', steps: '+esc(dkSteps):''})</span></td><td class="r">£${money(dkSell)}</td></tr>
          <tr><td>Installation &amp; fitting</td><td class="r">£${money(calc.fitting)}</td></tr>
          <tr style="color:var(--brand)"><td>Special offer — ${calc.discount}% off materials &amp; decking</td><td class="r">−£${money(calc.matDiscAmt)}</td></tr>
        </tbody><tfoot><tr><td class="r"><b>Total — You Pay</b></td><td class="r"><b>£${money(calc.youpay)}</b></td></tr></tfoot></table>`
@@ -6472,6 +6476,8 @@ function renderDocuments(){
           : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`)}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
+        ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
+        ${state.doc==='survey'?confirmRow('Dimensions (W×P)',`${cf.width} × ${cf.proj} mm${cf.bespoke?' · Bespoke':''}`,`<div style="width:64px;height:40px;margin:0 auto">${verandaOutlineSVG(cf)}</div>`,false):''}
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
         ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
         ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
@@ -6488,6 +6494,7 @@ function renderDocuments(){
            render), so an odd side count spills into an implicit row that a fixed
            template leaves auto-sized and shorter than the rest. -->
       <div style="display:grid;grid-template-columns:${sideCount<=3?'1fr 1.15fr':'1fr 1fr'};gap:14px 16px;grid-auto-rows:240px;align-content:start">${sideRows}</div>
+      ${(()=>{const notes=relSides.filter(sideHas).map(s=>(cf.sideNotes&&cf.sideNotes[s])?`${SIDE_LBL[s]}: ${esc(cf.sideNotes[s])}`:'').filter(Boolean);return notes.length?`<div style="margin-top:12px;padding:10px 14px;background:#fff8e8;border:1px solid #ecdca0;border-radius:8px"><div style="font-weight:700;font-size:12px;color:#8a6d1a;margin-bottom:4px">Special Notes from Quote</div><div style="font-size:11.5px;line-height:1.5;color:#5a4a12">${notes.join(' · ')}</div></div>`:'';})()}
     </div></div>${pfoot()}
   </section>`:''}
 
