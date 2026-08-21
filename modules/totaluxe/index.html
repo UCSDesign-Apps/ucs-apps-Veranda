@@ -3987,14 +3987,33 @@ function deckingStackDimKey(dir){
 /* The ring of boards round the outline, counted the same way the order counts
    them: off the Frame product's own length, so the panel and the materials list
    can never quote different numbers. */
+/* The border is cut from a decking board, so it takes that board's options —
+   its length, and its price. The Frame catalogue row only supplies the
+   description and the code the line is ordered against; every number on it
+   comes from whichever board was chosen for the border. */
+function deckingFrameLengthM(){
+  const prod=deckingFrameProduct();
+  if(prod&&+prod.lengthM>0)return +prod.lengthM;
+  const row=deckingPick('Frame');
+  if(row&&+row.lengthM>0)return +row.lengthM;
+  return BOARD_LENGTH_M;
+}
 function deckingFrameBoards(){
   const d=deckingState();
   if(!d.pictureFrame)return 0;
   const perimM=deckingPerimeter();
-  if(!(perimM>0))return 0;
-  const frameProd=deckingPick('Frame');
-  const lenM=(frameProd&&+frameProd.lengthM)||(deckingBoardLengthMm()/1000);
-  return lenM>0?Math.ceil(perimM/lenM):0;
+  const lenM=deckingFrameLengthM();
+  return (perimM>0&&lenM>0)?Math.ceil(perimM/lenM):0;
+}
+/* Trade cost of one unit of a catalogue line. Everything prices through here so
+   the border cannot cost one thing in the materials table and another in the
+   total. */
+function deckingUnitCost(p){
+  if(p&&p.cat==='Frame'){
+    const prod=deckingFrameProduct();
+    if(prod&&+prod.price>0)return +prod.price;
+  }
+  return +(p&&p.price)||0;
 }
 
 /* Runs only when the rep presses the button. Nothing here happens while they
@@ -4200,12 +4219,9 @@ function deckingAutoItems(){
      boards on top of the field — the field is NOT reduced by the band the frame
      occupies, so this is a slight over-order rather than an exact cut list. */
   if(d.pictureFrame){
-    const frameProd=deckingPick('Frame');
-    const perimM=deckingPerimeter();
-    if(frameProd&&perimM>0){
-      const lenM=(+frameProd.lengthM)||(BOARD_LENGTH_M);
-      if(lenM>0)out[frameProd.code]=Math.ceil(perimM/lenM);
-    }
+    const frameRow=deckingPick('Frame');
+    const qty=deckingFrameBoards();
+    if(frameRow&&qty>0)out[frameRow.code]=qty;
   }
   /* ── Fascia boards, per selected side ─────────────────────────────────── */
   const fasciaProd=deckingPick('Fascia');
@@ -4443,7 +4459,7 @@ function deckingCalc(){
 
   const board=d.colour?deckingProduct(d.colour):null;
   const boardSell=board?Math.round(g.lengths*deckSellPrice(board.price)*100)/100:0;
-  const extrasSell=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?deckSellPrice(p.price)*i.qty:0);},0);
+  const extrasSell=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?deckSellPrice(deckingUnitCost(p))*i.qty:0);},0);
   const res=Object.assign({},g,{board,boardSell,extrasSell:Math.round(extrasSell*100)/100});
   res.total=Math.round((res.boardSell+res.extrasSell)*100)/100;
 
@@ -4482,15 +4498,18 @@ function deckingRenderMaterials(res){
   if(!res.board){m.innerHTML='<div style="color:#8a969a;font-size:12px">Choose a board colour in Step 4 to price the deck.</div>';return;}
 
   const line=(p,qty,auto,fixed)=>{
-    const sell=deckSellPrice(p.price);
+    const sell=deckSellPrice(deckingUnitCost(p));
     const tag=fixed?'' : auto?`<div class="dk-auto">AUTO</div>`
       :`<div class="dk-auto" style="color:#8a969a;cursor:pointer" onclick="deckingExtraAuto('${p.code}')" title="Return to the calculated quantity">MANUAL ↺</div>`;
     const qtyCell=fixed
       ? `<b>${qty}</b>`
       : `<input class="num" type="number" min="0" step="1" value="${qty}" style="width:74px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)">${tag}`;
     /* the fitter needs the cut length on the picking line, not just the count */
+    const frameProd=(p.cat==='Frame')?deckingFrameProduct():null;
     const extra=(p.cat==='Post')
       ? ` <span style="color:#8a969a;font-size:11px">— cut to ${deckingPostCutMm()}mm · ${deckingSubframeCounts().pads} posts needed</span>`
+      : frameProd
+      ? ` <span style="color:#8a969a;font-size:11px">— ${esc(frameProd.name)} · ${deckingFrameLengthM()}m</span>`
       : '';
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${p.code}</td>
@@ -4532,7 +4551,7 @@ function deckingTotal(unit){
   const {lengths}=deckingGeom();
   const board=d.colour?deckingProduct(d.colour):null;
   const boards=board?lengths*unit(board.price):0;
-  const extras=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?unit(p.price)*i.qty:0);},0);
+  const extras=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?unit(deckingUnitCost(p))*i.qty:0);},0);
   return Math.round((boards+extras)*100)/100;
 }
 /* trade cost — Costings cost side and Admin only */
@@ -4652,7 +4671,7 @@ function renderCostings(){
     brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Composite Decking — trade cost</td><td class="r"></td></tr>`;
     deckingPickingRows().forEach(r=>{
       const p=deckingProduct(r[1]);
-      brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(r[0])} × ${r[2]}</td><td class="r">${money2(p?Math.round(p.price*r[2]*100)/100:0)}</td></tr>`;
+      brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(r[0])} × ${r[2]}</td><td class="r">${money2(p?Math.round(deckingUnitCost(p)*r[2]*100)/100:0)}</td></tr>`;
     });
     brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Decking subtotal (${hesc(_dk.colourName||'board TBC')} · ${DK_SHAPES[_dk.shape].label} · ${deckingArea()}m²)</td><td class="r">${money2(deckingCost)}</td></tr>`;
     brkHTML+=`<tr style="color:#666;font-size:11px"><td>&nbsp;&nbsp;Sold to customer at ${(+admin.deckingMarkup||0)}% mark-up — £${money(deckingSell)} incl VAT (before offer discount)</td><td class="r"></td></tr>`;
