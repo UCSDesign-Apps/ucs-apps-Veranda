@@ -3559,9 +3559,13 @@ function dkPlanBox(which,cv){
   const measured=(cv&&cv.clientWidth)||0;
   const W=Math.max(240,Math.round(measured||(zoom?DK_PLAN_FALLBACK.large:DK_PLAN_FALLBACK.small)));
   const dpr=Math.min(2,(typeof window!=='undefined'&&window.devicePixelRatio)||1);
+  /* The subframe plan needs more room than the board plan: its pads sit ON the
+     deck edges, so half of each edge circle falls outside the outline, and the
+     spacing dimensions live in the margin as well. */
+  const roomy=(which==='plan');
   return {W,
           HMAX:Math.round(W*(zoom?0.60:0.85)),   /* a paired plan may be taller than it is wide */
-          PAD:Math.max(16,Math.round(W*0.055)),
+          PAD:roomy?Math.max(26,Math.round(W*0.085)):Math.max(16,Math.round(W*0.055)),
           dpr:dpr>0?dpr:1};
 }
 /* Give the canvas its backing store at device resolution but keep the drawing
@@ -3649,36 +3653,98 @@ function drawSubframePlan(){
   ctx.fillStyle=DK_PLAN_NOGGIN;
   c.nogginsByBay.forEach(bay=>bay.runs.forEach(r=>
     r.vs.forEach(v=>bar(bay.u0,v,bay.u1,v,false))));
-  /* Concrete pads — red dots on the bearing joists only */
-  ctx.fillStyle=DK_PLAN_PAD;
-  c.padJoists.forEach(j=>j.vs.forEach(v=>{
-    const pt=P(j.u,v);
-    ctx.beginPath();ctx.arc(pt[0],pt[1],5,0,Math.PI*2);ctx.fill();
-  }));
   ctx.restore();
 
-  /* Outline last, so the joist ends do not overrun it */
+  /* Outline next, so the joist ends do not overrun it */
   outline();ctx.lineWidth=2;ctx.strokeStyle='#1f4e57';ctx.lineJoin='round';ctx.stroke();
 
-  /* Dimensions stay on the drawing — they are short and they point at an edge */
+  /* Concrete pads last of all, and OUTSIDE the clip. A pad on an edge joist is
+     centred on the deck edge, so clipping it would show half a circle; the
+     wider margin gives the other half somewhere to go. The white ring keeps
+     them legible against a dark joist or the deck fill. */
+  const pr=Math.min(6,Math.max(3.5,5*k/0.08));
+  c.padJoists.forEach(j=>j.vs.forEach(v=>{
+    const pt=P(j.u,v);
+    ctx.beginPath();ctx.arc(pt[0],pt[1],pr,0,Math.PI*2);
+    ctx.fillStyle=DK_PLAN_PAD;ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+  }));
+
+  /* ── Spacing dimensions ───────────────────────────────────────────────
+     The grid turns with the board direction, so these cannot be hard-coded to
+     "left margin" and "top margin". Each one is drawn along its own axis and
+     pushed out of the deck along the other, worked out from the mapper. */
+  const uMin=alongA?b.x0:b.y0, vMin=alongA?b.y0:b.x0, vMax=alongA?b.y1:b.x1;
+  /* unit canvas vectors pointing away from the deck along each axis */
+  const unit=(ax0,ax1)=>{
+    const dx=ax1[0]-ax0[0], dy=ax1[1]-ax0[1], len=Math.hypot(dx,dy)||1;
+    return [dx/len,dy/len];
+  };
+  const outV=unit(P(uMin,vMin+100),P(uMin,vMin));   /* away from the deck across V */
+  const outU=unit(P(uMin+100,vMin),P(uMin,vMin));   /* away from the deck across U */
+  const dim=(pA,pB,off,ink,label,font)=>{
+    const a=[pA[0]+off[0],pA[1]+off[1]], z=[pB[0]+off[0],pB[1]+off[1]];
+    const t=unit(a,z), n=[-t[1],t[0]];   /* tick direction, across the run */
+    ctx.strokeStyle=ink;ctx.lineWidth=0.75;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(z[0],z[1]);
+    ctx.moveTo(a[0]-n[0]*3,a[1]-n[1]*3);ctx.lineTo(a[0]+n[0]*3,a[1]+n[1]*3);
+    ctx.moveTo(z[0]-n[0]*3,z[1]-n[1]*3);ctx.lineTo(z[0]+n[0]*3,z[1]+n[1]*3);
+    ctx.stroke();
+    const mid=[(a[0]+z[0])/2,(a[1]+z[1])/2];
+    ctx.save();
+    ctx.translate(mid[0]+n[0]*-7,mid[1]+n[1]*-7);
+    if(Math.abs(t[0])<0.5)ctx.rotate(-Math.PI/2);   /* keep upright on a vertical run */
+    ctx.fillStyle=ink;ctx.font=font||'8px Helvetica,Arial';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(label,0,0);
+    ctx.restore();
+  };
+  /* joist centres — measured along U, pushed out across V */
+  let jStepMm=0;
+  if(c.joistU.length>=2){
+    jStepMm=Math.round(c.joistU[1]-c.joistU[0]);
+    dim(P(c.joistU[0],vMin),P(c.joistU[1],vMin),[outV[0]*16,outV[1]*16],
+        '#6b4f2a',jStepMm+'mm');
+  }
+  /* pad centres — measured along V, pushed out across U */
+  let pStepMm=0;
+  const firstPadJoist=c.padJoists[0];
+  if(firstPadJoist&&firstPadJoist.vs.length>=2){
+    pStepMm=Math.round(firstPadJoist.vs[1]-firstPadJoist.vs[0]);
+    dim(P(uMin,firstPadJoist.vs[0]),P(uMin,firstPadJoist.vs[1]),[outU[0]*18,outU[1]*18],
+        '#c0392b','pads '+pStepMm+'mm');
+  }
+  /* noggin centres — labelled inside the first bay, where they are */
+  let nStepMm=0;
+  const bay0=c.nogginsByBay[0], run0=bay0&&bay0.runs[0];
+  if(run0&&run0.vs.length>=2){
+    nStepMm=Math.round(run0.vs[1]-run0.vs[0]);
+    const pt=P((bay0.u0+bay0.u1)/2,(run0.vs[0]+run0.vs[1])/2);
+    ctx.fillStyle='#8a6a2a';ctx.font='8px Helvetica,Arial';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('noggins '+nStepMm+'mm',pt[0],pt[1]);
+  }
+
+  /* Overall size, out past the spacing dimensions */
   ctx.fillStyle='#5a6a6e';ctx.textAlign='center';
   ctx.font='700 11px Helvetica,Arial';ctx.textBaseline='middle';
-  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.max(8,Y(b.y0)-13));
+  ctx.fillText(Math.round(b.w)+'mm',W/2,Math.max(8,Y(b.y0)-24));
   ctx.save();
-  ctx.translate(Math.max(8,X(b.x0)-15),H/2);ctx.rotate(-Math.PI/2);
+  ctx.translate(Math.max(8,X(b.x0)-30),H/2);ctx.rotate(-Math.PI/2);
   ctx.fillText(Math.round(b.h)+'mm',0,0);
   ctx.restore();
 
   /* The counts go underneath in HTML, where a long line wraps */
   const runSpan=(c.dir==='b')?b.h:b.w;
-  const jStep=c.numJoists>1?Math.round(runSpan/(c.numJoists-1)):0;
+  const jStep=jStepMm||(c.numJoists>1?Math.round(runSpan/(c.numJoists-1)):JOIST_SPACING_MM);
+  const pStep=pStepMm||PAD_SPACING_MM;
   const pieces=c.joists.reduce((n,j)=>n+j.spans.length,0);
   dkPlanNote('dk_plan_note',
-    c.numJoists+' joist lines at '+jStep+'mm'+
+    c.numJoists+' joists @ '+jStep+'mm'+
     (pieces>c.numJoists?' ('+pieces+' pieces, cut to the outline)':'')+
     ' · '+(c.joistLengthMm/1000).toFixed(1)+'m · '+
-    c.nogginsTotal+' noggins, staggered · '+
-    c.pads+' pads on '+c.padJoists.length+' bearing joists');
+    c.nogginsTotal+' noggins'+(nStepMm?' @ '+nStepMm+'mm':'')+', staggered · '+
+    c.pads+' pads @ '+pStep+'mm on '+c.padJoists.length+' bearing joists');
 }
 
 /* ── Board layout diagram ───────────────────────────────────────────────── */
