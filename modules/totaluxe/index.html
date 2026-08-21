@@ -1031,6 +1031,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="field"><label>Default mark-up %</label><input id="a_markup" class="num" oninput="liveRates()"></div>
             <div class="field"><label>Decking mark-up %</label><input id="a_deckingmarkup" class="num" oninput="liveRates()"></div>
             <div class="field"><label>Decking fitting £/m&sup2;</label><input id="a_deckingfit" class="num" type="number" min="0" step="0.01" oninput="liveRates()"></div>
+            <div class="field"><label>Decking fabrication £/m&sup2;</label><input id="a_deckingfab" class="num" type="number" min="0" step="0.01" oninput="liveRates()"></div>
             <div class="field"><label>VAT rate %</label><input id="a_vatrate" class="num"></div>
             <div class="field"><label>Deposit %</label><input id="a_deppct" class="num"></div>
           </div>
@@ -1845,7 +1846,7 @@ const USERS_SEED=[
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
-  markup:150,deckingMarkup:150,deckingFitPerM2:45,vatRate:20,depPct:10,
+  markup:150,deckingMarkup:150,deckingFitPerM2:45,deckingFabPerM2:15,vatRate:20,depPct:10,
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
   fitting:JSON.parse(JSON.stringify(FITTING_SEED)),
@@ -1869,6 +1870,7 @@ function loadAdmin(){
     healDeckingCatalogue(m);   /* empty or pre-v2 catalogue -> current seed */
     if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
     if(m.deckingFitPerM2==null)m.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
+    if(m.deckingFabPerM2==null)m.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
@@ -1937,6 +1939,7 @@ async function loadAdminFromServer(){
       healDeckingCatalogue(admin);
       if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
       if(admin.deckingFitPerM2==null)admin.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
+      if(admin.deckingFabPerM2==null)admin.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
                           'roof','side','siderender','lifestyle','component','decking',
@@ -4730,8 +4733,12 @@ function deckingCalc(){
   const board=d.colour?deckingProduct(d.colour):null;
   const boardSell=board?Math.round(g.lengths*deckSellPrice(board.price)*100)/100:0;
   const extrasSell=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?deckSellPrice(deckingUnitCost(p))*i.qty:0);},0);
-  const res=Object.assign({},g,{board,boardSell,extrasSell:Math.round(extrasSell*100)/100});
-  res.total=Math.round((res.boardSell+res.extrasSell)*100)/100;
+  /* Fabrication is in the decking cost base, so it is in the price the customer
+     pays. The footer below calls itself the decking total, so it has to carry
+     the fabrication too or it would disagree with the Pricing page. */
+  const fabSell=deckSellPrice(deckingFabTotal());
+  const res=Object.assign({},g,{board,boardSell,extrasSell:Math.round(extrasSell*100)/100,fabSell});
+  res.total=Math.round((res.boardSell+res.extrasSell+res.fabSell)*100)/100;
 
   const s=document.getElementById('dk_summary');
   if(s){
@@ -4814,6 +4821,14 @@ function deckingRenderMaterials(res){
     if(!body)return;   /* a group with nothing in it is not worth a heading */
     rows+=`<tr class="dk-grouprow"><td colspan="5">${g.label}</td></tr>`+body;
   });
+  /* Not a product, so it has no code and never reaches the Picking List — but it
+     is part of what the customer pays, so the rep can see it here. */
+  if(res.fabSell>0)rows+=`<tr class="dk-grouprow"><td colspan="5">Fabrication</td></tr>
+    <tr><td style="color:#8a969a">—</td>
+      <td>Subframe fabrication <span style="color:#8a969a;font-size:11px">/ m&sup2;</span></td>
+      <td class="r">£${money(deckSellPrice(deckingFabRate()))}</td>
+      <td class="c">${deckingFabAreaM2()}</td>
+      <td class="r">£${money(res.fabSell)}</td></tr>`;
 
   const isAdmin=currentUser&&currentUser.role==='admin';
   const costNote=isAdmin?`<div style="font-size:10.5px;color:#8a969a;margin-top:4px">Trade cost £${money(deckingCostTotal())} · mark-up ${(+admin.deckingMarkup||0)}% <span style="color:#c2a14e">(admin only)</span></div>`:'';
@@ -4833,7 +4848,12 @@ function deckingTotal(unit){
   const board=d.colour?deckingProduct(d.colour):null;
   const boards=board?lengths*unit(board.price):0;
   const extras=d.items.reduce((s,i)=>{const p=deckingProduct(i.code);return s+(p?unit(deckingUnitCost(p))*i.qty:0);},0);
-  return Math.round((boards+extras)*100)/100;
+  /* Fabricating the subframe is a cost of producing the deck, not a fitting
+     charge, so it joins the cost base here and goes through `unit` with the
+     boards: at cost for Costings, marked up and VAT'd for the customer, and
+     discountable because the Pricing page discounts the decking sell total. */
+  const fab=unit(deckingFabTotal());
+  return Math.round((boards+extras+fab)*100)/100;
 }
 /* trade cost — Costings cost side and Admin only */
 function deckingCostTotal(){return deckingTotal(c=>c);}
@@ -4844,6 +4864,34 @@ function deckingSellTotal(){return deckingTotal(deckSellPrice);}
    fitting from there. */
 const DECK_FIT_DESC='Composite Decking Installation';
 function deckingFitRate(){return +((admin&&admin.deckingFitPerM2)!=null?admin.deckingFitPerM2:0)||0;}
+/* Tread area of every stepped side, m². A step runs the full width of the edge
+   it sits on and each tread is two boards deep, so this mirrors exactly what
+   deckingMaterials() counts treads from — one place decides how deep a tread is
+   (deckingStepTreadDepthM) and both the order and the fabrication follow it. */
+function deckingStepAreaM2(){
+  const d=deckingState();
+  if(!d.enabled||!d.steps)return 0;
+  const tread=deckingStepTreadDepthM();
+  if(!(tread>0))return 0;
+  let a=0;
+  DECK_SIDES.forEach(side=>{
+    const n=+d.steps[side]||0;   /* 0, 1 or 2 treads */
+    if(n>0)a+=deckingSideLengthM(side)*tread*n;
+  });
+  return Math.round(a*100)/100;
+}
+/* Building the subframe, at a set rate per m². Steps are framed the same way,
+   so their tread area is charged at the same rate as the field.
+   This is the RAW cost: deckingTotal() feeds it through the same `unit` as the
+   boards, so it is marked up and VAT'd for the customer and stays at cost for
+   Costings. */
+function deckingFabRate(){return +((admin&&admin.deckingFabPerM2)!=null?admin.deckingFabPerM2:0)||0;}
+function deckingFabAreaM2(){return Math.round((deckingArea()+deckingStepAreaM2())*100)/100;}
+function deckingFabTotal(){
+  const d=deckingState();
+  if(!d.enabled)return 0;
+  return Math.round(deckingFabRate()*deckingFabAreaM2()*100)/100;
+}
 function deckingFitTotal(){
   const d=deckingState();
   if(!d.enabled)return 0;
@@ -4966,6 +5014,13 @@ function renderCostings(){
       const p=deckingProduct(r[1]);
       brkHTML+=`<tr><td>&nbsp;&nbsp;${hesc(r[0])} × ${r[2]}</td><td class="r">${money2(p?Math.round(deckingUnitCost(p)*r[2]*100)/100:0)}</td></tr>`;
     });
+    /* Fabrication is inside deckingCostTotal(), so it has to be shown or the
+       listed parts would not add up to the subtotal underneath them. */
+    const _fab=deckingFabTotal();
+    if(_fab>0){
+      const _stepA=deckingStepAreaM2();
+      brkHTML+=`<tr><td>&nbsp;&nbsp;Subframe fabrication — £${money(deckingFabRate())}/m² × ${deckingFabAreaM2()}m²${_stepA>0?` (deck ${deckingArea()}m² + steps ${_stepA}m²)`:''}</td><td class="r">${money2(_fab)}</td></tr>`;
+    }
     brkHTML+=`<tr style="font-weight:600;color:#555"><td>&nbsp;&nbsp;Decking subtotal (${hesc(_dk.colourName||'board TBC')} · ${DK_SHAPES[_dk.shape].label} · ${deckingArea()}m²)</td><td class="r">${money2(deckingCost)}</td></tr>`;
     brkHTML+=`<tr style="color:#666;font-size:11px"><td>&nbsp;&nbsp;Sold to customer at ${(+admin.deckingMarkup||0)}% mark-up — £${money(deckingSell)} incl VAT (before offer discount)</td><td class="r"></td></tr>`;
   }
@@ -5118,11 +5173,11 @@ function renderPaySchedule(sched,total){
 function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));const pane=document.getElementById('ap-'+t);if(pane)pane.classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
   /* Ensure the image map is (re)rendered when switching to the Product Images tab */
   if(t==='imgmap')renderImageMap();}
-function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;}
+function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;}
 function renderAdmin(){
   const c=admin.company;
   V('a_coname',c.name);V('a_coshort',c.short);V('a_cono',c.cono);V('a_vat',c.vat);V('a_addr1',c.addr1);V('a_addr2',c.addr2);V('a_town',c.town);V('a_post',c.post);V('a_tel',c.tel);V('a_fax',c.fax);V('a_group',c.group);V('a_signable_key',c.signableKey||'');V('a_signable_rep',c.signableRepEmail||'');
-  V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_deckingfit',admin.deckingFitPerM2);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
+  V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_deckingfit',admin.deckingFitPerM2);V('a_deckingfab',admin.deckingFabPerM2);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
   // fitting
   const fb=document.getElementById('adminFitRows');fb.innerHTML='';
   admin.fitting.forEach((f,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(f.desc)}" oninput="admin.fitting[${i}].desc=this.value"></td><td class="r"><input class="num" value="${f.direct}" oninput="admin.fitting[${i}].direct=+this.value||0"></td><td class="r"><input class="num" value="${f.finance}" oninput="admin.fitting[${i}].finance=+this.value||0"></td><td><button class="chiprm" onclick="admin.fitting.splice(${i},1);renderAdmin()">×</button></td>`;fb.appendChild(tr);});
@@ -5689,7 +5744,7 @@ function saveAdmin(){const c=admin.company;
   c.name=val('a_coname');c.short=val('a_coshort');c.cono=val('a_cono');c.vat=val('a_vat');c.addr1=val('a_addr1');c.addr2=val('a_addr2');c.town=val('a_town');c.post=val('a_post');c.tel=val('a_tel');c.fax=val('a_fax');c.group=val('a_group');
   if(val('a_signable_key'))c.signableKey=val('a_signable_key');
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
-  admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
+  admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
   initLogin();renderPricing();renderSurvey();
   /* Sync the full admin object to the server so every user picks up the latest
      company details, pricing and images on their next login. */
