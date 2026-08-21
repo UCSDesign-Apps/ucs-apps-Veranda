@@ -1850,7 +1850,7 @@ const ADMIN_DEFAULT={
   decking:JSON.parse(JSON.stringify(DECKING_SEED)),
   users:JSON.parse(JSON.stringify(USERS_SEED)),
   images:[],
-  imgmap:{finish:{},gutter:{},post:{},gutterStyle:{},postStyle:{},model:{},roof:{},side:{},lifestyle:{},siderender:{},component:{},decking:{},finance:{}},
+  imgmap:{finish:{},gutter:{},post:{},gutterStyle:{},postStyle:{},model:{},roof:{},side:{},lifestyle:{},siderender:{},component:{},decking:{},deckboard:{},deckfascia:{},decklifestyle:{},finance:{}},
   pickImages:false,
   logo:TL_LOGO, logoDark:''
 };
@@ -1934,7 +1934,8 @@ async function loadAdminFromServer(){
       if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
-                          'roof','side','siderender','lifestyle','component','decking','finance'];
+                          'roof','side','siderender','lifestyle','component','decking',
+                          'deckboard','deckfascia','decklifestyle','finance'];
       if(!admin.imgmap)admin.imgmap={};
       requiredCats.forEach(cat=>{if(!admin.imgmap[cat])admin.imgmap[cat]={};});
       /* keep derived pricing constants in sync with the merged matrix */
@@ -4082,6 +4083,32 @@ function deckingRenderOptimised(){
     </div>`;
 }
 
+/* A PNG of one of the plan diagrams, for embedding in the documents.
+   The live canvases are the only place the drawing code renders, and they sit in
+   the decking view — which is usually hidden when the documents are built. That
+   is fine: with the view hidden the canvas measures zero and the draw falls back
+   to its nominal size, so it still paints. Nothing here is tainted by a remote
+   image, so toDataURL is safe; it is still wrapped, because a canvas that was
+   never drawn has zero width and throws. */
+function deckingPlanDataURL(which){
+  const cv=document.getElementById(which==='subframe'?'dk_plan_canvas':'dk_board_canvas');
+  if(!cv||!cv.width||!cv.height||!cv.toDataURL)return '';
+  try{return cv.toDataURL('image/png');}catch(e){return '';}
+}
+/* Redraw both plans at their normal paired size and hand back the images.
+   Any enlargement the rep left on screen is put back afterwards, so a document
+   never comes out with one plan blown up and the other small. */
+function deckingPlanImages(){
+  if(!deckingState().enabled)return {subframe:'',board:''};
+  const wasZoom=dkPlanZoom;
+  dkPlanZoom='';
+  drawSubframePlan();
+  drawBoardPlan();
+  const out={subframe:deckingPlanDataURL('subframe'),board:deckingPlanDataURL('board')};
+  if(wasZoom){dkPlanZoom=wasZoom;deckingApplyPlanZoom();drawSubframePlan();drawBoardPlan();}
+  return out;
+}
+
 /* Manual override — run the boards the other way and redraw. */
 function deckingFlipDir(){
   const d=deckingState();
@@ -4892,6 +4919,9 @@ function renderImageMap(){
     ['siderender','Side render — by side (Sides &amp; Infills page)',['front','left','right','back']],
     ['component','Picking-list component images',COMP_TYPES],
     ['decking','Decking boards — by product code',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
+    ['deckboard','Decking page — board swatch by product code <span style="font-weight:400;color:#8a969a">(falls back to the tile above)</span>',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
+    ['deckfascia','Decking page — fascia by product code <span style="font-weight:400;color:#8a969a">(falls back to the board swatch)</span>',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
+    ['decklifestyle','Decking page — lifestyle image',['1']],
     ['lifestyle','Lifestyle images — cover &amp; leaflet',['1','2','3','4','5','6']],
     ['finance','Finance partner logo (Finance Options page)',['logo']]];
   const w=document.getElementById('imgMapWrap');if(!w)return;w.innerHTML='';
@@ -5712,6 +5742,21 @@ function renderDocuments(){
   const dkBoard=dk.enabled&&dk.colour?deckingProduct(dk.colour):null;
   const dkSteps=DECK_SIDES.filter(s=>dk.steps&&dk.steps[s]>0)
     .map(s=>`${DECK_SIDE_LABEL[s]} ${DECK_STEP_LABEL[dk.steps[s]].toLowerCase()}`).join(', ');
+  const dkFasciaSides=DECK_SIDES.filter(sd=>dk.fasciaSides&&dk.fasciaSides[sd]);
+  const anyFascia=dkFasciaSides.length>0;
+  /* Redraw the plans so the embedded pictures match the dimensions on the page. */
+  const dkPlanImg=(dk.enabled&&dkSell>0)?deckingPlanImages():{subframe:'',board:''};
+  const dkSubframeImg=dkPlanImg.subframe, dkBoardImg=dkPlanImg.board;
+  /* The board swatch has lived under imgmap 'decking' since the colour grid was
+     built, so a new 'deckboard' slot falls back to it rather than making the
+     admin upload the same picture twice. Fascia is colour matched, so it falls
+     back to the board picture in turn. */
+  const dkImg=(cat,opt,label,style)=>{
+    const has=c=>!!(admin.imgmap&&admin.imgmap[c]&&admin.imgmap[c][opt]);
+    const chain=(cat==='deckfascia')?['deckfascia','deckboard','decking']
+              :(cat==='deckboard')?['deckboard','decking']:[cat];
+    return docImg(chain.find(has)||chain[chain.length-1],opt,label,0,0,style);
+  };
   const deckingOrderBlock=(dk.enabled&&dkSell>0)
     ? `<div class="sh">Order Breakdown</div>
        <table class="mt"><tbody>
@@ -5866,6 +5911,60 @@ function renderDocuments(){
       </div>
     </div></div>${pfoot()}
   </section>
+
+  <!-- COMPOSITE DECKING (only when decking is actually sold; not on the picking list) -->
+  ${(dk.enabled&&dkSell>0&&dkBoard&&state.doc!=='picking')?`<section class="sheet">
+    ${phead('Composite Decking')}
+    <div class="pg">
+      <div class="sh">Your Composite Decking — ${esc(dkBoard.name)}</div>
+
+      <!-- board swatch + fascia + specification -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:12px;margin-bottom:14px">
+        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <div style="height:90px;overflow:hidden">${dkImg('deckboard',dkBoard.code,'BOARD','width:100%;height:100%;object-fit:cover')}</div>
+          <div style="padding:6px 10px;font-size:11px;font-weight:600;text-align:center">Board: ${esc(dkBoard.name)}</div>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <div style="height:90px;overflow:hidden">${dkImg('deckfascia',dkBoard.code,'FASCIA','width:100%;height:100%;object-fit:cover')}</div>
+          <div style="padding:6px 10px;font-size:11px;font-weight:600;text-align:center">Fascia: ${anyFascia?esc(dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', ')):'None'}</div>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px">
+          <div style="font-weight:700;margin-bottom:6px">Specification</div>
+          <div>Shape: <b>${esc(dkShape)}</b></div>
+          <div>Area: <b>${dkArea}m&sup2;</b></div>
+          <div>Dimensions: <b>${dk.dims.a}&times;${dk.dims.b}mm</b></div>
+          ${dk.pictureFrame?'<div>Picture frame border: <b>Yes</b></div>':''}
+          ${anyFascia?`<div>Fascia: <b>${esc(dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', '))}</b></div>`:''}
+          ${dk.deckHeightMm>0?`<div>Height above ground: <b>${dk.deckHeightMm}mm</b></div>`:''}
+          ${dkSteps?`<div>Steps: <b>${esc(dkSteps)}</b></div>`:''}
+        </div>
+      </div>
+
+      <!-- the two layout plans -->
+      ${(dkSubframeImg||dkBoardImg)?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">Subframe Plan</div>
+          ${dkSubframeImg?`<img src="${dkSubframeImg}" style="max-width:100%;max-height:150px">`:''}
+        </div>
+        <div style="border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">Board Layout</div>
+          ${dkBoardImg?`<img src="${dkBoardImg}" style="max-width:100%;max-height:150px">`:''}
+        </div>
+      </div>`:''}
+
+      <!-- lifestyle image + why composite -->
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px">
+        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:120px">
+          ${docImg('decklifestyle','1','COMPOSITE DECKING',0,0,'width:100%;height:100%;object-fit:cover;min-height:120px')}
+        </div>
+        <div style="font-size:11.5px;line-height:1.55;color:#333">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--brand)">Why Composite Decking?</div>
+          <p style="margin:0 0 6px">Our composite boards combine recycled wood fibre and polymer for a surface that won't rot, warp, splinter or fade like traditional timber.</p>
+          <p style="margin:0">Virtually maintenance-free — no sanding, staining or sealing. Just an occasional wash keeps it looking its best, backed by a manufacturer warranty.</p>
+        </div>
+      </div>
+    </div>${pfoot()}
+  </section>`:''}
 
   <!-- YOUR VERANDA OR GLASS ROOM (quote & contract only) -->
   ${(state.doc==='quote'||state.doc==='contract')?`<section class="sheet">${phead('Your Veranda or Glass Room')}
