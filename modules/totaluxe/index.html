@@ -6441,18 +6441,19 @@ function renderDocuments(){
            object-fit:contain: the whole point is the markup, and cover would crop it. -->
       <div class="sh">Site &amp; Groundworks</div>
       ${(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?`
-      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;align-items:start;margin-top:2px">
+      <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:14px;align-items:start;margin-top:2px">
         <div>
-          ${state.doc==='survey'
-            ? `<div class="dl">${siteGroundRows(cf)}</div>`
-            : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
+          <!-- .dl is normally two columns; forced to one here so each detail gets its
+               own line and the text column can be narrow enough to give the photos
+               the wider half. Same on every document type. -->
+          <div class="dl" style="grid-template-columns:1fr">${siteGroundRows(cf)}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">
           ${cf.boxOutReq==='Yes'?`
           <div>
             <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Box Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
             <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['boxoutphoto'])?'#ed1c2d':'var(--line)'}">
-              <div class="gimg" style="height:120px">${ph('boxoutphoto','BOX OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
+              <div class="gimg" style="height:140px">${ph('boxoutphoto','BOX OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
               <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; BOX OUT</div>
             </div>
           </div>`:''}
@@ -6460,7 +6461,7 @@ function renderDocuments(){
           <div>
             <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Notch Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
             <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['notchphoto'])?'#ed1c2d':'var(--line)'}">
-              <div class="gimg" style="height:120px">${ph('notchphoto','NOTCH OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
+              <div class="gimg" style="height:140px">${ph('notchphoto','NOTCH OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
               <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; NOTCH OUT</div>
             </div>
           </div>`:''}
