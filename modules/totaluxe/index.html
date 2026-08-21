@@ -1321,7 +1321,7 @@ const DECKING_SEED=[
   {code:'TL0611362',cat:'Board',name:'Embossed — Teak',price:20.00,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#8a5a34'},
   {code:'TL0611363',cat:'Board',name:'Embossed — Silver Birch',price:20.50,unit:'board',widthMm:150,gapMm:5,lengthM:3.6,hex:'#b8b0a4'},
   /* ── Trim — quantity = perimeter / lengthM ──────────────────────────────── */
-  {code:'TL0611380',cat:'Trim',name:'Angle Trim — Colour Matched',price:16.00,unit:'length',lengthM:3.0},
+  {code:'TL0611380',cat:'Trim',name:'Angle Trim',price:16.00,unit:'length',lengthM:3.0},
   /* ── Subframe timber — joists and noggins are counted separately, because the
         plan spaces them by different rules and the picker orders them apart ── */
   {code:'TL0611404',cat:'Joist',name:'Joist 47×100mm × 3.0m (4×2 C24)',price:18.90,unit:'length',lengthM:3.0},
@@ -1341,9 +1341,9 @@ const DECKING_SEED=[
   {code:'TL0611432',cat:'Concrete',name:'Concrete Pad Bag (25kg, 2 pads per bag)',price:8.50,unit:'bag'},
   {code:'TL0611433',cat:'Screw',name:'Timber Screw 80mm — Joist/Noggin (box 200)',price:14.00,unit:'box'},
   /* ── Fascia boards — same composite board, cut to fit visible edges ──────── */
-  {code:'TL0611440',cat:'Fascia',name:'Face Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
+  {code:'TL0611440',cat:'Fascia',name:'Face Board (3.6m)',price:21.50,unit:'length',lengthM:3.6},
   /* ── Picture frame border — boards laid perpendicular around perimeter ───── */
-  {code:'TL0611441',cat:'Frame',name:'Picture Frame Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
+  {code:'TL0611441',cat:'Frame',name:'Picture Frame Board (3.6m)',price:21.50,unit:'length',lengthM:3.6},
   /* ── Raised deck posts — 100×100mm 4×4 timber, 2.4m cut to 600mm lengths ── */
   {code:'TL0611442',cat:'Post',name:'4×4 Timber Post 100×100mm × 2.4m (4 posts per length)',price:24.00,unit:'length'}
 ];
@@ -3114,6 +3114,41 @@ const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Ant
 /* What colour to draw a board. The product's own hex wins — that is the one an
    admin can tune — then the shade table by colour name, then a guess from the
    name so a board added by CSV still draws as something sensible. */
+/* Board names read "HD — Charcoal", so the colour is the part after the dash.
+   A board named without one falls back to the whole name rather than ''. These
+   are only ever handed a Board product: the deck colour, or the frame colour,
+   which is itself a board. */
+function deckingColourWord(prod){
+  if(!prod)return '';
+  const raw=prod.name||'';
+  return raw.indexOf('—')>=0 ? raw.split('—').pop().trim() : raw.trim();
+}
+function deckingDeckColourWord(){
+  const d=deckingState();
+  return deckingColourWord(d.colour?deckingProduct(d.colour):null);
+}
+/* Trim follows the picture frame when there is one — it butts up against the
+   frame, not the field — and the deck board otherwise. */
+function deckingTrimColourWord(){
+  const d=deckingState();
+  if(d.pictureFrame){const fp=deckingFrameProduct();if(fp)return deckingColourWord(fp);}
+  return deckingDeckColourWord();
+}
+/* One label for the picking list AND the materials summary, so the two can never
+   disagree. Trim, face board and frame are named by the colour actually being
+   ordered rather than by the catalogue wording — and building it here rather
+   than off p.name also means a catalogue still holding the old "— Colour
+   Matched" name does not come out as "Angle Trim — Colour Matched — Teak". */
+function deckingItemLabel(p){
+  if(!p)return '';
+  if(p.cat==='Trim'){const c=deckingTrimColourWord();return c?`Angle Trim — ${c}`:p.name;}
+  if(p.cat==='Fascia'){const c=deckingDeckColourWord();return c?`Face Board — ${c}`:p.name;}
+  if(p.cat==='Frame'){
+    const c=deckingColourWord(deckingFrameProduct())||deckingDeckColourWord();
+    return c?`Picture Frame Board — ${c}`:p.name;
+  }
+  return p.name;
+}
 function deckingBoardHex(prod){
   if(prod&&/^#[0-9a-f]{6}$/i.test(String(prod.hex||'')))return prod.hex;
   const raw=(prod&&prod.name)||'';
@@ -4822,14 +4857,15 @@ function deckingRenderMaterials(res){
       : `<input class="num" type="number" min="0" step="1" value="${qty}" style="width:74px;text-align:center" oninput="deckingExtraQty('${p.code}',this.value)">${tag}`;
     /* the fitter needs the cut length on the picking line, not just the count */
     const frameProd=(p.cat==='Frame')?deckingFrameProduct():null;
+    const note=t=>` <span style="color:#8a969a;font-size:11px">— ${t}</span>`;
+    /* the colour now travels in the label, so the note carries only the cut data */
     const extra=(p.cat==='Post')
-      ? ` <span style="color:#8a969a;font-size:11px">— cut to ${deckingPostCutMm()}mm · ${deckingSubframeCounts().pads} posts needed</span>`
-      : frameProd
-      ? ` <span style="color:#8a969a;font-size:11px">— ${esc(frameProd.name)} · ${deckingFrameLengthM()}m</span>`
+      ? note(`cut to ${deckingPostCutMm()}mm · ${deckingSubframeCounts().pads} posts needed`)
+      : (p.cat==='Frame'&&frameProd) ? note(`${deckingFrameLengthM()}m lengths`)
       : '';
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${p.code}</td>
-      <td>${esc(p.name)}${extra} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
+      <td>${esc(deckingItemLabel(p))}${extra} <span style="color:#8a969a;font-size:11px">/ ${p.unit}</span></td>
       <td class="r">£${money(sell)}</td>
       <td class="c">${qtyCell}</td>
       <td class="r">£${money(Math.round(qty*sell*100)/100)}</td>
@@ -4939,10 +4975,10 @@ function deckingPickingRows(){
     deckingByCat(cat).forEach(p=>{
       const it=d.items.find(i=>i.code===p.code);
       if(!it||it.qty<=0)return;
-      /* the border can be a different board from the deck — say which, or the
-         warehouse picks the deck colour by default and it arrives wrong */
-      const frameProd=(cat==='Frame')?deckingFrameProduct():null;
-      rows.push([frameProd?`${p.name} — ${frameProd.name}`:p.name,p.code,it.qty]);
+      /* Name the colour the warehouse has to pick. Left as "colour matched" it
+         gets guessed, and a border can legitimately be a different board from
+         the deck — as can the trim that runs against it. */
+      rows.push([deckingItemLabel(p),p.code,it.qty]);
     });
   });
   return rows;
