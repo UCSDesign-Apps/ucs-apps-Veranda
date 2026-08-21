@@ -379,7 +379,12 @@ body.print-internal .internal-notes-only{display:block !important;}
     page-break-after:always;break-after:page;}
   /* Picking list and survey notes can span multiple pages — remove height constraint */
   .sheet.picking-only,
-  .sheet.survey-only{height:auto !important;min-height:296mm;max-height:none;overflow:visible;}
+  .sheet.survey-only,
+  /* The Specification sheet is already full at A4. Adding the box out / notch
+     photo pushes the Confirmation of Finishes table past the fold, and a fixed
+     296mm sheet would silently clip it. Let this one flow onto a second page
+     instead — a lost confirmation table is worse than a two-page spec. */
+  .sheet.flow-page{height:auto !important;min-height:296mm;max-height:none;overflow:visible;}
   .sheet:last-child{page-break-after:auto;break-after:auto;}
   .imgph{border:1px solid #d3dadb;}
   /* Ensure tables don't break mid-row */
@@ -5606,6 +5611,13 @@ async function sendSurveyToCustomer(){
   const c=state.customer,j=state.job;
   const custEmail=c.cemail||'';
   if(!custEmail){alert('Customer email required.');return;}
+  /* A box out or a roof notch is cut on site from this photo — going without one
+     is how the wrong opening gets cut. */
+  const cf=state.config;
+  if((cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')&&!state.images['boxnotchphoto']){
+    alert('A box out / notch out photo is required. Please add a photo of the area (with the box out / notch marked up) before sending the survey.');
+    return;
+  }
   toast('Generating survey PDF…');
   /* Hide the survey extras editor panel from the PDF capture */
   const extrasPanel=document.querySelector('.no-pdf');
@@ -6358,7 +6370,7 @@ function renderDocuments(){
   </section>
 
   <!-- SPECIFICATION -->
-  <section class="sheet">${phead('Specification')}
+  <section class="sheet${(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?' flow-page':''}">${phead('Specification')}
     <div class="pg"><div class="fill">
       ${state.doc==='survey'?'<div class="surveynote">SURVEY MODE — confirm each item on site, write actual sizes on the drawing, and tick once verified.</div>':''}
       <div class="sh">Veranda Specification — ${cf.model} · ${cf.mount}</div>
@@ -6401,6 +6413,15 @@ function renderDocuments(){
       ${state.doc==='survey'
         ? `<div class="dl">${siteGroundRows(cf)}</div>`
         : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
+      <!-- Box out / notch photo. Sits here rather than beside the site photo because
+           there are two of those, one per layout branch — this way it is written once
+           and appears on all three documents, next to the fields that ask for it.
+           object-fit:contain: the whole point is the markup, and cover would crop it. -->
+      ${(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?`
+      <div style="margin-top:10px">
+        <div class="sh" style="font-size:12px;color:var(--brand-d)">Box Out / Notch Out &mdash; Site Photo${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:11px">(required &mdash; mark up the area)</span>':''}</div>
+        <div class="gimg" style="height:180px;border-radius:10px;border:1px solid ${(state.doc==='survey'&&!state.images['boxnotchphoto'])?'#ed1c2d':'var(--line)'}">${ph('boxnotchphoto','BOX OUT / NOTCH PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
+      </div>`:''}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
@@ -6680,6 +6701,7 @@ function renderDocuments(){
   </section>`;
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
+const UPLOADABLE_IMG_KEYS=['sitephoto','boxnotchphoto'];
 function ph(key,label,w,h,extra,src,tint){
   const extraStr=extra||'';
   const fitMatch=extraStr.match(/object-fit:\s*([\w-]+)/);
@@ -6687,10 +6709,14 @@ function ph(key,label,w,h,extra,src,tint){
   /* Only object-fit is routed to the <img>; background stays on the container */
   const style=(w?`width:${w}px;`:'')+(h?`height:${h}px;`:'')+((tint&&!src)?`background:${tint};border-style:solid;border-color:#cfd5d8;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);`:'')+(extraStr.replace(/object-fit:[^;]+;?/g,'')||'');
   /* Only the site photo is clickable — all other image placeholders are display-only */
-  /* `sitephoto` is the one per-quote image a rep/surveyor can upload. Renamed from
-     `survey_sitephoto` on 2026-08-17 when it started appearing on quote + contract too;
-     loadQuote carries the old key across so existing jobs keep their photo. */
-  const clickable=(key==='sitephoto');
+  /* The per-quote images a rep/surveyor can upload. `sitephoto` was renamed from
+     `survey_sitephoto` on 2026-08-17 when it started appearing on quote + contract
+     too; loadQuote carries the old key across so existing jobs keep their photo.
+     `boxnotchphoto` joined on 2026-08-21. Anything NOT in this set renders
+     no-click with pointer-events:none and its file input hidden — a required
+     photo left out of it could never be added, and its send gate would lock the
+     survey for good. */
+  const clickable=UPLOADABLE_IMG_KEYS.includes(key);
   return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
 function docImg(cat,opt,label,w,hh,extra,tint){
