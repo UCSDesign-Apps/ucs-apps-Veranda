@@ -1035,6 +1035,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="grid g4">
             <div class="field"><label>Default mark-up %</label><input id="a_markup" class="num" oninput="liveRates()"></div>
             <div class="field"><label>Decking mark-up %</label><input id="a_deckingmarkup" class="num" oninput="liveRates()"></div>
+            <div class="field"><label>Decking fitting £/m&sup2;</label><input id="a_deckingfit" class="num" type="number" min="0" step="0.01" oninput="liveRates()"></div>
             <div class="field"><label>VAT rate %</label><input id="a_vatrate" class="num"></div>
             <div class="field"><label>Deposit %</label><input id="a_deppct" class="num"></div>
           </div>
@@ -1843,7 +1844,7 @@ const USERS_SEED=[
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
-  markup:150,deckingMarkup:150,vatRate:20,depPct:10,
+  markup:150,deckingMarkup:150,deckingFitPerM2:45,vatRate:20,depPct:10,
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
   fitting:JSON.parse(JSON.stringify(FITTING_SEED)),
@@ -1866,6 +1867,7 @@ function loadAdmin(){
     if(!m.imgmap)m.imgmap=clone(ADMIN_DEFAULT.imgmap);
     healDeckingCatalogue(m);   /* empty or pre-v2 catalogue -> current seed */
     if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
+    if(m.deckingFitPerM2==null)m.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
@@ -1933,6 +1935,7 @@ async function loadAdminFromServer(){
          stops clips, screws, timber and trim from calculating. */
       healDeckingCatalogue(admin);
       if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
+      if(admin.deckingFitPerM2==null)admin.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
                           'roof','side','siderender','lifestyle','component','decking',
@@ -2827,14 +2830,29 @@ function autoFitting(){
       if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
     }
   });
+  /* Decking install is a single charge covering the whole area, so it is neither
+     merged nor incremented: pressing the button twice must not double it, and
+     resizing the deck must not leave the old area behind on a second line.
+     Drop any previous decking line and re-add it at the current size. */
+  let dkAdded=0;
+  const dkBefore=state.fitting.length;
+  state.fitting=state.fitting.filter(f=>String(f.desc||'').indexOf(DECK_FIT_DESC)!==0);
+  const dkRemoved=dkBefore-state.fitting.length;
+  const dkFit=deckingFitTotal();
+  if(dkFit>0){
+    state.fitting.push({desc:`${DECK_FIT_DESC} — ${deckingArea()}m² @ £${money(deckingFitRate())}/m²`,
+                        price:dkFit,qty:1});
+    if(!dkRemoved)dkAdded=1;
+  }
+
   /* Merge into the fitting list — an existing line gains qty rather than repeating */
-  let added=0,bumped=0;
+  let added=dkAdded,bumped=0;
   suggested.forEach(s=>{
     const ex=state.fitting.find(f=>f.desc===s.desc);
     if(ex){ex.qty=(ex.qty||1)+1;bumped++;}
     else{state.fitting.push(s);added++;}
   });
-  if(added||bumped){
+  if(added||bumped||dkRemoved){
     renderPricing();
     toast('Fitting costs updated ('+added+' line'+(added===1?'':'s')+' added'+(bumped?', '+bumped+' qty increased':'')+')');
   }
@@ -3102,7 +3120,10 @@ function deckingState(){
    mark-up, and (like materialsSell) is treated as VAT-inclusive.
    Reps only ever see sell prices; cost stays in Admin and Costings. */
 function deckingMarkupMult(){return 1+(+((admin&&admin.deckingMarkup)!=null?admin.deckingMarkup:150)||0)/100;}
-function deckSellPrice(cost){return Math.round((+cost||0)*deckingMarkupMult()*100)/100;}
+/* Cost -> customer price: decking's own mark-up, then VAT. materialsSell() has
+   always done markup x 1.2; decking was only ever marked up, so anything that
+   called this "inc VAT" was a fifth short. */
+function deckSellPrice(cost){return Math.round((+cost||0)*deckingMarkupMult()*1.2*100)/100;}
 
 function deckingToggle(on){
   const d=deckingState();d.enabled=!!on;
@@ -4558,6 +4579,16 @@ function deckingTotal(unit){
 function deckingCostTotal(){return deckingTotal(c=>c);}
 /* customer price, VAT-inclusive — Pricing, documents, deposit and finance */
 function deckingSellTotal(){return deckingTotal(deckSellPrice);}
+/* Installing the deck, charged by the square metre. Not marked up and not
+   discounted — it goes into state.fitting and is treated exactly like veranda
+   fitting from there. */
+const DECK_FIT_DESC='Composite Decking Installation';
+function deckingFitRate(){return +((admin&&admin.deckingFitPerM2)!=null?admin.deckingFitPerM2:0)||0;}
+function deckingFitTotal(){
+  const d=deckingState();
+  if(!d.enabled)return 0;
+  return Math.round(deckingFitRate()*deckingArea()*100)/100;
+}
 /* [description, code, qty] rows for the Picking List */
 function deckingPickingRows(){
   const d=deckingState();
@@ -4610,7 +4641,8 @@ function renderCostings(){
   /* Decking is discounted alongside materials, so calc.matNet already carries its
      net value. Its list value therefore has to join _effectiveList too — put it on
      one side only and the band drifts away from the discount actually given. */
-  const _deckingListIncVat=Math.round(deckingSell*1.2*100)/100;
+  /* deckingSell already carries VAT — adding it again here would charge it twice */
+  const _deckingListIncVat=deckingSell;
   const _revenueExFitting=Math.round((calc.matNet+svTotal)*100)/100;
   const _effectiveList=Math.round((_listIncVat+_deckingListIncVat+addCostsTotal)*100)/100;
   const costedAtBand=_effectiveList>0?Math.max(0,Math.round((1-(_revenueExFitting/_effectiveList))*100)):soldAtBand;
@@ -4825,11 +4857,11 @@ function renderPaySchedule(sched,total){
 function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));const pane=document.getElementById('ap-'+t);if(pane)pane.classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
   /* Ensure the image map is (re)rendered when switching to the Product Images tab */
   if(t==='imgmap')renderImageMap();}
-function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;}
+function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;}
 function renderAdmin(){
   const c=admin.company;
   V('a_coname',c.name);V('a_coshort',c.short);V('a_cono',c.cono);V('a_vat',c.vat);V('a_addr1',c.addr1);V('a_addr2',c.addr2);V('a_town',c.town);V('a_post',c.post);V('a_tel',c.tel);V('a_fax',c.fax);V('a_group',c.group);V('a_signable_key',c.signableKey||'');V('a_signable_rep',c.signableRepEmail||'');
-  V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
+  V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_deckingfit',admin.deckingFitPerM2);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
   // fitting
   const fb=document.getElementById('adminFitRows');fb.innerHTML='';
   admin.fitting.forEach((f,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td><input value="${esc(f.desc)}" oninput="admin.fitting[${i}].desc=this.value"></td><td class="r"><input class="num" value="${f.direct}" oninput="admin.fitting[${i}].direct=+this.value||0"></td><td class="r"><input class="num" value="${f.finance}" oninput="admin.fitting[${i}].finance=+this.value||0"></td><td><button class="chiprm" onclick="admin.fitting.splice(${i},1);renderAdmin()">×</button></td>`;fb.appendChild(tr);});
@@ -5390,7 +5422,7 @@ function saveAdmin(){const c=admin.company;
   c.name=val('a_coname');c.short=val('a_coshort');c.cono=val('a_cono');c.vat=val('a_vat');c.addr1=val('a_addr1');c.addr2=val('a_addr2');c.town=val('a_town');c.post=val('a_post');c.tel=val('a_tel');c.fax=val('a_fax');c.group=val('a_group');
   if(val('a_signable_key'))c.signableKey=val('a_signable_key');
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
-  admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
+  admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
   initLogin();renderPricing();renderSurvey();
   /* Sync the full admin object to the server so every user picks up the latest
      company details, pricing and images on their next login. */
