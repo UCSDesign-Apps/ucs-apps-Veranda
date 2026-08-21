@@ -814,8 +814,8 @@ body.print-internal .internal-notes-only{display:block !important;}
 
             <!-- Fascia boards -->
             <div style="margin-bottom:16px">
-              <div style="font-weight:600;font-size:14px;margin-bottom:6px">Fascia Boards</div>
-              <div class="sub" style="margin-bottom:8px">Select which sides of the deck get a fascia board to hide the subframe edge. Uses the same board as the deck surface.</div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:6px">Face Boards</div>
+              <div class="sub" style="margin-bottom:8px">Select which sides of the deck get a face board to hide the subframe edge. Uses the same board as the deck surface.</div>
               <div id="dk_fascia_sides" style="display:flex;gap:8px;flex-wrap:wrap"></div>
             </div>
 
@@ -1341,7 +1341,7 @@ const DECKING_SEED=[
   {code:'TL0611432',cat:'Concrete',name:'Concrete Pad Bag (25kg, 2 pads per bag)',price:8.50,unit:'bag'},
   {code:'TL0611433',cat:'Screw',name:'Timber Screw 80mm — Joist/Noggin (box 200)',price:14.00,unit:'box'},
   /* ── Fascia boards — same composite board, cut to fit visible edges ──────── */
-  {code:'TL0611440',cat:'Fascia',name:'Fascia Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
+  {code:'TL0611440',cat:'Fascia',name:'Face Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
   /* ── Picture frame border — boards laid perpendicular around perimeter ───── */
   {code:'TL0611441',cat:'Frame',name:'Picture Frame Board — Colour Matched (3.6m)',price:21.50,unit:'length',lengthM:3.6},
   /* ── Raised deck posts — 100×100mm 4×4 timber, 2.4m cut to 600mm lengths ── */
@@ -1368,7 +1368,7 @@ const DECK_GROUPS=[
 ];
 const DECK_CAT_LABEL={Board:'Boards',Joist:'Joists',Noggin:'Noggins',Membrane:'Weed Membrane',
   Tape:'Joist Tape',Concrete:'Concrete Pads',Screw:'Timber Screws',
-  Trim:'Trim',Fixing:'Fixings',Fascia:'Fascia',Frame:'Picture Frame',Post:'Posts',Step:'Steps'};
+  Trim:'Trim',Fixing:'Fixings',Fascia:'Face Board',Frame:'Picture Frame',Post:'Posts',Step:'Steps'};
 const DECKING_BOARD_CATS=['Board'];
 
 /* A catalogue saved before the v2 calculator uses the old HD / Embossed / Edge
@@ -5380,7 +5380,7 @@ function renderImageMap(){
     ['component','Picking-list component images',COMP_TYPES],
     ['decking','Decking boards — by product code',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
     ['deckboard','Decking page — board swatch by product code <span style="font-weight:400;color:#8a969a">(falls back to the tile above)</span>',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
-    ['deckfascia','Decking page — fascia by product code <span style="font-weight:400;color:#8a969a">(falls back to the board swatch)</span>',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
+    ['deckfascia','Decking page — face board by product code <span style="font-weight:400;color:#8a969a">(falls back to the board swatch)</span>',(admin.decking||[]).filter(p=>DECKING_BOARD_CATS.includes(p.cat)).map(p=>p.code)],
     ['decklifestyle','Decking page — lifestyle image',['1']],
     ['stepSingle','Decking steps — single step photo',['1']],
     ['stepDouble','Decking steps — double step photo',['1']],
@@ -6288,8 +6288,8 @@ function renderDocuments(){
   const SWATCH='width:100%;height:100%;object-fit:cover';
   const dkCards=dkBoard?[
     dkCard('Board',esc(dkBoard.name),dkImg('deckboard',dkBoard.code,'BOARD',SWATCH)),
-    dkCard('Fascia',anyFascia?esc(dkFasciaTxt):'None',
-           anyFascia?dkImg('deckfascia',dkBoard.code,'FASCIA',SWATCH):dkNone),
+    dkCard('Face Board',anyFascia?esc(dkFasciaTxt):'None',
+           anyFascia?dkImg('deckfascia',dkBoard.code,'FACE BOARD',SWATCH):dkNone),
     dkCard('Picture Frame',dk.pictureFrame?esc(dkFrameProd?dkFrameProd.name:'Matched'):'None',
            dk.pictureFrame?dkImg('deckboard',(dkFrameProd||dkBoard).code,'BORDER',SWATCH):dkNone),
     dkCard('Steps',dkAnySteps?esc(dkSteps):'None',dkStepCardImg)
@@ -6444,7 +6444,7 @@ function renderDocuments(){
           <div>Area<br><b style="color:#2b323a">${dkArea}m&sup2;</b></div>
           <div>Dimensions<br><b style="color:#2b323a">${dk.dims.a}&times;${dk.dims.b}mm</b></div>
           <div>Board<br><b style="color:#2b323a">${esc(dkBoard.name)}</b></div>
-          <div>Fascia<br><b style="color:#2b323a">${anyFascia?esc(dkFasciaTxt):'None'}</b></div>
+          <div>Face Board<br><b style="color:#2b323a">${anyFascia?esc(dkFasciaTxt):'None'}</b></div>
           <div>Picture frame<br><b style="color:#2b323a">${dk.pictureFrame?esc(dkFrameTxt):'None'}</b></div>
           <div>Steps<br><b style="color:#2b323a">${dkSteps?esc(dkSteps):'None'}</b></div>
           <div>Maximum fall depth<br><b style="color:#2b323a">${dk.deckHeightMm>0?dk.deckHeightMm+'mm':'Level'}</b></div>
