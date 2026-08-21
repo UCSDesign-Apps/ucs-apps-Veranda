@@ -6181,22 +6181,30 @@ function renderDocuments(){
      that looks like built. */
   const dkStepTypes=(dk.enabled&&dkSell>0)?deckingStepTypes():{single:false,double:false};
   const dkAnySteps=dkStepTypes.single||dkStepTypes.double;
-  /* The step photo has to be readable as a step, so it scales to fit rather than
-     cropping — a cropped tread tells the customer nothing. The well centres it on
-     a neutral ground so the spare space either side reads as deliberate. */
-  const dkStepTile=(cat,label)=>`<div style="display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="flex:1 1 auto;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">${docImg(cat,DECK_STEP_IMG_KEY,label,0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')}</div>
-      <div style="flex:0 0 auto;padding:4px 8px;font-size:10.5px;font-weight:600;text-align:center">${label}</div>
+  /* Which sides carry a step, short enough for a quarter-width card. The
+     Specification rectangle below spells out single vs double per side. */
+  const dkStepSides=DECK_SIDES.filter(sd=>dk.steps&&dk.steps[sd]>0).map(sd=>DECK_SIDE_LABEL[sd]).join(', ');
+  /* One card per element of the deck, four across the top of the page. Every
+     card is always present so the row reads as a checklist of what was and was
+     not taken — an option the customer declined shows a muted "None" rather
+     than vanishing and leaving a ragged row. */
+  const dkNone='<span style="font-size:11px;color:#9aa6aa">None</span>';
+  const dkCard=(title,sub,inner)=>`<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="flex:0 0 auto;height:80px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">${inner}</div>
+      <div style="flex:1 1 auto;padding:5px 8px;font-size:10.5px;font-weight:600;text-align:center">${title}<br><span style="font-weight:400;color:#666">${sub}</span></div>
     </div>`;
-  const dkStepImages=dkAnySteps?`<div style="flex:1 1 auto;min-height:0;display:grid;grid-template-columns:${(dkStepTypes.single&&dkStepTypes.double)?'1fr 1fr':'1fr'};gap:8px">
-      ${dkStepTypes.single?dkStepTile('stepSingle','Single Step'):''}
-      ${dkStepTypes.double?dkStepTile('stepDouble','Double Step'):''}
-    </div>`:'';
+  /* The step photo scales to fit — a cropped tread tells the customer nothing.
+     Double is shown in preference to single: it is the bigger build. */
+  const dkStepCardImg=dkStepTypes.double
+    ? docImg('stepDouble',DECK_STEP_IMG_KEY,'Double step',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')
+    : dkStepTypes.single
+    ? docImg('stepSingle',DECK_STEP_IMG_KEY,'Single step',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')
+    : dkNone;
   /* Technical plans scale to fit instead of cropping — a cropped subframe plan
      would cut off joists and bearers the installer needs to see. */
   const dkDiagramBox=(label,src)=>`<div style="display:flex;flex-direction:column;min-height:0">
       <div style="flex:0 0 auto;font-size:11px;font-weight:600;color:#555;text-align:center;margin-bottom:4px">${label}</div>
-      <div style="flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;padding:5px;background:#fff">
+      <div style="flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;padding:5px;background:#fafafa">
         ${src?`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`:''}
       </div>
     </div>`;
@@ -6233,28 +6241,22 @@ function renderDocuments(){
     ? confirmRow('Composite Decking',`${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²${dkSteps?` · steps: ${esc(dkSteps)}`:''}`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
     : '';
 
-  /* One tile per thing the customer actually bought. Fascia and the border only
-     appear when they were selected, so the row never carries a "None" card. */
-  /* The tile is a flex column so its picture well grows to whatever height the
-     row settles at — the spec box beside it is usually the tallest thing there.
-     Without this the swatch leaves dead space under a fixed 90px picture.
+  /* The four cards along the top: the board, and the three options the customer
+     either took or did not. dkImg keeps the deckboard -> decking fallback so a
+     site that never uploaded a dedicated swatch still shows the colour-grid
+     picture instead of an empty placeholder.
      These three stay on object-fit:cover deliberately: board, fascia and border
-     are colour and grain samples, so filling the tile IS the sample. Only the
-     lifestyle and step photos, which have to be read as a whole scene, use
-     contain. */
-  const dkTile=(img,label)=>`<div style="display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-          <div style="flex:1 1 auto;min-height:90px;overflow:hidden">${img}</div>
-          <div style="flex:0 0 auto;padding:6px 10px;font-size:11px;font-weight:600;text-align:center">${label}</div>
-        </div>`;
-  const dkTiles=[];
-  if(dkBoard){
-    dkTiles.push(dkTile(dkImg('deckboard',dkBoard.code,'BOARD','width:100%;height:100%;object-fit:cover'),
-                        `Board: ${esc(dkBoard.name)}`));
-    if(anyFascia)dkTiles.push(dkTile(dkImg('deckfascia',dkBoard.code,'FASCIA','width:100%;height:100%;object-fit:cover'),
-                        `Fascia: ${esc(dkFasciaTxt)}`));
-    if(dk.pictureFrame)dkTiles.push(dkTile(dkImg('deckboard',(dkFrameProd||dkBoard).code,'BORDER','width:100%;height:100%;object-fit:cover'),
-                        `Picture frame: ${esc(dkFrameProd?dkFrameProd.name:'Matched')}`));
-  }
+     are colour and grain samples, so filling the card IS the sample. The step,
+     lifestyle and diagrams use contain, because they have to be read whole. */
+  const SWATCH='width:100%;height:100%;object-fit:cover';
+  const dkCards=dkBoard?[
+    dkCard('Board',esc(dkBoard.name),dkImg('deckboard',dkBoard.code,'BOARD',SWATCH)),
+    dkCard('Fascia',anyFascia?esc(dkFasciaTxt):'None',
+           anyFascia?dkImg('deckfascia',dkBoard.code,'FASCIA',SWATCH):dkNone),
+    dkCard('Picture Frame',dk.pictureFrame?esc(dkFrameProd?dkFrameProd.name:'Matched'):'None',
+           dk.pictureFrame?dkImg('deckboard',(dkFrameProd||dkBoard).code,'BORDER',SWATCH):dkNone),
+    dkCard('Steps',dkAnySteps?esc(dkStepSides):'None',dkStepCardImg)
+  ].join(''):'';
 
   const html=`
   <!-- COVER -->
@@ -6392,45 +6394,49 @@ function renderDocuments(){
   ${(dk.enabled&&dkSell>0&&dkBoard&&state.doc!=='picking')?`<section class="sheet">
     ${phead('Composite Decking')}
     <div class="pg"><div class="fill" style="gap:10px">
-      <div class="sh" style="flex:0 0 auto;margin:0">Your Composite Decking &mdash; ${esc(dkBoard.name)}</div>
 
-      <!-- Row 1 — board swatch, only the options actually chosen, then the spec.
-           Natural height: this row sets the baseline the other two flex around. -->
-      <div style="flex:0 0 auto;display:grid;grid-template-columns:${dkTiles.map(()=>'1fr').join(' ')} 1.2fr;gap:10px">
-        ${dkTiles.join('')}
-        <div style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:11.5px">
-          <div style="font-weight:700;margin-bottom:5px">Specification</div>
-          <div>Shape: <b>${esc(dkShape)}</b></div>
-          <div>Area: <b>${dkArea}m&sup2;</b></div>
-          <div>Dimensions: <b>${dk.dims.a}&times;${dk.dims.b}mm</b></div>
-          ${dk.pictureFrame?`<div>Picture frame border: <b>${esc(dkFrameTxt)}</b></div>`:''}
-          ${anyFascia?`<div>Fascia: <b>${esc(dkFasciaTxt)}</b></div>`:''}
-          ${dk.deckHeightMm>0?`<div>Height above ground: <b>${dk.deckHeightMm}mm</b></div>`:''}
-          ${dkSteps?`<div>Steps: <b>${esc(dkSteps)}</b></div>`:''}
+      <!-- ROW 1 — Board / Fascia / Picture Frame / Steps, four across. Natural height. -->
+      <div style="flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        ${dkCards}
+      </div>
+
+      <!-- ROW 2 — Specification, full width. -->
+      <div style="flex:0 0 auto;border:1px solid var(--line);border-radius:8px;padding:10px 14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--brand)">Specification</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px 20px;font-size:11.5px;color:#555">
+          <div>Shape<br><b style="color:#2b323a">${esc(dkShape)}</b></div>
+          <div>Area<br><b style="color:#2b323a">${dkArea}m&sup2;</b></div>
+          <div>Dimensions<br><b style="color:#2b323a">${dk.dims.a}&times;${dk.dims.b}mm</b></div>
+          <div>Board<br><b style="color:#2b323a">${esc(dkBoard.name)}</b></div>
+          <div>Fascia<br><b style="color:#2b323a">${anyFascia?esc(dkFasciaTxt):'None'}</b></div>
+          <div>Picture frame<br><b style="color:#2b323a">${dk.pictureFrame?esc(dkFrameTxt):'None'}</b></div>
+          <div>Steps<br><b style="color:#2b323a">${dkSteps?esc(dkSteps):'None'}</b></div>
+          <div>Height above ground<br><b style="color:#2b323a">${dk.deckHeightMm>0?dk.deckHeightMm+'mm':'Ground level'}</b></div>
         </div>
       </div>
 
-      <!-- Row 2 — the two layout plans. Diagrams fit rather than crop. -->
-      ${(dkSubframeImg||dkBoardImg)?`<div style="flex:1 1 40%;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0">
-        ${dkDiagramBox('Subframe Plan',dkSubframeImg)}
-        ${dkDiagramBox('Board Layout',dkBoardImg)}
-      </div>`:''}
-
-      <!-- Row 3 — lifestyle photo, why composite, and the step reference photos.
-           Takes the remainder so the sheet has no dead space at the foot. -->
-      <div style="flex:1 1 35%;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;min-height:0">
+      <!-- ROW 3 — lifestyle photo and why composite.
+           Rows 3 and 4 share the leftover height 3:4. That has to be expressed as
+           grow factors on a zero basis, NOT flex-basis percentages: .fill sits in
+           a chain of auto-height flex parents, so a percentage basis resolves
+           against an indefinite height, falls back to auto, and the ratio is
+           silently ignored (every percentage pair lays out identically). -->
+      <div style="flex:3 1 0;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;min-height:0">
         <div style="min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">
           ${docImg('decklifestyle','1','COMPOSITE DECKING',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')}
         </div>
-        <div style="display:flex;flex-direction:column;min-height:0;gap:8px">
-          <div style="flex:${dkAnySteps?'0 0 auto':'1 1 auto'};overflow:hidden;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;color:#333">
-            <div style="font-weight:700;font-size:13px;margin-bottom:5px;color:var(--brand)">Why Composite Decking?</div>
-            <p style="margin:0 0 6px">Our composite boards combine recycled wood fibre and polymer for a surface that won't rot, warp, splinter or fade like traditional timber.</p>
-            <p style="margin:0">Virtually maintenance-free &mdash; no sanding, staining or sealing. Just an occasional wash keeps it looking its best, backed by a manufacturer warranty.</p>
-          </div>
-          ${dkStepImages}
+        <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:#333">
+          <div style="flex:0 0 auto;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--brand)">Why Composite Decking?</div>
+          <p style="margin:0 0 6px;font-size:11.5px;line-height:1.5">Our composite boards combine recycled wood fibre and polymer for a surface that won't rot, warp, splinter or fade like traditional timber.</p>
+          <p style="margin:0;font-size:11.5px;line-height:1.5">Virtually maintenance-free &mdash; no sanding, staining or sealing. Just an occasional wash keeps it looking its best, backed by a manufacturer warranty.</p>
         </div>
       </div>
+
+      <!-- ROW 4 — the two layout plans, anchored at the foot of the sheet. -->
+      ${(dkSubframeImg||dkBoardImg)?`<div style="flex:4 1 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0">
+        ${dkDiagramBox('Subframe Plan',dkSubframeImg)}
+        ${dkDiagramBox('Board Layout',dkBoardImg)}
+      </div>`:''}
     </div></div>${pfoot()}
   </section>`:''}
 
