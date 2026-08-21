@@ -3320,7 +3320,10 @@ function deckingCycleStep(side){
   const d=deckingState();
   deckingSetStep(side,((d.steps[side]||0)+1)%3);
 }
+/* Internal enum wording. Kept as the record of what 0/1/2 mean; everything the
+   customer or rep reads now uses DECK_STEP_NUM. */
 const DECK_STEP_LABEL=['None','Single','Double'];
+const DECK_STEP_NUM=['No steps','1 Step','2 Step'];  /* customer-facing step count labels */
 /* Which letter the drawing puts on a given bounding-box side. This is NOT the
    same for every shape and cannot be a fixed map: a rectangle's front edge is C,
    an L-left's is F, and a U-shape's front is split either side of the gap into E
@@ -3355,7 +3358,7 @@ function renderDkStepLabels(){
     const dots='<span class="dots">'+Array.from({length:n},()=>'<i class="dot"></i>').join('')+'</span>';
     return `<span class="${'dk-pill dk-pill'+n}">
       ${dots}
-      ${deckSideLetters(s)?`${deckSideLetters(s)} (${DECK_SIDE_LABEL[s]})`:DECK_SIDE_LABEL[s]}: ${DECK_STEP_LABEL[n]} step${len>0?` · ${len.toFixed(2)}m`:''}
+      ${deckSideLetters(s)?`${deckSideLetters(s)} (${DECK_SIDE_LABEL[s]})`:DECK_SIDE_LABEL[s]}: ${DECK_STEP_NUM[n]}${len>0?` · ${len.toFixed(2)}m`:''}
     </span>`;
   }).join('')+'</div>';
 }
@@ -6201,7 +6204,7 @@ function renderDocuments(){
   const dkShape=DK_SHAPES[dk.shape]?DK_SHAPES[dk.shape].label:'';
   const dkBoard=dk.enabled&&dk.colour?deckingProduct(dk.colour):null;
   const dkSteps=DECK_SIDES.filter(s=>dk.steps&&dk.steps[s]>0)
-    .map(s=>`${DECK_SIDE_LABEL[s]} ${DECK_STEP_LABEL[dk.steps[s]].toLowerCase()}`).join(', ');
+    .map(s=>`${DECK_SIDE_LABEL[s]} — ${DECK_STEP_NUM[dk.steps[s]]}`).join(', ');
   const dkFasciaSides=DECK_SIDES.filter(sd=>dk.fasciaSides&&dk.fasciaSides[sd]);
   const anyFascia=dkFasciaSides.length>0;
   const dkFasciaTxt=dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', ');
@@ -6215,9 +6218,6 @@ function renderDocuments(){
      that looks like built. */
   const dkStepTypes=(dk.enabled&&dkSell>0)?deckingStepTypes():{single:false,double:false};
   const dkAnySteps=dkStepTypes.single||dkStepTypes.double;
-  /* Which sides carry a step, short enough for a quarter-width card. The
-     Specification rectangle below spells out single vs double per side. */
-  const dkStepSides=DECK_SIDES.filter(sd=>dk.steps&&dk.steps[sd]>0).map(sd=>DECK_SIDE_LABEL[sd]).join(', ');
   /* One card per element of the deck, four across the top of the page. Every
      card is always present so the row reads as a checklist of what was and was
      not taken — an option the customer declined shows a muted "None" rather
@@ -6292,7 +6292,7 @@ function renderDocuments(){
            anyFascia?dkImg('deckfascia',dkBoard.code,'FASCIA',SWATCH):dkNone),
     dkCard('Picture Frame',dk.pictureFrame?esc(dkFrameProd?dkFrameProd.name:'Matched'):'None',
            dk.pictureFrame?dkImg('deckboard',(dkFrameProd||dkBoard).code,'BORDER',SWATCH):dkNone),
-    dkCard('Steps',dkAnySteps?esc(dkStepSides):'None',dkStepCardImg)
+    dkCard('Steps',dkAnySteps?esc(dkSteps):'None',dkStepCardImg)
   ].join(''):'';
 
   const html=`
