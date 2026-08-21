@@ -6452,49 +6452,6 @@ function renderDocuments(){
     </div></div>${pfoot()}
   </section>`:''}
 
-  <!-- INSTALLATION — survey: own page · quote/contract: Sides (top half) + Installation (bottom half) -->
-  <section class="sheet">${phead(state.doc==='survey'?'Installation & Fitting':'Sides, Infills & Installation')}
-    <div class="pg"><div class="fill" style="overflow:hidden">
-      ${state.doc!=='survey'?`<div class="sh">Sides / Infills — ${cf.mount}</div>
-      <div style="flex:0 0 auto;max-height:120mm;display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-auto-rows:minmax(0,58mm);align-content:start;overflow:hidden">${sideCardsBig}</div>
-      <div class="sh" style="margin-top:10px">Installation &amp; Fitting Schedule</div>`:`<div class="sh">Installation &amp; Fitting Schedule</div>`}
-      <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0">
-      <table class="mt"><thead><tr><th>Fitting work to be carried out</th><th class="c" style="width:60px">Qty</th><th class="r" style="width:90px">Unit £</th><th class="r" style="width:100px">Total £</th></tr></thead>
-        <tbody>${fitRows}</tbody>
-        <tfoot><tr><td colspan="3" class="r">Total Installation Fee (${j.pay})</td><td class="r">£${money(calc.fitting)}</td></tr></tfoot></table>
-      <p style="font-size:9.5px;color:#6a777c;margin-top:8px">*RP Replacement · *NB New Build · *FRP Finance Replacement. This fee is payable to the fitters in addition to materials. Prices shown on the <b>${j.pay}</b> tariff.</p>
-      <div class="sigrow signblock" style="margin-top:auto">
-        <div class="sigcard" data-signable="{signature:signer2:Customer+Signature}" style="min-height:70px"><div class="h">Customer Signature</div></div>
-        <div class="sigcard"><div class="h">Customer Name</div><div class="nm">${c.cname||''}</div><div class="line" style="margin-top:6px"></div></div>
-      </div>
-      </div>
-      <div class="survey-only no-print no-pdf" style="flex-direction:column;gap:6px;margin-top:auto;border-top:2px dashed var(--gold);padding-top:14px">
-        <div class="sh" style="margin-top:0">Add Survey Extras — on site</div>
-        <div style="font-size:11px;color:#6a777c">Materials &amp; install costs added here are <b>additional to the signed contract</b>. They populate the <b>Survey Notes &amp; Additional Items</b> page and the picking list, and do not change the contract price.</div>
-        <div style="font-weight:700;font-size:12px;margin-top:6px">Additional materials</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="sv_doc_partpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_part_wrap',this)">${admin.parts.map((p,i)=>`<option value="${i}">${esc(p.desc)} — Mat £${money(partMat(p))} / Fit £${money(+p.fitCost||0)}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
-          <button class="btn primary sm" onclick="addPartDoc()">＋ Add</button>
-        </div>
-        <div id="sv_doc_other_part_wrap" style="display:none;gap:8px;margin-top:6px;flex-wrap:wrap">
-          <input id="sv_doc_other_part_desc" placeholder="Item description..." style="flex:2;min-width:160px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
-          <input id="sv_doc_other_part_cost" type="number" min="0" step="0.01" placeholder="Cost £" style="width:90px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
-        </div>
-        <div style="font-size:11px">${state.surveyParts.map((p,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(p.desc)} ×${p.qty} · £${money(p.cost*p.qty)} <a onclick="delPartDoc(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional materials yet.</i>'}</div>
-        <div style="font-weight:700;font-size:12px;margin-top:8px">Additional labour / install costs (${j.pay})</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="sv_doc_labpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_lab_wrap',this)">${admin.fitting.map((fz,i)=>`<option value="${i}">${esc(fz.desc)} — £${payPrice(fz)}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
-          <button class="btn primary sm" onclick="addLabourDoc()">＋ Add</button>
-        </div>
-        <div id="sv_doc_other_lab_wrap" style="display:none;gap:8px;margin-top:6px;flex-wrap:wrap">
-          <input id="sv_doc_other_lab_desc" placeholder="Work description (e.g. Groundwork dig up)..." style="flex:2;min-width:160px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
-          <input id="sv_doc_other_lab_cost" type="number" min="0" step="1" placeholder="Amount £" style="width:90px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
-        </div>
-        <div style="font-size:11px">${state.surveyLabour.map((l,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(l.desc)} ×${l.qty} · £${money(l.price*l.qty)} <a onclick="delLabDoc(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional labour yet.</i>'}</div>
-      </div>
-    </div></div>${pfoot()}
-  </section>
-
   <!-- COMPOSITE DECKING (only when decking is actually sold; not on the picking list) -->
   ${(dk.enabled&&dkSell>0&&dkBoard&&state.doc!=='picking')?`<section class="sheet">
     ${phead('Composite Decking')}
@@ -6546,6 +6503,49 @@ function renderDocuments(){
       </div>`:''}
     </div></div>${pfoot()}
   </section>`:''}
+
+  <!-- INSTALLATION — survey: own page · quote/contract: Sides (top half) + Installation (bottom half) -->
+  <section class="sheet">${phead(state.doc==='survey'?'Installation & Fitting':'Sides, Infills & Installation')}
+    <div class="pg"><div class="fill" style="overflow:hidden">
+      ${state.doc!=='survey'?`<div class="sh">Sides / Infills — ${cf.mount}</div>
+      <div style="flex:0 0 auto;max-height:120mm;display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-auto-rows:minmax(0,58mm);align-content:start;overflow:hidden">${sideCardsBig}</div>
+      <div class="sh" style="margin-top:10px">Installation &amp; Fitting Schedule</div>`:`<div class="sh">Installation &amp; Fitting Schedule</div>`}
+      <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0">
+      <table class="mt"><thead><tr><th>Fitting work to be carried out</th><th class="c" style="width:60px">Qty</th><th class="r" style="width:90px">Unit £</th><th class="r" style="width:100px">Total £</th></tr></thead>
+        <tbody>${fitRows}</tbody>
+        <tfoot><tr><td colspan="3" class="r">Total Installation Fee (${j.pay})</td><td class="r">£${money(calc.fitting)}</td></tr></tfoot></table>
+      <p style="font-size:9.5px;color:#6a777c;margin-top:8px">*RP Replacement · *NB New Build · *FRP Finance Replacement. This fee is payable to the fitters in addition to materials. Prices shown on the <b>${j.pay}</b> tariff.</p>
+      <div class="sigrow signblock" style="margin-top:auto">
+        <div class="sigcard" data-signable="{signature:signer2:Customer+Signature}" style="min-height:70px"><div class="h">Customer Signature</div></div>
+        <div class="sigcard"><div class="h">Customer Name</div><div class="nm">${c.cname||''}</div><div class="line" style="margin-top:6px"></div></div>
+      </div>
+      </div>
+      <div class="survey-only no-print no-pdf" style="flex-direction:column;gap:6px;margin-top:auto;border-top:2px dashed var(--gold);padding-top:14px">
+        <div class="sh" style="margin-top:0">Add Survey Extras — on site</div>
+        <div style="font-size:11px;color:#6a777c">Materials &amp; install costs added here are <b>additional to the signed contract</b>. They populate the <b>Survey Notes &amp; Additional Items</b> page and the picking list, and do not change the contract price.</div>
+        <div style="font-weight:700;font-size:12px;margin-top:6px">Additional materials</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="sv_doc_partpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_part_wrap',this)">${admin.parts.map((p,i)=>`<option value="${i}">${esc(p.desc)} — Mat £${money(partMat(p))} / Fit £${money(+p.fitCost||0)}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
+          <button class="btn primary sm" onclick="addPartDoc()">＋ Add</button>
+        </div>
+        <div id="sv_doc_other_part_wrap" style="display:none;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <input id="sv_doc_other_part_desc" placeholder="Item description..." style="flex:2;min-width:160px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
+          <input id="sv_doc_other_part_cost" type="number" min="0" step="0.01" placeholder="Cost £" style="width:90px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
+        </div>
+        <div style="font-size:11px">${state.surveyParts.map((p,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(p.desc)} ×${p.qty} · £${money(p.cost*p.qty)} <a onclick="delPartDoc(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional materials yet.</i>'}</div>
+        <div style="font-weight:700;font-size:12px;margin-top:8px">Additional labour / install costs (${j.pay})</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="sv_doc_labpick" style="flex:1;padding:8px;border:1px solid #cfd8da;border-radius:8px" onchange="toggleOtherPart('sv_doc_other_lab_wrap',this)">${admin.fitting.map((fz,i)=>`<option value="${i}">${esc(fz.desc)} — £${payPrice(fz)}</option>`).join('')}<option value="__other__">Other — enter below</option></select>
+          <button class="btn primary sm" onclick="addLabourDoc()">＋ Add</button>
+        </div>
+        <div id="sv_doc_other_lab_wrap" style="display:none;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <input id="sv_doc_other_lab_desc" placeholder="Work description (e.g. Groundwork dig up)..." style="flex:2;min-width:160px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
+          <input id="sv_doc_other_lab_cost" type="number" min="0" step="1" placeholder="Amount £" style="width:90px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">
+        </div>
+        <div style="font-size:11px">${state.surveyLabour.map((l,i)=>`<span style="display:inline-block;background:#f3f6f7;border:1px solid #e0e6e7;border-radius:14px;padding:3px 9px;margin:3px 4px 0 0">${esc(l.desc)} ×${l.qty} · £${money(l.price*l.qty)} <a onclick="delLabDoc(${i})" style="color:#bd4219;cursor:pointer;font-weight:700">×</a></span>`).join('')||'<i style="color:#8a969a">No additional labour yet.</i>'}</div>
+      </div>
+    </div></div>${pfoot()}
+  </section>
 
   <!-- YOUR VERANDA OR GLASS ROOM (quote & contract only) -->
   ${(state.doc==='quote'||state.doc==='contract')?`<section class="sheet">${phead('Your Veranda or Glass Room')}
