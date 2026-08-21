@@ -791,14 +791,6 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div id="dk_step_labels" style="margin-top:10px"></div>
           </div>
 
-          <!-- STEP PROFILES — only while a side actually has steps -->
-          <div class="card" id="dk_step_profiles_card" style="display:none">
-            <div class="dk-step" style="margin-bottom:6px">Step Profiles</div>
-            <div class="sub" style="margin-bottom:10px" id="dk_step_profiles_sub">Side elevation of each stepped edge.</div>
-            <div id="dk_step_profiles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
-            <div id="dk_step_images" style="display:none;gap:10px;margin-top:10px"></div>
-          </div>
-
           <!-- STEP 2 — COLOUR -->
           <div class="card">
             <div class="dk-step"><span class="dk-num">2</span> Board Colour</div>
@@ -3943,45 +3935,6 @@ function drawBoardPlan(force){
     (clipped?' · runs cut to the outline':''));
 }
 
-/* ── Step elevations ────────────────────────────────────────────────────── */
-/* A side-on section through a stepped edge — the view an installer reads a step
-   detail from. Each tread is drawn two boards deep with the division showing,
-   and where the deck has a picture frame the tread nose carries the border. */
-const STEP_RISE_MM=150;   /* nominal rise per tread, for the caption */
-function drawStepElevation(canvasId,treads,hasBorder){
-  const cv=document.getElementById(canvasId);if(!cv)return;
-  const ctx=cv.getContext&&cv.getContext('2d');if(!ctx)return;
-  const W=220,H=130;
-  cv.width=W;cv.height=H;
-  if(cv.style)cv.style.width='100%';
-  ctx.clearRect(0,0,W,H);
-  const TREAD_PX=40,RISE_PX=28,deckTop=20,startX=30;
-  /* the deck itself */
-  ctx.fillStyle='#c8a46e';ctx.fillRect(startX,deckTop,60,12);
-  ctx.strokeStyle='#3c4650';ctx.lineWidth=1.5;ctx.strokeRect(startX,deckTop,60,12);
-  /* treads stepping down away from it */
-  let x=startX+60,y=deckTop;
-  for(let i=0;i<treads;i++){
-    y+=RISE_PX;
-    ctx.fillStyle='#a8863a';ctx.fillRect(x,y-RISE_PX,4,RISE_PX);          /* riser */
-    ctx.fillStyle='#c8a46e';ctx.fillRect(x,y,TREAD_PX,12);                /* tread */
-    ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=0.5;                  /* two boards */
-    ctx.beginPath();ctx.moveTo(x+TREAD_PX/2,y);ctx.lineTo(x+TREAD_PX/2,y+12);ctx.stroke();
-    ctx.strokeStyle='#3c4650';ctx.lineWidth=1.5;ctx.strokeRect(x,y,TREAD_PX,12);
-    if(hasBorder){ctx.fillStyle='#3c4650';ctx.fillRect(x+TREAD_PX-3,y,3,12);}   /* nosing */
-    x+=TREAD_PX;
-  }
-  /* ground */
-  ctx.strokeStyle='#8a969a';ctx.lineWidth=1;
-  if(ctx.setLineDash)ctx.setLineDash([4,3]);
-  ctx.beginPath();ctx.moveTo(10,y+14);ctx.lineTo(210,y+14);ctx.stroke();
-  if(ctx.setLineDash)ctx.setLineDash([]);
-  /* caption — the tread depth is whatever two of the chosen boards measure */
-  const depth=Math.round(deckingStepTreadDepthM()*1000);
-  ctx.fillStyle='#555';ctx.font='10px Helvetica,Arial';ctx.textAlign='left';
-  ctx.fillText(`${treads} step${treads>1?'s':''} · ${STEP_BOARDS_PER_TREAD} boards/tread (${depth}mm)`+
-               (hasBorder?' · border nosing':''),10,122);
-}
 /* The legend swatches show the colours actually on the drawing, so a customer
    looking at a charcoal plan does not see a tan key beside it. */
 function deckingRenderPlanLegend(){
@@ -4001,48 +3954,14 @@ function deckingRenderPlanLegend(){
     tx('dk_lg_frame_txt',fp?`Picture frame — ${fp.name}`:'Picture frame');
   }
 }
-/* One photo per step TYPE, not per stepped side: three sides with a single step
-   still means one kind of step, and three copies of the same picture would just
-   push the page down. */
+/* Which kinds of step this deck has. One photo per TYPE goes on the documents —
+   three sides with a single step still means one kind of step — and the
+   configurator shows no step visual beyond the red lines on the overhead plan. */
 const DECK_STEP_IMG_KEY='1';   /* these are fixed slots, like the lifestyle image */
 function deckingStepTypes(){
   const d=deckingState();
   return {single:DECK_SIDES.some(sd=>(d.steps&&d.steps[sd]||0)===1),
           double:DECK_SIDES.some(sd=>(d.steps&&d.steps[sd]||0)===2)};
-}
-function deckingRenderStepImages(){
-  const el=document.getElementById('dk_step_images');if(!el)return;
-  const t=deckingStepTypes();
-  if(!t.single&&!t.double){el.style.display='none';el.innerHTML='';return;}
-  const tile=(cat,label)=>`<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="height:120px;overflow:hidden">${docImg(cat,DECK_STEP_IMG_KEY,label,0,0,'width:100%;height:100%;object-fit:cover')}</div>
-      <div style="padding:6px 10px;font-size:12px;font-weight:600;text-align:center">${label}</div>
-    </div>`;
-  const both=t.single&&t.double;
-  el.style.display='grid';
-  el.style.gridTemplateColumns=both?'1fr 1fr':'1fr';
-  el.innerHTML=(t.single?tile('stepSingle','Single Step'):'')+
-               (t.double?tile('stepDouble','Double Step'):'');
-}
-function deckingRenderStepProfiles(){
-  const card=document.getElementById('dk_step_profiles_card');
-  const el=document.getElementById('dk_step_profiles');
-  if(!card||!el)return;
-  const d=deckingState();
-  const stepped=DECK_SIDES.filter(sd=>(d.steps&&d.steps[sd]||0)>0);
-  if(!stepped.length){card.style.display='none';el.innerHTML='';return;}
-  card.style.display='';
-  const sub=document.getElementById('dk_step_profiles_sub');
-  if(sub)sub.textContent=`Side elevation of each stepped edge — ${STEP_BOARDS_PER_TREAD} boards per tread `+
-    `(${Math.round(deckingStepTreadDepthM()*1000)}mm), ${STEP_RISE_MM}mm rise.`;
-  el.innerHTML=stepped.map(sd=>{
-    const letter=deckSideLetters(sd);
-    return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center">
-      <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">${letter?`Side ${letter} (${DECK_SIDE_LABEL[sd]})`:DECK_SIDE_LABEL[sd]}</div>
-      <canvas id="dk_stepcv_${sd}" style="width:100%"></canvas>
-    </div>`;
-  }).join('');
-  stepped.forEach(sd=>drawStepElevation('dk_stepcv_'+sd,d.steps[sd],!!d.pictureFrame));
 }
 
 /* Tap a side of the diagram to cycle its steps: none -> single -> double -> none */
@@ -4432,19 +4351,6 @@ function deckingPlanDataURL(which){
   const cv=document.getElementById(which==='subframe'?'dk_plan_canvas':'dk_board_canvas');
   if(!cv||!cv.width||!cv.height||!cv.toDataURL)return '';
   try{return cv.toDataURL('image/png');}catch(e){return '';}
-}
-/* The step elevations as PNGs, for the decking page in the documents. Same
-   approach as the plans: render them into the live canvases, then read those. */
-function deckingStepElevationImages(){
-  const d=deckingState();
-  if(!d.enabled)return [];
-  deckingRenderStepProfiles();
-  return DECK_SIDES.filter(sd=>(d.steps&&d.steps[sd]||0)>0).map(sd=>{
-    const cv=document.getElementById('dk_stepcv_'+sd);
-    let url='';
-    if(cv&&cv.width&&cv.height&&cv.toDataURL){try{url=cv.toDataURL('image/png');}catch(e){url='';}}
-    return {side:sd,letter:deckSideLetters(sd),label:DECK_SIDE_LABEL[sd],treads:d.steps[sd],url};
-  }).filter(x=>x.url);
 }
 
 /* Redraw both plans at their normal paired size and hand back the images.
@@ -4845,8 +4751,6 @@ function deckingCalc(){
   }
   deckingRenderMaterials(res);
   deckingRenderPlanLegend();
-  deckingRenderStepProfiles();
-  deckingRenderStepImages();
   deckingRenderFasciaSides();   /* the side lengths on the chips follow the dims */
   deckingRenderHeightNote();    /* pad count moves with the deck */
   deckingRenderDirection();
@@ -6217,14 +6121,13 @@ function renderDocuments(){
   /* Redraw the plans so the embedded pictures match the dimensions on the page. */
   const dkPlanImg=(dk.enabled&&dkSell>0)?deckingPlanImages():{subframe:'',board:''};
   const dkSubframeImg=dkPlanImg.subframe, dkBoardImg=dkPlanImg.board;
-  const dkStepImgs=(dk.enabled&&dkSell>0)?deckingStepElevationImages():[];
-  /* one photo per step type — the elevation shows the geometry, the photo shows
-     the finished look, so they belong in the same box rather than a fourth row
-     the A4 sheet has no room for */
+  /* One reference photo per step type, on the documents only. The specification
+     box above already says which sides are stepped; this shows the customer what
+     that looks like built. */
   const dkStepTypes=(dk.enabled&&dkSell>0)?deckingStepTypes():{single:false,double:false};
   const dkStepPhoto=(cat,label)=>`<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="height:78px;overflow:hidden">${docImg(cat,DECK_STEP_IMG_KEY,label,0,0,'width:100%;height:100%;object-fit:cover')}</div>
-      <div style="padding:4px 8px;font-size:10px;font-weight:600;text-align:center">${label}</div>
+      <div style="height:130px;overflow:hidden">${docImg(cat,DECK_STEP_IMG_KEY,label,0,0,'width:100%;height:100%;object-fit:cover')}</div>
+      <div style="padding:6px 10px;font-size:12px;font-weight:600;text-align:center">${label}</div>
     </div>`;
   /* The board swatch has lived under imgmap 'decking' since the colour grid was
      built, so a new 'deckboard' slot falls back to it rather than making the
@@ -6441,18 +6344,10 @@ function renderDocuments(){
       </div>`:''}
 
       <!-- step elevations, only where the deck actually has steps -->
-      ${(dkStepImgs.length||dkStepTypes.single||dkStepTypes.double)?`<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:14px">
-        <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-align:center">Step Profiles${dkStepImgs.length?' — side elevation':''}</div>
-        <div style="display:${dkStepImgs.length?'grid':'none'};grid-template-columns:repeat(${Math.max(1,Math.min(dkStepImgs.length,4))},1fr);gap:10px">
-          ${dkStepImgs.map(st=>`<div style="text-align:center">
-            <img src="${st.url}" style="max-width:100%;max-height:80px">
-            <div style="font-size:10px;color:#555;margin-top:2px">${st.letter?`Side ${esc(st.letter)} (${esc(st.label)})`:esc(st.label)} · ${st.treads===2?'double':'single'}</div>
-          </div>`).join('')}
-        </div>
-        ${(dkStepTypes.single||dkStepTypes.double)?`<div style="display:grid;grid-template-columns:${(dkStepTypes.single&&dkStepTypes.double)?'1fr 1fr':'1fr'};gap:10px;margin-top:8px">
-          ${dkStepTypes.single?dkStepPhoto('stepSingle','Single Step'):''}
-          ${dkStepTypes.double?dkStepPhoto('stepDouble','Double Step'):''}
-        </div>`:''}
+      ${(dkStepTypes.single||dkStepTypes.double)?`<div class="sh" style="margin-top:12px">Steps</div>
+      <div style="display:grid;grid-template-columns:${(dkStepTypes.single&&dkStepTypes.double)?'1fr 1fr':'1fr'};gap:12px;margin:6px 0 14px">
+        ${dkStepTypes.single?dkStepPhoto('stepSingle','Single Step'):''}
+        ${dkStepTypes.double?dkStepPhoto('stepDouble','Double Step'):''}
       </div>`:''}
 
       <!-- lifestyle image + why composite -->
