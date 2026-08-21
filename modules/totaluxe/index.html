@@ -808,6 +808,7 @@ body.print-internal .internal-notes-only{display:block !important;}
                 Picture Frame Border
               </label>
               <div class="sub" style="margin:4px 0 0 28px">One row of boards laid perpendicular around the perimeter before the main field. Adds boards and is shown on the layout diagram.</div>
+              <div id="dk_frame_colour" style="display:none;margin:8px 0 0 28px"></div>
             </div>
 
             <!-- Fascia boards -->
@@ -2038,7 +2039,7 @@ function blankState(){return{
      surveyParts   = on-site survey extras only — never alter the contract totals. */
   fitting:[],contractParts:[],surveyParts:[],surveyLabour:[],images:{},surveyDraw:{},
   decking:{enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null,
-    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,deckHeightMm:0}
+    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,frameColour:'',deckHeightMm:0}
 };}
 let state=blankState();
 function today(){return new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
@@ -3061,7 +3062,7 @@ const DECK_HEX={'Dove Grey':'#9aa0a3','Charcoal':'#3f4245','Teak':'#8a5a33','Ant
 
 function deckingState(){
   if(!state.decking)state.decking={enabled:false,shape:'square',dims:{a:0,b:0,c:0,d:0},colour:'',colourName:'',perimeter:0,steps:{front:0,right:0,back:0,left:0},items:[],areaM2:0,boardDir:'a',optimised:null,
-    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,deckHeightMm:0};
+    fasciaSides:{front:false,right:false,back:false,left:false},pictureFrame:false,frameColour:'',deckHeightMm:0};
   const d=state.decking;
   /* Which way the boards run: 'a' along the width, 'b' along the projection.
      Anything saved before the optimiser existed ran along A. */
@@ -3073,6 +3074,10 @@ function deckingState(){
   if(!d.fasciaSides)d.fasciaSides={};
   DECK_SIDES.forEach(k=>{d.fasciaSides[k]=!!d.fasciaSides[k];});
   d.pictureFrame=!!d.pictureFrame;
+  /* blank means the border is cut from the same board as the deck. A code that
+     is no longer in the catalogue falls back to the same thing. */
+  if(d.frameColour&&!deckingProduct(d.frameColour))d.frameColour='';
+  if(typeof d.frameColour!=='string')d.frameColour='';
   d.deckHeightMm=Math.max(0,+d.deckHeightMm||0);
   if(!Array.isArray(d.items))d.items=[];
   /* v1 called the rectangle 'rect' */
@@ -4285,7 +4290,49 @@ function deckingRenderDirection(){
 /* ── Step 3: finishing options ──────────────────────────────────────────── */
 function deckingSetPictureFrame(on){
   deckingState().pictureFrame=!!on;
+  deckingRenderFrameColour();
   deckingCalc();   /* redraws both plans itself */
+}
+/* The board the border is cut from: whatever was picked for it, or the deck's
+   own board when it is left matched. */
+function deckingFrameProduct(){
+  const d=deckingState();
+  if(!d.pictureFrame)return null;
+  const code=d.frameColour||d.colour;
+  return code?deckingProduct(code):null;
+}
+function deckingFrameColourName(){
+  const d=deckingState();
+  const prod=deckingFrameProduct();
+  if(!prod)return 'Matched to deck boards';
+  return d.frameColour?prod.name:prod.name+' (matched to deck)';
+}
+function deckingSetFrameColour(code){
+  const d=deckingState();
+  d.frameColour=(d.frameColour===code)?'':code;
+  deckingRenderFrameColour();
+  deckingCalc();
+}
+/* Same list of boards the deck itself is chosen from, plus the matched default.
+   Only on show while the border is actually ticked. */
+function deckingRenderFrameColour(){
+  const w=document.getElementById('dk_frame_colour');if(!w)return;
+  const d=deckingState();
+  if(!d.pictureFrame){w.style.display='none';w.innerHTML='';return;}
+  w.style.display='';
+  const boards=deckingBoards();
+  const chip=(code,label,sub,sel,bg,src)=>`<label style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:5px 10px;border:1.5px solid ${sel?'var(--brand)':'var(--line)'};border-radius:8px;background:${sel?'#f0f8f0':'#fff'}" onclick="deckingSetFrameColour('${code}')">
+      <span style="width:22px;height:22px;border-radius:4px;border:1px solid var(--line);overflow:hidden;background:${bg};flex:none">${src?`<img src="${src}" style="width:100%;height:100%;object-fit:cover">`:''}</span>
+      <span style="font-size:12px;font-weight:600">${esc(label)}${sub?`<br><span style="font-weight:400;color:#8a969a;font-size:11px">${esc(sub)}</span>`:''}</span>
+    </label>`;
+  const deckBoard=d.colour?deckingProduct(d.colour):null;
+  const matchedBg=deckBoard?(DECK_HEX[deckBoard.name.split('—').pop().trim()]||'#cccccc'):'#e3e8e9';
+  const rows=[chip('','Match deck boards',deckBoard?deckBoard.name:'pick a board in Step 4',!d.frameColour,matchedBg,
+                   deckBoard?((admin.imgmap.decking||{})[deckBoard.code]||''):'')]
+    .concat(boards.map(pr=>chip(pr.code,pr.name,'',d.frameColour===pr.code,
+      DECK_HEX[pr.name.split('—').pop().trim()]||'#cccccc',(admin.imgmap.decking||{})[pr.code]||'')));
+  w.innerHTML=`<div style="font-size:12px;font-weight:600;margin-bottom:6px">Border colour</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${rows.join('')}</div>`;
 }
 function deckingSetHeight(mm){
   const d=deckingState();
@@ -4337,6 +4384,7 @@ function deckingRenderFinishing(){
   const d=deckingState();
   const pf=document.getElementById('dk_picture_frame');
   if(pf)pf.checked=!!d.pictureFrame;
+  deckingRenderFrameColour();
   const h=document.getElementById('dk_height');
   if(h)h.value=d.deckHeightMm||'';
   deckingRenderHeightNote();
@@ -4349,6 +4397,7 @@ function deckingSetColour(code){
   const d=deckingState();
   d.colour=(d.colour===code)?'':code;
   d.colourName=d.colour?p.name:'';
+  deckingRenderFrameColour();   /* the "matched" swatch follows the deck board */
   /* a different board is a different pitch, so the last optimisation is stale */
   deckingClearOptimised();
   renderDecking();   /* board width changed -> running metres and clips change */
@@ -4502,7 +4551,11 @@ function deckingPickingRows(){
     if(cat==='Board')return;
     deckingByCat(cat).forEach(p=>{
       const it=d.items.find(i=>i.code===p.code);
-      if(it&&it.qty>0)rows.push([p.name,p.code,it.qty]);
+      if(!it||it.qty<=0)return;
+      /* the border can be a different board from the deck — say which, or the
+         warehouse picks the deck colour by default and it arrives wrong */
+      const frameProd=(cat==='Frame')?deckingFrameProduct():null;
+      rows.push([frameProd?`${p.name} — ${frameProd.name}`:p.name,p.code,it.qty]);
     });
   });
   return rows;
@@ -5744,6 +5797,9 @@ function renderDocuments(){
     .map(s=>`${DECK_SIDE_LABEL[s]} ${DECK_STEP_LABEL[dk.steps[s]].toLowerCase()}`).join(', ');
   const dkFasciaSides=DECK_SIDES.filter(sd=>dk.fasciaSides&&dk.fasciaSides[sd]);
   const anyFascia=dkFasciaSides.length>0;
+  const dkFasciaTxt=dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', ');
+  const dkFrameProd=deckingFrameProduct();
+  const dkFrameTxt=dk.pictureFrame?deckingFrameColourName():'';
   /* Redraw the plans so the embedded pictures match the dimensions on the page. */
   const dkPlanImg=(dk.enabled&&dkSell>0)?deckingPlanImages():{subframe:'',board:''};
   const dkSubframeImg=dkPlanImg.subframe, dkBoardImg=dkPlanImg.board;
@@ -5779,6 +5835,22 @@ function renderDocuments(){
   const deckingSpecRow=(dk.enabled&&dkSell>0&&dkBoard)
     ? confirmRow('Composite Decking',`${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²${dkSteps?` · steps: ${esc(dkSteps)}`:''}`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
     : '';
+
+  /* One tile per thing the customer actually bought. Fascia and the border only
+     appear when they were selected, so the row never carries a "None" card. */
+  const dkTile=(img,label)=>`<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <div style="height:90px;overflow:hidden">${img}</div>
+          <div style="padding:6px 10px;font-size:11px;font-weight:600;text-align:center">${label}</div>
+        </div>`;
+  const dkTiles=[];
+  if(dkBoard){
+    dkTiles.push(dkTile(dkImg('deckboard',dkBoard.code,'BOARD','width:100%;height:100%;object-fit:cover'),
+                        `Board: ${esc(dkBoard.name)}`));
+    if(anyFascia)dkTiles.push(dkTile(dkImg('deckfascia',dkBoard.code,'FASCIA','width:100%;height:100%;object-fit:cover'),
+                        `Fascia: ${esc(dkFasciaTxt)}`));
+    if(dk.pictureFrame)dkTiles.push(dkTile(dkImg('deckboard',(dkFrameProd||dkBoard).code,'BORDER','width:100%;height:100%;object-fit:cover'),
+                        `Picture frame: ${esc(dkFrameProd?dkFrameProd.name:'Matched')}`));
+  }
 
   const html=`
   <!-- COVER -->
@@ -5918,23 +5990,16 @@ function renderDocuments(){
     <div class="pg">
       <div class="sh">Your Composite Decking — ${esc(dkBoard.name)}</div>
 
-      <!-- board swatch + fascia + specification -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:12px;margin-bottom:14px">
-        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
-          <div style="height:90px;overflow:hidden">${dkImg('deckboard',dkBoard.code,'BOARD','width:100%;height:100%;object-fit:cover')}</div>
-          <div style="padding:6px 10px;font-size:11px;font-weight:600;text-align:center">Board: ${esc(dkBoard.name)}</div>
-        </div>
-        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
-          <div style="height:90px;overflow:hidden">${dkImg('deckfascia',dkBoard.code,'FASCIA','width:100%;height:100%;object-fit:cover')}</div>
-          <div style="padding:6px 10px;font-size:11px;font-weight:600;text-align:center">Fascia: ${anyFascia?esc(dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', ')):'None'}</div>
-        </div>
+      <!-- board swatch, then only the options actually chosen, then the spec -->
+      <div style="display:grid;grid-template-columns:${dkTiles.map(()=>'1fr').join(' ')} 1.2fr;gap:12px;margin-bottom:14px">
+        ${dkTiles.join('')}
         <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px">
           <div style="font-weight:700;margin-bottom:6px">Specification</div>
           <div>Shape: <b>${esc(dkShape)}</b></div>
           <div>Area: <b>${dkArea}m&sup2;</b></div>
           <div>Dimensions: <b>${dk.dims.a}&times;${dk.dims.b}mm</b></div>
-          ${dk.pictureFrame?'<div>Picture frame border: <b>Yes</b></div>':''}
-          ${anyFascia?`<div>Fascia: <b>${esc(dkFasciaSides.map(sd=>DECK_SIDE_LABEL[sd]).join(', '))}</b></div>`:''}
+          ${dk.pictureFrame?`<div>Picture frame border: <b>${esc(dkFrameTxt)}</b></div>`:''}
+          ${anyFascia?`<div>Fascia: <b>${esc(dkFasciaTxt)}</b></div>`:''}
           ${dk.deckHeightMm>0?`<div>Height above ground: <b>${dk.deckHeightMm}mm</b></div>`:''}
           ${dkSteps?`<div>Steps: <b>${esc(dkSteps)}</b></div>`:''}
         </div>
