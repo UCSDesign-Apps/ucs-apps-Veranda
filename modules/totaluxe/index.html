@@ -3249,7 +3249,26 @@ function deckingCycleStep(side){
 }
 const DECK_STEP_LABEL=['None','Single','Double'];
 /* Sides are lettered clockwise from the front: A front, B right, C back, D left. */
-const DECK_SIDE_LETTER={front:'A',right:'B',back:'C',left:'D'};
+/* Which letter the drawing puts on a given bounding-box side. This is NOT the
+   same for every shape and cannot be a fixed map: a rectangle's front edge is C,
+   an L-left's is F, and a U-shape's front is split either side of the gap into E
+   and G. Reading it back out of the shape's own edgeDescs is the only way the
+   checkbox and the drawing can never disagree.
+   (The fixed map this replaced had front=A / back=C, which was the wrong way
+   round even on a rectangle.) */
+const DECK_SIDE_EDGE_RE={back:/^back edge/i,front:/^front edge|front face/i,
+                         right:/^right side/i,left:/^left side/i};
+function deckSideLetters(side,shape){
+  const sh=DK_SHAPES[shape||deckingState().shape];
+  const re=DECK_SIDE_EDGE_RE[side];
+  if(!sh||!sh.edgeLabels||!sh.edgeDescs||!re)return '';
+  const hits=[];
+  sh.edgeDescs.forEach((desc,i)=>{
+    const letter=sh.edgeLabels[i];
+    if(re.test(desc)&&letter&&hits.indexOf(letter)<0)hits.push(letter);
+  });
+  return hits.join('/');
+}
 /* Coloured pills under the diagram, one per side that carries steps. */
 function renderDkStepLabels(){
   const d=deckingState(),w=document.getElementById('dk_step_labels');if(!w)return;
@@ -3264,7 +3283,7 @@ function renderDkStepLabels(){
     const dots='<span class="dots">'+Array.from({length:n},()=>'<i class="dot"></i>').join('')+'</span>';
     return `<span class="${'dk-pill dk-pill'+n}">
       ${dots}
-      ${DECK_SIDE_LABEL[s]} (${DECK_SIDE_LETTER[s]}): ${DECK_STEP_LABEL[n]} step${len>0?` · ${len.toFixed(2)}m`:''}
+      ${deckSideLetters(s)?`${deckSideLetters(s)} (${DECK_SIDE_LABEL[s]})`:DECK_SIDE_LABEL[s]}: ${DECK_STEP_LABEL[n]} step${len>0?` · ${len.toFixed(2)}m`:''}
     </span>`;
   }).join('')+'</div>';
 }
@@ -3396,8 +3415,11 @@ function dkStepLine(ctx,g){
     const e=edges[s];
     const dir=e.horiz ? (e.y>=cy?1:-1) : (e.x>=cx?1:-1);   /* outward */
     const base=DK_STEP_OFFSET*dir;
+    /* One line for a single step. For a double, the inner line keeps full weight
+       and the outer one is half of it, so the pair reads as a stepped profile
+       rather than as two equal lines. */
     const runs=(n===1)?[{off:base,w:5,c:DK_STEP1_COLOUR}]
-                      :[{off:base,w:4,c:DK_STEP2_COLOUR},{off:base+3*dir,w:4,c:DK_STEP2_COLOUR}];
+                      :[{off:base,w:5,c:DK_STEP2_COLOUR},{off:base+5*dir,w:2.5,c:DK_STEP2_COLOUR}];
     runs.forEach(r=>{
       ctx.beginPath();
       ctx.lineWidth=r.w;ctx.strokeStyle=r.c;ctx.lineCap='round';
@@ -4409,9 +4431,15 @@ function deckingRenderFasciaSides(){
   el.innerHTML=sides.map(side=>{
     const on=!!(d.fasciaSides&&d.fasciaSides[side]);
     const len=valid?deckingSideLengthM(side):0;
+    /* letter first, so it reads off the drawing above rather than off a guess
+       about which way round the deck is */
+    const letter=deckSideLetters(side);
+    const chip=letter
+      ? `<span style="display:inline-block;min-width:20px;height:20px;line-height:20px;text-align:center;padding:0 4px;background:var(--brand);color:#fff;border-radius:4px;margin-right:6px;font-size:11px">${letter}</span>`
+      : '';
     return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1.5px solid ${on?'var(--brand)':'var(--line)'};border-radius:8px;background:${on?'#f0f8f0':'#fff'}">
       <input type="checkbox" ${on?'checked':''} onchange="deckingSetFascia('${side}',this.checked)" style="accent-color:var(--brand)">
-      <span style="font-size:13px;font-weight:600">${labels[side]||side}</span>
+      <span style="font-size:13px;font-weight:600">${chip}${labels[side]||side}</span>
       ${len>0?`<span style="font-size:11px;color:#8a969a">${len.toFixed(2)}m</span>`:''}
     </label>`;
   }).join('');
