@@ -2079,10 +2079,16 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    saved its users — which is every live one. Anyone who can reach the
    Configurator gets it, since Qualify is the step that feeds it; a surveyor
    (quotes + docs only) is left alone. Idempotent. */
+/* Bump whenever the seeded questions change. An install that has saved its admin
+   config keeps its own copy of the questions, so without a version to compare
+   against, later seed edits — new answers, photo flags, corrected allow-lists —
+   never reach it. */
+const QUALIFY_SEED_VERSION=3;
 /* Deep clone of the seed. Every field a question can carry has to come across —
    an earlier version copied only {id,text,options} and would have silently
    dropped section, type, filter, unit, placeholder and the per-option
-   models/specify, leaving a set that renders but never filters. */
+   models/specify/photo, leaving a set that renders but never filters or asks for
+   a picture. */
 function qualifySeedClone(){
   return ADMIN_DEFAULT.qualifyQuestions.map(function(q){
     var out={id:q.id,text:q.text};
@@ -2101,10 +2107,23 @@ function qualifySeedClone(){
     return out;
   });
 }
+/* A stable fingerprint of a question set. Stamped when the seed is written, so a
+   later re-seed can tell "still exactly what we shipped" from "the admin has
+   edited this" and leave the second alone. */
+function qualifySignature(list){
+  try{
+    return JSON.stringify((list||[]).map(function(q){
+      return [q.id,q.text,q.section||'',q.type||'select',q.filter?1:0,q.unit||'',q.placeholder||'',
+        (q.options||[]).map(function(o){
+          return [o.label,(Array.isArray(o.models)?o.models.slice().sort():[]).join(','),o.specify?1:0,o.photo?1:0];
+        })];
+    }));
+  }catch(e){return '';}
+}
 /* True while the saved set is still one of the earlier shipped defaults, so it
-   can be replaced by the current one. The current set is recognised by ids that
+   can be replaced by the current one. The current generation is recognised by ids
    only it has — q_access, q_soffit, q_rooftype — which also holds if a rep has
-   since edited its wording. Anything else is left alone. */
+   since edited its wording. */
 function qualifyIsPlaceholder(list){
   if(!Array.isArray(list)||!list.length)return false;
   var ids=list.map(function(q){return q&&q.id;});
@@ -2115,11 +2134,22 @@ function qualifyIsPlaceholder(list){
 function healQualifyQuestions(target){
   var t=target||(typeof admin!=='undefined'?admin:null);
   if(!t)return false;
-  if(!Array.isArray(t.qualifyQuestions)||qualifyIsPlaceholder(t.qualifyQuestions)){
-    t.qualifyQuestions=qualifySeedClone();
-    return true;
+  var list=t.qualifyQuestions;
+  var reseed=false;
+  if(!Array.isArray(list)||qualifyIsPlaceholder(list)){
+    reseed=true;
+  }else if(t.qualifySeedVersion!==QUALIFY_SEED_VERSION){
+    /* Only overwrite a set that is still byte-for-byte what we last seeded. Once
+       the admin edits anything the signature stops matching and their work is
+       left alone, even across later seed changes. A set stamped before signatures
+       existed has no fingerprint to check, so this one transition re-seeds it. */
+    reseed=(!t.qualifySeedSig)||(qualifySignature(list)===t.qualifySeedSig);
   }
-  return false;
+  if(!reseed)return false;
+  t.qualifyQuestions=qualifySeedClone();
+  t.qualifySeedVersion=QUALIFY_SEED_VERSION;
+  t.qualifySeedSig=qualifySignature(t.qualifyQuestions);
+  return true;
 }
 function healUserSections(list){
   if(!Array.isArray(list))return false;
