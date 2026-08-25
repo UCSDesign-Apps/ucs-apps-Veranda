@@ -451,6 +451,7 @@ body.print-internal .internal-notes-only{display:block !important;}
       <nav class="nav" id="nav">
         <button data-view="quotes" data-label="Quotes"><span class="ic">▦</span> Quotes</button>
         <button data-view="customer" data-label="Customer"><span class="ic">👤</span> Customer &amp; Job</button>
+        <button data-view="qualify" data-label="Qualify"><span class="ic">❓</span> Qualify</button>
         <button data-view="build" data-label="Config"><span class="ic">⚙</span> Configurator</button>
         <button data-view="pricing" data-label="Pricing"><span class="ic">£</span> Pricing &amp; Fitting</button>
         <button data-view="decking" data-label="Decking"><span class="ic">🪵</span> Decking</button>
@@ -526,6 +527,13 @@ body.print-internal .internal-notes-only{display:block !important;}
             <div class="field"><label>Prepared by</label><select id="f_prep" onchange="syncFromForm()"></select></div>
           </div>
         </div>
+      </section>
+
+      <!-- QUALIFY — Q&A that narrows the product range before configuring -->
+      <section class="view" id="view-qualify">
+        <div style="margin-bottom:6px"><h2 style="margin:0 0 2px">Qualify</h2>
+        <div class="sub">A few quick questions to narrow the product range before configuring. Answers filter which products are available.</div></div>
+        <div id="qualifyBody"></div>
       </section>
 
       <!-- CONFIGURATOR WIZARD -->
@@ -1008,6 +1016,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           <button onclick="adminTab('fitting',this)">Fitting Costs</button>
           <button onclick="adminTab('parts',this)">Parts Catalogue</button>
           <button onclick="adminTab('decking',this)">🪵 Decking</button>
+          <button onclick="adminTab('qualify',this)">❓ Qualify</button>
           <button onclick="adminTab('users',this)">Users &amp; Access</button>
           <button onclick="adminTab('pricematrix',this)">💷 Price Matrix</button>
           <button onclick="adminTab('imgmap',this)">Product Images</button>
@@ -1062,6 +1071,16 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="sub">Additional-parts catalogue used in Pricing &amp; at survey. Set real costs here. <b>Materials</b> are subject to the customer discount; <b>Fitting</b> is never discounted.</div>
           <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Description</th><th class="r" style="width:160px">Materials £ <span style="font-weight:400;font-size:11px">(discounted)</span></th><th class="r" style="width:160px">Fitting £ <span style="font-weight:400;font-size:11px">(not discounted)</span></th><th style="width:30px"></th></tr></thead><tbody id="adminPartRows"></tbody></table></div>
           <button class="btn sm" style="margin-top:10px" onclick="adminAddPart()">＋ Add part</button>
+        </div></div>
+
+        <div class="apane" id="ap-qualify"><div class="card">
+          <div class="notebox" style="background:#eef4f6;border:1px solid #cfdde2;color:#3c5560;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:10px">
+            <b>Qualification questions.</b> These are asked on the <b>Qualify</b> stage, between Customer &amp; Job and the Configurator.
+            Each answer carries a list of the products it allows — a product stays available only if <b>every</b> answered question allows it.
+            Tick nothing on an answer and it filters nothing, which is useful for a &ldquo;not sure yet&rdquo; option.
+          </div>
+          <div id="qualifyAdminBody"></div>
+          <div style="margin-top:12px"><button class="btn primary sm" onclick="addQualifyQuestion()">＋ Add question</button></div>
         </div></div>
 
         <div class="apane" id="ap-decking"><div class="card">
@@ -1846,13 +1865,13 @@ const PARTS_SEED=[
   {desc:'Foundation Block',                    matCost:0, fitCost:120},
 ];
 
-const ALL_SECTIONS=['quotes','customer','build','pricing','decking','docs','costings','admin'];
+const ALL_SECTIONS=['quotes','customer','qualify','build','pricing','decking','docs','costings','admin'];
 const ALL_DOCS=['quote','contract','survey','picking'];
 const USERS_SEED=[
  {u:'admin',pin:'0000',name:'Administrator',role:'admin',sections:ALL_SECTIONS.slice(),docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'damien',pin:'1111',name:'Damien',role:'sales',sections:['quotes','customer','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'ryan',pin:'2222',name:'Ryan',role:'sales',sections:['quotes','customer','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'richard',pin:'3333',name:'Richard',role:'sales',sections:['quotes','customer','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'damien',pin:'1111',name:'Damien',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'ryan',pin:'2222',name:'Ryan',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'richard',pin:'3333',name:'Richard',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
  {u:'surveyor',pin:'4444',name:'Surveyor',role:'surveyor',sections:['quotes','docs'],docs:['contract','survey','picking'],signedOnly:true}
 ];
 
@@ -1860,6 +1879,16 @@ const USERS_SEED=[
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
   markup:150,deckingMarkup:150,deckingFitPerM2:45,deckingFabPerM2:15,vatRate:20,depPct:10,
+  /* Qualification Q&A. Each option carries an allow-list of model keys: a model
+     survives only if EVERY answered question allows it. An empty models[] means
+     "this answer rules nothing out", which is why these seeds filter nothing
+     until the questions are configured in Admin -> Qualify. */
+  qualifyQuestions:[
+    {id:'q_use',text:'How will the space mainly be used?',
+     options:[{label:'Shade / shelter (open sides)',models:[]},{label:'Enclosed garden room',models:[]},{label:'Not sure yet',models:[]}]},
+    {id:'q_mount',text:'Will it attach to the house or stand free?',
+     options:[{label:'Attached to the wall',models:[]},{label:'Free standing',models:[]}]}
+  ],
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
   fitting:JSON.parse(JSON.stringify(FITTING_SEED)),
@@ -1884,6 +1913,7 @@ function loadAdmin(){
     if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
     if(m.deckingFitPerM2==null)m.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
     if(m.deckingFabPerM2==null)m.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
+    if(!Array.isArray(m.qualifyQuestions))m.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
@@ -1953,6 +1983,7 @@ async function loadAdminFromServer(){
       if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
       if(admin.deckingFitPerM2==null)admin.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
       if(admin.deckingFabPerM2==null)admin.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
+      if(!Array.isArray(admin.qualifyQuestions))admin.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
                           'roof','side','siderender','lifestyle','component','decking',
@@ -2046,6 +2077,7 @@ function persistAdmin(){/* no-op: admin baked into file on Save Admin */}
 function blankState(){return{
   id:null,doc:'contract',status:'Draft',
   customer:{cname:"",ctel:"",caddr1:"",caddr2:"",cpost:"",cemail:"",site:""},
+  qualify:{},
   job:{quote:nextQuoteNo(),hq:"",date:today(),valid:plus30(),prep:"",surveyorName:"",internalNotes:"",loc:"Back of house",pay:"Direct",payMethods:{},surveySentToCustomer:false},
   config:{model:"",mount:"",colour:"",roof:"",gutter:"",post:"",width:0,proj:0,sides:{left:"None",right:"None",front:"None",back:"None"},sideNotes:{front:"",left:"",right:"",back:""},doors:{},sku:"",
     /* SITE & GROUNDWORKS (2026-08-17) — site conditions captured in wizard step 5 and shown on the
@@ -2070,9 +2102,9 @@ function plus30(){return new Date(Date.now()+30*864e5).toLocaleDateString('en-GB
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>showView(b.dataset.view,b));
 /* ── Next step buttons ───────────────────────────────────────────────────── */
 /* Flow: customer → build → pricing → docs (quotes and admin excluded) */
-const NEXT_FLOW=['customer','build','pricing','decking','docs'];
-const NEXT_LABEL={customer:'Configure your veranda',build:'Pricing &amp; Fitting',pricing:'View Documents',docs:null};
-const NEXT_ICON={customer:'⚙',build:'£',pricing:'📄',docs:null};
+const NEXT_FLOW=['customer','qualify','build','pricing','decking','docs'];
+const NEXT_LABEL={customer:'Qualify &amp; filter products',qualify:'Configure your veranda',build:'Pricing &amp; Fitting',pricing:'View Documents',docs:null};
+const NEXT_ICON={customer:'❓',qualify:'⚙',build:'£',pricing:'📄',docs:null};
 function renderNextBtn(){
   /* Remove any existing next buttons first */
   document.querySelectorAll('.view-next-btn').forEach(b=>b.remove());
@@ -2108,6 +2140,8 @@ function showView(v,btn){
     /* entering docs — show bar only if survey is active */
     if(bar)bar.style.display=(state.doc==='survey')?'flex':'none';
   }
+  if(v==='qualify')renderQualify();
+  if(v==='build')renderModelGrid();
   if(v==='quotes')renderQuotes();
   if(v==='pricing')renderPricing();
   if(v==='decking')renderDecking();
@@ -2344,9 +2378,174 @@ function renderMountChips(){
   if(wc){wc.classList.toggle('sel',m==='Wall Mounted');wc.classList.remove('locked');}
   if(fc){fc.classList.toggle('sel',m==='Free Standing');fc.classList.remove('locked');}
 }
+/* ===== QUALIFICATION =====================================================
+   A short Q&A that runs before the configurator and narrows which models the
+   rep can pick. Every answered question contributes an allow-list; a model has
+   to survive ALL of them. An option with an empty models[] is treated as "no
+   opinion" and filters nothing, which is what makes the seeded questions inert
+   until they are configured in Admin -> Qualify. */
+function qesc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function qualifyQuestions(){return (admin&&Array.isArray(admin.qualifyQuestions))?admin.qualifyQuestions:[];}
+/* -> {allowed:Set|null, reasons:{model->question text}}. allowed===null means
+   nothing answered so far narrows anything, so every product stays available. */
+function qualifyModelFilter(){
+  const qs=qualifyQuestions(); const ans=state.qualify||{}; const reasons={};
+  let anyAnswered=false, allowed=null;
+  qs.forEach(q=>{
+    const pick=ans[q.id]; if(pick==null||pick==='')return;
+    const opt=q.options&&q.options[pick]; if(!opt)return;
+    const models=Array.isArray(opt.models)?opt.models:[]; if(!models.length)return;
+    anyAnswered=true;
+    const set=new Set(models);
+    allowed=(allowed===null)?new Set(models):new Set([...allowed].filter(m=>set.has(m)));
+    Object.keys(MODELS).forEach(m=>{if(!set.has(m)&&!reasons[m])reasons[m]=q.text;});
+  });
+  return {allowed:anyAnswered?allowed:null,reasons};
+}
+function qualifyModelAllowed(model){const f=qualifyModelFilter();return f.allowed===null?true:f.allowed.has(model);}
+function qualifyMatches(){
+  const f=qualifyModelFilter();
+  return Object.keys(MODELS).filter(m=>f.allowed===null||f.allowed.has(m));
+}
+function setQualify(qid,optIdx){
+  if(!state.qualify)state.qualify={};
+  /* clicking the chosen answer again clears it, so a rep can undo a question
+     without guessing which answer was the neutral one */
+  state.qualify[qid]=(String(state.qualify[qid])===String(optIdx))?'':optIdx;
+  const cur=state.config&&state.config.model;
+  if(cur&&!qualifyModelAllowed(cur)){
+    state.config.model='';
+    const sel=document.getElementById('c_model'); if(sel)sel.value='';
+    toast('“'+displayName(cur)+'” no longer matches — selection cleared.');
+  }
+  renderQualify();
+  if(typeof renderModelGrid==='function')renderModelGrid();
+  scheduleAutoSave();
+}
+function clearQualify(){
+  state.qualify={};
+  renderQualify();
+  if(typeof renderModelGrid==='function')renderModelGrid();
+  scheduleAutoSave();
+}
+/* ===== ADMIN -> QUALIFY ===================================================
+   Builds the questions the rep answers on the Qualify stage. Each answer owns
+   an allow-list of models; tick nothing and that answer filters nothing. */
+function renderQualifyAdmin(){
+  const body=document.getElementById('qualifyAdminBody'); if(!body)return;
+  const qs=qualifyQuestions();
+  if(!qs.length){
+    body.innerHTML='<div class="empty">No questions yet. Use <b>＋ Add question</b> below to create one.</div>';
+    return;
+  }
+  const allModels=Object.keys(MODELS);
+  body.innerHTML=qs.map(function(q,qi){
+    const opts=(q.options||[]).map(function(o,oi){
+      const chosen=Array.isArray(o.models)?o.models:[];
+      const grid=allModels.map(function(m){
+        const on=chosen.indexOf(m)>=0;
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0">'
+          +'<input type="checkbox" '+(on?'checked':'')+' onchange="toggleQualifyModel('+qi+','+oi+',\''+qesc(m).replace(/'/g,"\'")+'\',this.checked)">'
+          +qesc(displayName(m))+'</label>';
+      }).join('');
+      return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px;background:#fbfcfc">'
+        +'<div style="display:flex;gap:8px;align-items:center">'
+        +'<input value="'+qesc(o.label)+'" oninput="setQualifyOptLabel('+qi+','+oi+',this.value)" placeholder="Answer text" style="flex:1;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:13px">'
+        +'<button class="btn sm" onclick="delQualifyOpt('+qi+','+oi+')">Remove</button></div>'
+        +'<div class="sub" style="margin:8px 0 4px">Products this answer allows <b>('+chosen.length+' ticked'+(chosen.length?'':' — filters nothing')+')</b></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0 14px">'+grid+'</div>'
+        +'</div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:14px">'
+      +'<div style="display:flex;gap:8px;align-items:center">'
+      +'<input value="'+qesc(q.text)+'" oninput="setQualifyText('+qi+',this.value)" placeholder="Question" style="flex:1;padding:8px 10px;border:1px solid #cfd8da;border-radius:8px;font-size:14px;font-weight:600">'
+      +'<button class="btn sm" onclick="delQualifyQuestion('+qi+')">Delete question</button></div>'
+      +opts
+      +'<div style="margin-top:10px"><button class="btn sm" onclick="addQualifyOpt('+qi+')">＋ Add answer</button></div>'
+      +'</div>';
+  }).join('');
+}
+/* Answers are stored in state.qualify keyed by question id, so two questions
+   sharing an id would share one answer slot and cancel each other out. A bare
+   Date.now() collides whenever two questions are added inside the same
+   millisecond, which is exactly what a double-click does — so check. */
+function qualifyNewId(){
+  const used={};
+  (admin.qualifyQuestions||[]).forEach(function(q){used[q.id]=true;});
+  const base='q_'+Date.now().toString(36);
+  let id=base, n=2;
+  while(used[id])id=base+'_'+(n++);
+  return id;
+}
+function addQualifyQuestion(){
+  if(!Array.isArray(admin.qualifyQuestions))admin.qualifyQuestions=[];
+  admin.qualifyQuestions.push({id:qualifyNewId(),text:'New question',options:[{label:'Answer 1',models:[]}]});
+  persistAdmin();renderQualifyAdmin();
+}
+function delQualifyQuestion(qi){
+  if(!confirm('Delete this question?'))return;
+  admin.qualifyQuestions.splice(qi,1);persistAdmin();renderQualifyAdmin();
+}
+function setQualifyText(qi,v){admin.qualifyQuestions[qi].text=v;persistAdmin();}
+function addQualifyOpt(qi){
+  const q=admin.qualifyQuestions[qi];
+  if(!Array.isArray(q.options))q.options=[];
+  q.options.push({label:'Answer '+(q.options.length+1),models:[]});
+  persistAdmin();renderQualifyAdmin();
+}
+function delQualifyOpt(qi,oi){admin.qualifyQuestions[qi].options.splice(oi,1);persistAdmin();renderQualifyAdmin();}
+function setQualifyOptLabel(qi,oi,v){admin.qualifyQuestions[qi].options[oi].label=v;persistAdmin();}
+function toggleQualifyModel(qi,oi,model,on){
+  const o=admin.qualifyQuestions[qi].options[oi];
+  if(!Array.isArray(o.models))o.models=[];
+  const ix=o.models.indexOf(model);
+  if(on&&ix<0)o.models.push(model);
+  if(!on&&ix>=0)o.models.splice(ix,1);
+  persistAdmin();renderQualifyAdmin();
+}
+function renderQualifyResult(){
+  const el=document.getElementById('qualifyResult'); if(!el)return;
+  const qs=qualifyQuestions(), ans=state.qualify||{};
+  const answered=qs.filter(function(q){var p=ans[q.id];return p!=null&&p!=='';}).length;
+  const matches=qualifyMatches(), total=Object.keys(MODELS).length;
+  const none=matches.length===0;
+  el.innerHTML='<div style="border:1px solid '+(none?'#e4b4b4':'var(--line)')+';background:'+(none?'#fdf2f2':'#f6f9f9')+';border-radius:10px;padding:12px 14px">'
+    +'<div style="font-weight:800;font-size:15px;color:'+(none?'#a33':'var(--brand-d)')+'">'+matches.length+' of '+total+' products match</div>'
+    +'<div class="sub" style="margin-top:3px">'+(answered?('Based on '+answered+' answer'+(answered===1?'':'s')+'.'):'No answers yet — every product is available.')+'</div>'
+    +((matches.length&&answered)?('<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+matches.map(function(m){return '<span class="pill">'+qesc(displayName(m))+'</span>';}).join('')+'</div>'):'')
+    +(none?'<div style="margin-top:8px;font-size:12px;color:#a33">No product satisfies every answer. Change an answer to widen the range.</div>':'')
+    +'</div>';
+}
+function renderQualify(){
+  const body=document.getElementById('qualifyBody'); if(!body)return;
+  const qs=qualifyQuestions(), ans=state.qualify||{};
+  if(!qs.length){
+    body.innerHTML='<div class="card"><div class="empty">No qualification questions have been set up yet. An administrator can add them in <b>Admin → Qualify</b>.</div></div>';
+    return;
+  }
+  const cards=qs.map(function(q){
+    const pick=ans[q.id];
+    const opts=(q.options||[]).map(function(o,i){
+      const on=(pick!=null&&pick!==''&&String(pick)===String(i));
+      const n=Array.isArray(o.models)?o.models.length:0;
+      return '<div onclick="setQualify(\''+qesc(q.id)+'\','+i+')" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'#f2f6f7':'#fff')+';border-radius:9px;cursor:pointer;margin-top:6px">'
+        +'<span style="width:16px;height:16px;border-radius:50%;border:2px solid '+(on?'var(--brand)':'#c3ced0')+';background:'+(on?'var(--brand)':'#fff')+';box-shadow:'+(on?'inset 0 0 0 3px #fff':'none')+';flex:0 0 auto"></span>'
+        +'<span style="font-size:13.5px;font-weight:'+(on?'700':'500')+'">'+qesc(o.label)+'</span>'
+        +'<span class="sub" style="margin-left:auto;font-size:11px">'+(n?(n+' product'+(n===1?'':'s')):'no filter')+'</span>'
+        +'</div>';
+    }).join('')||'<div class="sub" style="margin-top:6px">No answers configured for this question.</div>';
+    return '<div class="card" style="margin-bottom:12px"><div style="font-weight:700;font-size:14px">'+qesc(q.text)+'</div>'+opts+'</div>';
+  }).join('');
+  const anyAns=qs.some(function(q){var p=ans[q.id];return p!=null&&p!=='';});
+  body.innerHTML='<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">'
+    +'<div>'+cards+(anyAns?'<button class="btn sm" onclick="clearQualify()">Clear answers</button>':'')+'</div>'
+    +'<div id="qualifyResult"></div></div>';
+  renderQualifyResult();
+}
 function renderModelGrid(){
   const g=document.getElementById('modelGrid');if(!g)return;
   const currentMount=state.config.mount||'Wall Mounted';
+  const qf=qualifyModelFilter();
   g.innerHTML=Object.keys(MODELS).map(model=>{
     /* filter by mount type */
     const isFree=ALWAYS_FREE.includes(model);
@@ -2354,9 +2553,17 @@ function renderModelGrid(){
     if(currentMount==='Wall Mounted'&&isFree)return '';
     const img=(admin.imgmap&&admin.imgmap.model&&admin.imgmap.model[model])||'';
     const sel=state.config.model===model && state.config.model!=='';
-    return `<div class="model-chip${sel?' sel':''}" onclick="pickModel('${model.replace(/'/g,"\\'")}')">
+    /* Ruled out by the Qualify answers: greyed and captioned with the question
+       that excluded it, but still clickable so pickModel can explain why. */
+    const blocked=(qf.allowed!==null&&!qf.allowed.has(model));
+    const why=blocked?(qf.reasons[model]||'the qualification questions'):'';
+    /* the badge sits over a ~150px chip, so a long question is trimmed there;
+       the full wording still reaches the rep via the tooltip and the toast */
+    const whyShort=(why.length>32)?why.slice(0,30).replace(/\s+\S*$/,'')+'…':why;
+    return `<div class="model-chip${sel?' sel':''}" onclick="pickModel('${model.replace(/'/g,"\\'")}')"${blocked?` title="Not suited — ${qesc(why)}" style="opacity:.4;filter:grayscale(1);cursor:not-allowed;position:relative"`:''}>
       <div class="mc-img">${img?`<img src="${img}" alt="${model}">`:`<div class="mc-ph">${model}</div>`}</div>
       <div class="mc-lbl">${displayName(model)}</div>
+      ${blocked?`<div style="position:absolute;left:6px;right:6px;bottom:6px;background:rgba(60,70,80,.9);color:#fff;font-size:9.5px;font-weight:700;text-align:center;padding:3px 5px;border-radius:6px;line-height:1.25">Not suited — ${qesc(whyShort)}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -2382,6 +2589,11 @@ function setMount(v){
   wizRefreshSummaries();
 }
 function pickModel(model){
+  if(!qualifyModelAllowed(model)){
+    const f=qualifyModelFilter();
+    toast('“'+displayName(model)+'” is ruled out by your answer to: '+(f.reasons[model]||'the qualification questions')+'. Change your answers on the Qualify stage to enable it.');
+    return;
+  }
   V('c_model',model);
   onModel(false); /* sets state.config.mount correctly via ALWAYS_FREE */
   renderModelGrid();
@@ -5263,7 +5475,8 @@ function renderPaySchedule(sched,total){
 /* ===== ADMIN UI ===== */
 function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classList.remove('active'));const pane=document.getElementById('ap-'+t);if(pane)pane.classList.add('active');document.querySelectorAll('.atabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
   /* Ensure the image map is (re)rendered when switching to the Product Images tab */
-  if(t==='imgmap')renderImageMap();}
+  if(t==='imgmap')renderImageMap();
+  if(t==='qualify')renderQualifyAdmin();}
 function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;}
 function renderAdmin(){
   const c=admin.company;
@@ -5521,7 +5734,7 @@ function setMapImg(cat,opt,input){
   });
 }
 function togglePerm(i,kind,key,on){const arr=admin.users[i][kind];const ix=arr.indexOf(key);if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);}
-function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
+function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','qualify','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
 function adminAddFit(){admin.fitting.push({desc:"New item",direct:0,finance:0});renderAdmin();}
 function adminAddPart(){admin.parts.push({desc:"New part",matCost:0,fitCost:0});renderAdmin();}
 
