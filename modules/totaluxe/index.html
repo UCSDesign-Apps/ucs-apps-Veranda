@@ -1911,7 +1911,12 @@ const ADMIN_DEFAULT={
     {id:'q_rooftype',text:'Roof Type',section:'Product',type:'select',filter:true,
      options:[
        {label:'Polycarbonate roof',models:['Bosco','Nebbiolo','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus']},
-       {label:'Glass roof',models:['Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass']}
+       {label:'Glass roof',models:['Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass']},
+       /* Both the adjustable-slat and the retractable-slat models sit here — the
+          data names them separately but they are one choice to a customer. Split
+          into a fifth answer if retractable needs asking about on its own. */
+       {label:'Adjustable slats',models:['Pinela','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Fabric canopy',models:['Verdeca']}
      ]},
     {id:'q_lighting',text:'Lighting',section:'Product',type:'select',
      options:[{label:'No'},{label:'Yes — please specify electrical source',specify:true}]}
