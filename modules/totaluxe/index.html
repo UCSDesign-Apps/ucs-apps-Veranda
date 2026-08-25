@@ -1900,10 +1900,19 @@ const ADMIN_DEFAULT={
      options:[{label:'No'},{label:'Yes',specify:true}]},
     {id:'q_obstruct',text:'Obstructions',section:'Site & Install',type:'select',
      options:[{label:'No'},{label:'Yes — conservatory'},{label:'Yes — shed'},{label:'Yes — other',specify:true}]},
+    /* Allow-lists derived from each model's own roofs[] and ALWAYS_FREE, so they
+       stay true to the product data — e.g. Pinela Glass (Mizen Glass) is both
+       free standing AND a glass roof, so it appears in both lists. */
     {id:'q_mount',text:'Mounting Type',section:'Product',type:'select',filter:true,
-     options:[{label:'Wall mounted',models:['Bosco','Nebbiolo','Pigato','Giallo','Trebbiano']},{label:'Free standing',models:['Ribolla','Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']}]},
+     options:[
+       {label:'Wall mounted',models:['Bosco','Nebbiolo','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Verdeca']},
+       {label:'Free standing',models:['Ribolla','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']}
+     ]},
     {id:'q_rooftype',text:'Roof Type',section:'Product',type:'select',filter:true,
-     options:[{label:'Polycarbonate roof',models:['Bosco','Nebbiolo','Ribolla']},{label:'Glass roof',models:['Pigato','Giallo','Trebbiano']}]},
+     options:[
+       {label:'Polycarbonate roof',models:['Bosco','Nebbiolo','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus']},
+       {label:'Glass roof',models:['Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass']}
+     ]},
     {id:'q_lighting',text:'Lighting',section:'Product',type:'select',
      options:[{label:'No'},{label:'Yes — please specify electrical source',specify:true}]}
   ],
