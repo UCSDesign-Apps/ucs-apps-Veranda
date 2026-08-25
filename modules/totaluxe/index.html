@@ -2334,6 +2334,35 @@ function fillSelectPH(id,arr,v,placeholder){
 }
 /** The single source of truth for how these four read — used by BOTH the documents
  *  and the wizard step summary, so the rep sees exactly what the customer will. */
+/* The site-capture Qualify answers, ready to print on the survey as a
+   confirm-on-site checklist. Product filters and anything in the Product section
+   are left out — they choose the product, they are not site conditions to check. */
+function qualifySurveyRows(){
+  var qs=(typeof qualifyQuestions==='function')?qualifyQuestions():[];
+  var ans=state.qualify||{};
+  var out=[];
+  qs.forEach(function(q){
+    if(q.filter)return;                       /* product filters aren't site checks */
+    if((q.section||'')==='Product')return;    /* Lighting etc. stay off the site list */
+    var v='';
+    if(q.type==='number'){
+      var n=ans[q.id];
+      if(n!==''&&n!=null)v=n+(q.unit?(' '+q.unit):'');
+    }else{
+      var pick=(typeof qualifyPick==='function')?qualifyPick(ans[q.id]):ans[q.id];
+      if(pick!=null&&pick!==''){
+        var o=q.options&&q.options[pick];
+        if(o){
+          v=o.label||'';
+          var t=(ans[q.id]&&typeof ans[q.id]==='object')?(ans[q.id].text||''):'';
+          if(t)v+=' — '+t;
+        }
+      }
+    }
+    out.push({label:q.text,value:v||SITE_DASH});
+  });
+  return out;
+}
 function siteGroundVals(cf){
   cf=cf||{};
   const ground=cf.groundType==='Other'?(cf.groundTypeOther||SITE_DASH):(cf.groundType||SITE_DASH);
@@ -6932,6 +6961,11 @@ function renderDocuments(){
       : (state.doc==='survey'
           ? `<div class="dl">${siteGroundRows(cf)}</div>`
           : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`)}
+      ${(state.doc==='survey'&&qualifySurveyRows().length)?`
+      <div class="sh" style="margin-top:10px">Site Questions &mdash; Confirm on Site</div>
+      <table class="mt tall"><thead><tr><th style="width:34%">Question</th><th style="width:30%">Answer given</th><th>Notes / actual</th><th class="c tickwrap" style="width:72px">Confirmed</th></tr></thead><tbody>
+        ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(r.value)}</b></td><td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td></tr>`).join('')}
+      </tbody></table>`:''}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
@@ -6988,6 +7022,14 @@ function renderDocuments(){
            of auto-height flex parents, so a percentage basis resolves against an
            indefinite height, falls back to auto, and the ratio is silently ignored
            (every percentage pair lays out identically). -->
+      ${state.doc==='survey'?`
+      <!-- SURVEY: the lifestyle image and marketing copy earn nothing on site, so
+           the whole row becomes one sketch panel — the same graph-paper box the
+           side infills use. Quote and contract keep the marketing content. -->
+      <div style="flex:4 1 0;display:flex;flex-direction:column;min-height:0">
+        <div style="font-size:10px;font-weight:600;color:#6a777c;margin-bottom:3px">Decking &mdash; site sketch</div>
+        <div style="flex:1;border-radius:12px;border:1px dashed #b8c2c5;background-color:#fff;background-image:repeating-linear-gradient(0deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px);min-height:150px;position:relative"><span style="position:absolute;top:6px;left:8px;font-size:9px;color:#aab4b7">Sketch / measurements</span></div>
+      </div>`:`
       <div style="flex:4 1 0;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;min-height:0">
         <div style="min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f6f7f8">
           ${docImg('decklifestyle','1','COMPOSITE DECKING',0,0,'width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#f6f7f8')}
@@ -6999,6 +7041,7 @@ function renderDocuments(){
           <p style="margin:0;font-size:11.5px;line-height:1.5">Virtually maintenance-free: no sanding, staining or sealing. An occasional wash keeps it looking its best, season after season.</p>
         </div>
       </div>
+      `}
 
       <!-- ROW 4 — the two layout plans, anchored at the foot of the sheet. -->
       ${(dkSubframeImg||dkBoardImg)?`<div style="flex:3 1 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:0">
