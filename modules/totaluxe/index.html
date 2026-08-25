@@ -1914,6 +1914,7 @@ function loadAdmin(){
     if(m.deckingFitPerM2==null)m.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
     if(m.deckingFabPerM2==null)m.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
     if(!Array.isArray(m.qualifyQuestions))m.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
+    healUserSections(m.users);
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
@@ -1984,6 +1985,14 @@ async function loadAdminFromServer(){
       if(admin.deckingFitPerM2==null)admin.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
       if(admin.deckingFabPerM2==null)admin.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
       if(!Array.isArray(admin.qualifyQuestions))admin.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
+      /* The server's users array has just replaced the local one, so heal it and
+         re-point currentUser at the merged record — the login grabbed its
+         reference from the pre-merge array and would otherwise be detached. */
+      healUserSections(admin.users);
+      if(currentUser&&Array.isArray(admin.users)){
+        const _fresh=admin.users.find(x=>x&&x.u===currentUser.u);
+        if(_fresh)currentUser=_fresh;
+      }
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
                           'roof','side','siderender','lifestyle','component','decking',
@@ -2060,6 +2069,22 @@ async function doLogin(){
 }
 function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{});document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');}
 function can(sec){return currentUser&&currentUser.sections.includes(sec);}
+/* Every user record saved before the Qualify stage existed carries a sections
+   array without it, so the nav button stays hidden on an install that has ever
+   saved its users — which is every live one. Anyone who can reach the
+   Configurator gets it, since Qualify is the step that feeds it; a surveyor
+   (quotes + docs only) is left alone. Idempotent. */
+function healUserSections(list){
+  if(!Array.isArray(list))return false;
+  let changed=0;
+  list.forEach(u=>{
+    if(!u||!Array.isArray(u.sections))return;
+    if(u.sections.indexOf('build')>=0&&u.sections.indexOf('qualify')<0){
+      u.sections.splice(u.sections.indexOf('build'),0,'qualify');changed++;
+    }
+  });
+  return changed>0;
+}
 function applyPerms(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('hidden',!can(b.dataset.view)));
   document.querySelectorAll('.doctabs [data-doc]').forEach(b=>b.classList.toggle('hidden',!currentUser.docs.includes(b.dataset.doc)));
@@ -5733,7 +5758,13 @@ function setMapImg(cat,opt,input){
     }).catch(()=>toast('Image saved locally — offline'));
   });
 }
-function togglePerm(i,kind,key,on){const arr=admin.users[i][kind];const ix=arr.indexOf(key);if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);}
+function togglePerm(i,kind,key,on){
+  const arr=admin.users[i][kind];const ix=arr.indexOf(key);
+  if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);
+  /* Repaint immediately. Without this a tick only takes effect on the next
+     login, because applyPerms is what hides nav buttons and nothing re-ran it. */
+  if(currentUser&&admin.users[i]&&admin.users[i].u===currentUser.u){currentUser=admin.users[i];applyPerms();renderNextBtn();}
+}
 function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','qualify','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
 function adminAddFit(){admin.fitting.push({desc:"New item",direct:0,finance:0});renderAdmin();}
 function adminAddPart(){admin.parts.push({desc:"New part",matCost:0,fitCost:0});renderAdmin();}
@@ -6062,6 +6093,7 @@ function saveAdmin(){const c=admin.company;
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
   admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
   initLogin();renderPricing();renderSurvey();
+  if(currentUser){applyPerms();renderNextBtn();}
   /* Sync the full admin object to the server so every user picks up the latest
      company details, pricing and images on their next login. */
   fetch('/api/admin/config',{
