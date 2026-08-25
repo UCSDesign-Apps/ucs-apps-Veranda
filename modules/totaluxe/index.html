@@ -1954,7 +1954,7 @@ function loadAdmin(){
     if(m.deckingMarkup==null)m.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
     if(m.deckingFitPerM2==null)m.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
     if(m.deckingFabPerM2==null)m.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
-    if(!Array.isArray(m.qualifyQuestions))m.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
+    healQualifyQuestions(m);
     healUserSections(m.users);
     if(!m.logo)m.logo=TL_LOGO;
     ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
@@ -2025,7 +2025,7 @@ async function loadAdminFromServer(){
       if(admin.deckingMarkup==null)admin.deckingMarkup=ADMIN_DEFAULT.deckingMarkup;
       if(admin.deckingFitPerM2==null)admin.deckingFitPerM2=ADMIN_DEFAULT.deckingFitPerM2;
       if(admin.deckingFabPerM2==null)admin.deckingFabPerM2=ADMIN_DEFAULT.deckingFabPerM2;
-      if(!Array.isArray(admin.qualifyQuestions))admin.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(q=>({id:q.id,text:q.text,options:q.options.map(o=>({label:o.label,models:o.models.slice()}))}));
+      healQualifyQuestions(admin);
       /* The server's users array has just replaced the local one, so heal it and
          re-point currentUser at the merged record — the login grabbed its
          reference from the pre-merge array and would otherwise be detached. */
@@ -2115,6 +2115,32 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    saved its users — which is every live one. Anyone who can reach the
    Configurator gets it, since Qualify is the step that feeds it; a surveyor
    (quotes + docs only) is left alone. Idempotent. */
+/* The Qualify stage shipped with two inert placeholder questions before the real
+   content existed. Any install that saved admin in that window has them persisted,
+   and a plain "is it an array?" guard then blocks the real seed for good — which
+   is exactly what kept the six questions from ever loading. Swap the placeholders
+   out, but only while nothing has been configured: as soon as any answer carries
+   an allow-list, or the set has been added to, it is the admin's own work and is
+   left alone. Idempotent. */
+function qualifyIsPlaceholder(list){
+  if(!Array.isArray(list)||!list.length||list.length>2)return false;
+  const ids=list.map(function(q){return q&&q.id;}).sort().join(',');
+  if(ids!=='q_mount,q_use'&&ids!=='q_use'&&ids!=='q_mount')return false;
+  return list.every(function(q){
+    return (q&&q.options||[]).every(function(o){return !(o&&Array.isArray(o.models)&&o.models.length);});
+  });
+}
+function healQualifyQuestions(target){
+  const t=target||(typeof admin!=='undefined'?admin:null);
+  if(!t)return false;
+  if(!Array.isArray(t.qualifyQuestions)||qualifyIsPlaceholder(t.qualifyQuestions)){
+    t.qualifyQuestions=ADMIN_DEFAULT.qualifyQuestions.map(function(q){
+      return {id:q.id,text:q.text,options:q.options.map(function(o){return {label:o.label,models:o.models.slice()};})};
+    });
+    return true;
+  }
+  return false;
+}
 function healUserSections(list){
   if(!Array.isArray(list))return false;
   let changed=0;
