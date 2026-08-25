@@ -1859,20 +1859,20 @@ const ADMIN_DEFAULT={
      specify:true opens a free-text box when it is chosen. */
   qualifyQuestions:[
     {id:'q_access',text:'Site Access',section:'Site & Install',type:'select',
-     options:[{label:'No access issues'},{label:'Limited — through house'},{label:'Limited — alley'}]},
+     options:[{label:'No access issues'},{label:'Limited — through house',photo:true},{label:'Limited — alley',photo:true}]},
     {id:'q_level',text:'Installation Level',section:'Site & Install',type:'select',
      options:[{label:'Ground level'},{label:'First floor'},{label:'Second floor'},{label:'Other',specify:true}]},
     {id:'q_ground',text:'Ground Type',section:'Site & Install',type:'select',
      options:[{label:'Grass'},{label:'Patio slabs'},{label:'Porcelain slabs'},{label:'Decking'},{label:'Concrete'},{label:'Tarmac'},{label:'Other',specify:true}]},
     {id:'q_soffit',text:'Soffit Clearance',section:'Site & Install',type:'number',unit:'mm',placeholder:'Enter value in mm'},
     {id:'q_drainage',text:'Drainage',section:'Site & Install',type:'select',
-     options:[{label:'Existing gutter'},{label:'Natural soakaway'},{label:'Submerged block'},{label:'Other',specify:true}]},
+     options:[{label:'Existing gutter'},{label:'Natural soakaway'},{label:'Submerged block'},{label:'Other',specify:true,photo:true}]},
     {id:'q_boxout',text:'Box Out required? (pipework, etc.)',section:'Site & Install',type:'select',
-     options:[{label:'No'},{label:'Yes — downpipe'},{label:'Yes — soil pipe'},{label:'Yes — other',specify:true}]},
+     options:[{label:'No'},{label:'Yes — downpipe',photo:true},{label:'Yes — soil pipe',photo:true},{label:'Yes — other',specify:true,photo:true}]},
     {id:'q_notch',text:'Roof Notch required?',section:'Site & Install',type:'select',
-     options:[{label:'No'},{label:'Yes',specify:true}]},
+     options:[{label:'No'},{label:'Yes',specify:true,photo:true}]},
     {id:'q_obstruct',text:'Obstructions',section:'Site & Install',type:'select',
-     options:[{label:'No'},{label:'Yes — conservatory'},{label:'Yes — shed'},{label:'Yes — other',specify:true}]},
+     options:[{label:'No'},{label:'Yes — conservatory',photo:true},{label:'Yes — shed',photo:true},{label:'Yes — other',specify:true,photo:true}]},
     /* Allow-lists derived from each model's own roofs[] and ALWAYS_FREE, so they
        stay true to the product data — e.g. Pinela Glass (Mizen Glass) is both
        free standing AND a glass roof, so it appears in both lists. */
@@ -2095,6 +2095,7 @@ function qualifySeedClone(){
       var oo={label:o.label};
       if(Array.isArray(o.models))oo.models=o.models.slice();
       if(o.specify)oo.specify=true;
+      if(o.photo)oo.photo=true;
       return oo;
     });
     return out;
@@ -2337,6 +2338,30 @@ function fillSelectPH(id,arr,v,placeholder){
 /* The site-capture Qualify answers, ready to print on the survey as a
    confirm-on-site checklist. Product filters and anything in the Product section
    are left out — they choose the product, they are not site conditions to check. */
+/* ── Site photos on flagged answers ────────────────────────────────────────
+   An option carrying photo:true asks the rep for a picture of what they just
+   answered. Slots are created on demand and keyed by question id, so ph() has to
+   recognise them by prefix rather than from a fixed list. */
+function qualifyPhotoKey(qid){return 'qphoto_'+String(qid).replace(/[^a-z0-9_]/gi,'');}
+function qualifyPhotoWanted(q){
+  if(!q||q.filter||(q.section||'')==='Product')return false;
+  var pick=(typeof qualifyPick==='function')?qualifyPick((state.qualify||{})[q.id]):(state.qualify||{})[q.id];
+  if(pick==null||pick==='')return false;
+  var o=q.options&&q.options[pick];
+  return !!(o&&o.photo);
+}
+function qualifyPhotoList(){
+  var out=[];
+  ((typeof qualifyQuestions==='function')?qualifyQuestions():[]).forEach(function(q){
+    if(!qualifyPhotoWanted(q))return;
+    var a=(state.qualify||{})[q.id];
+    var pick=(typeof qualifyPick==='function')?qualifyPick(a):a;
+    var o=q.options&&q.options[pick];
+    var t=(a&&typeof a==='object')?(a.text||''):'';
+    out.push({id:q.id,key:qualifyPhotoKey(q.id),label:q.text,answer:((o&&o.label)||'')+(t?(' — '+t):'')});
+  });
+  return out;
+}
 function qualifySurveyRows(){
   var qs=(typeof qualifyQuestions==='function')?qualifyQuestions():[];
   var ans=state.qualify||{};
@@ -2658,7 +2683,9 @@ function renderQualify(){
     var opts=(q.options||[]).map(function(o,i){
       var on=(pick!=null&&pick!==''&&String(pick)===String(i));
       var n=Array.isArray(o.models)?o.models.length:0;
-      var tag=q.filter?(n?(n+' product'+(n===1?'':'s')):'no filter'):(o.specify?'text box':'');
+      var tag;
+      if(q.filter){tag=n?(n+' product'+(n===1?'':'s')):'no filter';}
+      else{var bits=[];if(o.specify)bits.push('text box');if(o.photo)bits.push('photo');tag=bits.join(' · ');}
       var row='<div onclick="setQualify(&#39;'+qesc(q.id)+'&#39;,'+i+')" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'#f2f6f7':'#fff')+';border-radius:9px;cursor:pointer;margin-top:6px">'
         +'<span style="width:16px;height:16px;border-radius:50%;border:2px solid '+(on?'var(--brand)':'#c3ced0')+';background:'+(on?'var(--brand)':'#fff')+';box-shadow:'+(on?'inset 0 0 0 3px #fff':'none')+';flex:0 0 auto"></span>'
         +'<span style="font-size:13.5px;font-weight:'+(on?'700':'500')+'">'+qesc(o.label)+'</span>'
@@ -2668,6 +2695,17 @@ function renderQualify(){
         row+='<input type="text" value="'+qesc(qualifyText(a))+'" placeholder="Please specify…"'
           +' oninput="setQualifySpecify(&#39;'+qesc(q.id)+'&#39;,this.value)"'
           +' style="width:100%;margin-top:6px;padding:8px 10px;border:1px solid #cfd8da;border-radius:8px;font-size:13px">';
+      }
+      if(on&&o.photo){
+        var pk=qualifyPhotoKey(q.id);
+        var has=!!(state.images&&state.images[pk]);
+        /* src is passed through: this stage is outside #docwrap, so restoreImages
+           never reaches it and a re-render would otherwise drop the picture. */
+        row+='<div style="margin-top:6px;border:1px dashed '+(has?'var(--line)':'#e0a0a0')+';border-radius:8px;padding:8px;background:'+(has?'#fbfcfc':'#fdf6f6')+'">'
+          +'<div class="sub" style="font-size:11px;margin-bottom:5px">'+(has?'Photo added — tap to replace':'Add a photo of this (required on the survey)')+'</div>'
+          +'<div class="gimg" style="height:130px;border-radius:6px;border:1px solid var(--line)">'
+          +ph(pk,'TAP TO ADD PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[pk])
+          +'</div></div>';
       }
       return row;
     }).join('')||'<div class="sub" style="margin-top:6px">No answers configured for this question.</div>';
@@ -6122,6 +6160,16 @@ async function sendSurveyToCustomer(){
     alert('A notch out photo is required. Please add a photo of the notch out area (marked up) before sending the survey.');
     return;
   }
+  /* Every flagged Qualify answer that still has no picture, named in one alert so
+     the rep makes a single trip back rather than one per photo. */
+  const missingQ=qualifyPhotoList().filter(function(p){return !state.images[p.key];});
+  if(missingQ.length){
+    const NL=String.fromCharCode(10);
+    alert('Photo'+(missingQ.length===1?'':'s')+' required before sending:'+NL+NL
+      +missingQ.map(function(p){return '• '+p.label+' — '+p.answer;}).join(NL)
+      +NL+NL+'Add '+(missingQ.length===1?'it':'them')+' on the Qualify stage.');
+    return;
+  }
   toast('Generating survey PDF…');
   /* Hide the survey extras editor panel from the PDF capture */
   const extrasPanel=document.querySelector('.no-pdf');
@@ -6965,7 +7013,16 @@ function renderDocuments(){
       <div class="sh" style="margin-top:10px">Site Questions &mdash; Confirm on Site</div>
       <table class="mt tall"><thead><tr><th style="width:34%">Question</th><th style="width:30%">Answer given</th><th>Notes / actual</th><th class="c tickwrap" style="width:72px">Confirmed</th></tr></thead><tbody>
         ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(r.value)}</b></td><td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td></tr>`).join('')}
-      </tbody></table>`:''}
+      </tbody></table>
+      ${qualifyPhotoList().length?`
+      <div class="sh" style="margin-top:10px">Site Photos</div>
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(3,qualifyPhotoList().length)},1fr);gap:10px;margin-top:4px">
+        ${qualifyPhotoList().map(p=>`
+        <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${state.images[p.key]?'var(--line)':'#ed1c2d'}">
+          <div class="gimg" style="height:130px">${ph(p.key,'PHOTO REQUIRED',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[p.key])}</div>
+          <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:9.5px;font-weight:600;text-align:center;padding:3px 5px;line-height:1.3">${esc(p.label)}<br><span style="font-weight:400;opacity:.85">${esc(p.answer)}</span></div>
+        </div>`).join('')}
+      </div>`:''}`:''}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
         ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
@@ -7261,6 +7318,12 @@ function renderDocuments(){
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
 const UPLOADABLE_IMG_KEYS=['sitephoto','boxoutphoto','notchphoto'];
+/* The per-question site photos are created on demand, so they cannot be listed —
+   match them by prefix. A key that is neither renders no-click with its file
+   input hidden, which would make the slot impossible to fill. */
+function isUploadableImgKey(k){
+  return UPLOADABLE_IMG_KEYS.indexOf(k)>=0||/^qphoto_/.test(String(k||''));
+}
 function ph(key,label,w,h,extra,src,tint){
   const extraStr=extra||'';
   const fitMatch=extraStr.match(/object-fit:\s*([\w-]+)/);
@@ -7275,7 +7338,7 @@ function ph(key,label,w,h,extra,src,tint){
      no-click with pointer-events:none and its file input hidden — a required
      photo left out of it could never be added, and its send gate would lock the
      survey for good. */
-  const clickable=UPLOADABLE_IMG_KEYS.includes(key);
+  const clickable=isUploadableImgKey(key);
   return `<div class="imgph${clickable?'':' no-click'}" data-key="${key}" data-fit="${imgFit}" style="${style}"${clickable?' onclick="pickImg(this)"':''}><span>${label}</span>${src?`<img src="${src}" style="object-fit:${imgFit}">`:''}<input type="file" accept="image/*" onchange="setDocImg(this)"${clickable?'':' style="display:none"'}></div>`;
 }
 function docImg(cat,opt,label,w,hh,extra,tint){
