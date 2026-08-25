@@ -1879,15 +1879,56 @@ const USERS_SEED=[
 const ADMIN_DEFAULT={
   company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
   markup:150,deckingMarkup:150,deckingFitPerM2:45,deckingFabPerM2:15,vatRate:20,depPct:10,
-  /* Qualification Q&A. Each option carries an allow-list of model keys: a model
-     survives only if EVERY answered question allows it. An empty models[] means
-     "this answer rules nothing out", which is why these seeds filter nothing
-     until the questions are configured in Admin -> Qualify. */
+  /* Starting defaults only — every question, answer and allow-list is editable in
+     Admin -> Qualify. The first four filter products; the last two carry empty
+     models[] so they grey nothing out and simply record site context. */
   qualifyQuestions:[
+    /* ── PRODUCT-FILTERING QUESTIONS (answers grey out unsuited products) ── */
     {id:'q_use',text:'How will the space mainly be used?',
-     options:[{label:'Shade / shelter (open sides)',models:[]},{label:'Enclosed garden room',models:[]},{label:'Not sure yet',models:[]}]},
-    {id:'q_mount',text:'Will it attach to the house or stand free?',
-     options:[{label:'Attached to the wall',models:[]},{label:'Free standing',models:[]}]}
+     options:[
+       {label:'Shade & shelter over a patio',models:['Bosco','Nebbiolo','Ribolla','Pigato','Giallo','Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Outdoor dining & entertaining',models:['Bosco','Nebbiolo','Ribolla','Pigato','Giallo','Trebbiano','Pinela','Pinela Glass','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Enclosed, all-year garden room',models:['Pigato','Giallo','Trebbiano']},
+       {label:'Cover for a hot tub or spa',models:['Bosco','Nebbiolo','Ribolla','Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Not sure yet — show everything',models:[]}
+     ]},
+    {id:'q_mount',text:'Attach to the house, or stand free in the garden?',
+     options:[
+       {label:'Attached to the house wall',models:['Bosco','Nebbiolo','Pigato','Giallo','Trebbiano']},
+       {label:'Free standing in the garden',models:['Ribolla','Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Either — not decided',models:[]}
+     ]},
+    {id:'q_roof',text:'What matters most for the roof?',
+     options:[
+       {label:'Maximum natural light',models:['Bosco','Nebbiolo','Ribolla','Pigato','Giallo','Trebbiano']},
+       {label:'Heat & glare reduction',models:['Bosco','Nebbiolo','Ribolla']},
+       {label:'A solid, all-weather glass roof',models:['Pigato','Giallo','Trebbiano']},
+       {label:'Adjustable / opening roof',models:['Pinela','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Retractable fabric shade',models:['Verdeca']},
+       {label:'Not sure yet',models:[]}
+     ]},
+    {id:'q_size',text:'Roughly how wide is the space?',
+     options:[
+       {label:'Compact — up to 4m',models:[]},
+       {label:'Standard — 4m to 6m',models:[]},
+       {label:'Large — 6m and over',models:['Bosco','Pigato','Giallo','Ribolla','Trebbiano']},
+       {label:'Not sure — needs measuring',models:[]}
+     ]},
+    /* ── SITE-CAPTURE QUESTIONS (empty models[] = do not filter; feed the survey) ── */
+    {id:'q_ground',text:'What is the ground like where it will go?',
+     options:[
+       {label:'Solid — concrete, paving or patio',models:[]},
+       {label:'Existing decking',models:[]},
+       {label:'Grass or soil',models:[]},
+       {label:'Mixed / not sure',models:[]}
+     ]},
+    {id:'q_existing',text:'Is there anything already there?',
+     options:[
+       {label:'Clear site — nothing to remove',models:[]},
+       {label:'Old canopy or awning to remove',models:[]},
+       {label:'Existing conservatory',models:[]},
+       {label:'Fascia / soffit / pipework to work around',models:[]}
+     ]}
   ],
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
