@@ -645,37 +645,10 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="wiz-body" id="wbody4">
             <div class="grid g4" id="sidesWrap"></div>
-            <button class="btn" style="margin-top:14px;width:100%" onclick="wizNext(4)">Next — Site &amp; groundworks ›</button>
+            <button class="btn" style="margin-top:14px;width:100%" onclick="showView('pricing')">Next — Pricing &amp; Fitting ›</button>
           </div>
         </div>
 
-        <!-- STEP 5 — Site & Groundworks -->
-        <div class="wiz-step" id="wstep5">
-          <div class="wiz-hdr" onclick="wizToggle(5)">
-            <div class="wiz-num idle" id="wnum5">5</div>
-            <div class="wiz-title">Site &amp; Groundworks</div>
-            <div class="wiz-summary" id="wsumm5">Ground, soffit, box out &amp; notch</div>
-            <span class="wiz-chevron" id="wchev5">&#8964;</span>
-          </div>
-          <div class="wiz-body" id="wbody5">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="field"><label>Ground type</label>
-                <select id="c_groundType" onchange="onSiteField()"></select></div>
-              <div class="field" id="groundOtherWrap" style="display:none"><label>Ground type — please specify</label>
-                <input id="c_groundTypeOther" type="text" placeholder="Describe the ground type" oninput="onSiteField()"></div>
-              <div class="field"><label>Soffit height (mm)</label>
-                <input id="c_soffitHeight" type="number" min="0" max="10000" step="1" placeholder="e.g. 2400" oninput="onSiteField()"></div>
-              <div class="field"><label>Box out required?</label>
-                <select id="c_boxOutReq" onchange="onSiteField()"><option>No</option><option>Yes</option></select></div>
-              <div class="field" id="boxOutSizeWrap" style="display:none"><label>Box out depth <span style="font-weight:400;color:#8a969a;font-size:11px">(width = veranda width)</span></label>
-                <select id="c_boxOutSize" onchange="onSiteField()"></select></div>
-              <div class="field" id="boxOutOtherWrap" style="display:none"><label>Box out — please specify</label>
-                <input id="c_boxOutOther" type="text" placeholder="Describe the box out" oninput="onSiteField()"></div>
-              <div class="field"><label>Roof notch out required?</label>
-                <select id="c_roofNotch" onchange="onSiteField()"><option>No</option><option>Yes</option></select></div>
-            </div>
-          </div>
-        </div>
 
       </section>
 
@@ -2347,7 +2320,7 @@ const ROOF_ICON={'Clear':'☀️','Opal':'🌥️','Solar':'🌤️','Ultra Clea
    including "No" and blanks (blank = "—"). An explicit "Box Out: No" is a positive
    instruction to the fitter; an omitted row is ambiguous. Do not "tidy" these away
    on the customer-facing documents without asking. */
-const WIZ_STEPS=5;
+const WIZ_STEPS=4;
 const GROUND_TYPES=['Grass','Tarmac','Concrete Paving Slabs','Porcelain Paving Slabs','Loose Stones','Other'];
 const BOX_OUT_SIZES=['150mm (Downpipe)','200mm (Waste Pipe)','250mm','300mm','Other'];
 const SITE_DASH='—';
@@ -2397,6 +2370,9 @@ function syncSiteReveals(){
  *  and the DOM — otherwise a hidden input keeps its old text and gets re-read next call,
  *  resurrecting a "specify" value the rep thought they had cleared. */
 function onSiteField(){
+  /* the Site & Groundworks step has gone; without this guard a stray call would
+     read empty values off missing inputs and wipe what Qualify just bridged in */
+  if(!document.getElementById('c_groundType'))return;
   const cf=state.config;
   cf.groundType=val('c_groundType');
   cf.groundTypeOther=val('c_groundTypeOther');
@@ -2515,6 +2491,51 @@ function qualifyMatches(){
   var f=qualifyModelFilter();
   return Object.keys(MODELS).filter(function(m){return f.allowed===null||f.allowed.has(m)});
 }
+/* ── Qualify -> config bridge ──────────────────────────────────────────────
+   The Site & Groundworks step has gone from the configurator, but the fields it
+   used to fill are load-bearing: the documents, the box-out/notch photo slots and
+   the survey-send gate all read state.config.*. So the Qualify answers are mapped
+   onto those same fields and the rep answers once. Only answered questions write
+   anything — an unanswered one leaves whatever is already on the config alone. */
+function qualifyAnswerLabel(qid){
+  var q=qualifyQuestions().filter(function(x){return x.id===qid;})[0];
+  if(!q)return '';
+  var pick=qualifyPick((state.qualify||{})[qid]);
+  if(pick==null||pick==='')return '';
+  var o=q.options&&q.options[pick];
+  return o?(o.label||''):'';
+}
+function qualifyAnswerText(qid){
+  var a=(state.qualify||{})[qid];
+  return (a&&typeof a==='object')?(a.text||''):'';
+}
+function syncQualifyToConfig(){
+  var cf=state.config; if(!cf)return;
+  var ans=state.qualify||{};
+  var gl=qualifyAnswerLabel('q_ground');
+  if(gl){
+    /* the Qualify wording is shorter than the ground-type list the documents
+       print, so translate rather than store the answer text verbatim */
+    var map={'Grass':'Grass','Tarmac':'Tarmac','Concrete':'Concrete',
+             'Patio slabs':'Concrete Paving Slabs','Porcelain slabs':'Porcelain Paving Slabs','Decking':'Decking'};
+    if(gl==='Other'){cf.groundType='Other';cf.groundTypeOther=qualifyAnswerText('q_ground')||'';}
+    else{cf.groundType=map[gl]||gl;cf.groundTypeOther='';}
+  }
+  var sf=ans['q_soffit'];
+  if(sf!==''&&sf!=null)cf.soffitHeight=+sf||0;
+  var bl=qualifyAnswerLabel('q_boxout');
+  if(bl){
+    if(bl==='No'){cf.boxOutReq='No';cf.boxOutSize='';cf.boxOutOther='';}
+    else{
+      cf.boxOutReq='Yes';
+      if(bl==='Yes — downpipe'){cf.boxOutSize='150mm (Downpipe)';cf.boxOutOther='';}
+      else if(bl==='Yes — soil pipe'){cf.boxOutSize='200mm (Waste Pipe)';cf.boxOutOther='';}
+      else{cf.boxOutSize='Other';cf.boxOutOther=qualifyAnswerText('q_boxout')||'';}
+    }
+  }
+  var nl=qualifyAnswerLabel('q_notch');
+  if(nl)cf.roofNotch=(nl==='No')?'No':'Yes';
+}
 function setQualify(qid,optIdx){
   if(!state.qualify)state.qualify={};
   var q=qualifyQuestions().filter(function(x){return x.id===qid})[0];
@@ -2535,6 +2556,7 @@ function setQualify(qid,optIdx){
     var sel=document.getElementById('c_model'); if(sel)sel.value='';
     toast('“'+displayName(curModel)+'” no longer matches — selection cleared.');
   }
+  syncQualifyToConfig();
   renderQualify();
   if(typeof renderModelGrid==='function')renderModelGrid();
   scheduleAutoSave();
@@ -2546,11 +2568,13 @@ function setQualifySpecify(qid,text){
   var cur=state.qualify[qid];
   if(cur&&typeof cur==='object')cur.text=text;
   else if(cur!=null&&cur!=='')state.qualify[qid]={opt:cur,text:text};
+  syncQualifyToConfig();
   scheduleAutoSave();
 }
 function setQualifyNumber(qid,v){
   if(!state.qualify)state.qualify={};
   state.qualify[qid]=String(v==null?'':v).trim();
+  syncQualifyToConfig();
   scheduleAutoSave();
   renderQualifyResult();
 }
@@ -6643,7 +6667,7 @@ function paySelect(k){const opts=['Cash','Card','Bank Transfer','Finance'];const
 function renderDocuments(){
   const a=admin.company,c=state.customer,j=state.job,cf=state.config;recalc();const calc=state._calc;if(!j.payMethods)j.payMethods={};const _instDirect=(j.pay==='Direct'&&calc.fitting>0);let _dep=calc.sched.deposit,_stages=calc.sched.stages.map(s=>[s[0],s[1]]),_finalShown=calc.sched.final;if(_instDirect){const M=Math.round((calc.youpay-calc.fitting)*100)/100;if(_stages.length===2){const s1=Math.round(M*0.25*100)/100,s2=Math.round(M*0.25*100)/100;_stages=[[calc.sched.stages[0][0],s1],[calc.sched.stages[1][0],s2]];_finalShown=Math.round((M-_dep-s1-s2)*100)/100;}else if(_stages.length===1){const s1=Math.round(M*0.5*100)/100;_stages=[[calc.sched.stages[0][0],s1]];_finalShown=Math.round((M-_dep-s1)*100)/100;}else{_finalShown=Math.round((M-_dep)*100)/100;}}
   const cw=cword(cf.colour);
-  const glaze=(cf.roof==='Without Poly'||cf.roof==='No poly')?`${cf.model} — Prepared (no polycarbonate)`:(cf.roof==='Glass Roof'||cf.roof==='Prepared for Glass')?`${cf.model} — Glass Roof`:`${cf.model} with ${cf.roof} roof`;
+  const glaze=(cf.roof==='Without Poly'||cf.roof==='No poly')?`${displayName(cf.model)} — Prepared (no polycarbonate)`:(cf.roof==='Glass Roof'||cf.roof==='Prepared for Glass')?`${displayName(cf.model)} — Glass Roof`:`${displayName(cf.model)} with ${cf.roof} roof`;
   const phead=(sheet)=>`<div class="phead">${admin.logo?`<div style="background:#fff;border-radius:9px;padding:6px 12px;display:inline-flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18)"><img src="${admin.logo}" style="max-height:56px;max-width:175px;display:block"></div>`:`<div class="wm">TotaLuxe&trade;<small>COLLECTION</small></div>`}
     <div class="meta"><span class="dt">${DLAB[state.doc]}</span><br>Quote ${j.quote}${j.hq?(' · HQ '+j.hq):''}<br>${j.date}${sheet?(' · '+sheet):''}</div></div>`;
   const pfoot=()=>`<div class="pfoot">${a.name} · Company No. ${a.cono} · ${a.group}<br>${a.addr1}, ${a.addr2}, ${a.town} ${a.post} &nbsp;·&nbsp; T: ${a.tel} &nbsp;·&nbsp; F: ${a.fax}</div>`;
@@ -6837,7 +6861,7 @@ function renderDocuments(){
   <section class="sheet${(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?' flow-page':''}">${phead('Specification')}
     <div class="pg"><div class="fill">
       ${state.doc==='survey'?'<div class="surveynote">SURVEY MODE — confirm each item on site, write actual sizes on the drawing, and tick once verified.</div>':''}
-      <div class="sh">Veranda Specification — ${cf.model} · ${cf.mount}</div>
+      <div class="sh">Veranda Specification — ${displayName(cf.model)} · ${cf.mount}</div>
       ${state.doc==='survey'?`
       <div class="grow" style="min-height:150px;background:#fcfcfb;border:1px solid var(--line);border-radius:12px;padding:8px 12px">${verandaOutlineSVG(cf)}</div>
       <div class="sh">Specification Details</div>
@@ -6913,7 +6937,7 @@ function renderDocuments(){
         ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
         ${state.doc==='survey'?confirmRow('Dimensions (W×P)',`${cf.width} × ${cf.proj} mm${cf.bespoke?' · Bespoke':''}`,`<div style="font-size:11px;font-weight:700;color:var(--brand-d);text-align:center;line-height:1.3">${esc(displayName(cf.model))}</div>`,false):''}
         ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
-        ${confirmRow('Gutter',cf.model+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
+        ${confirmRow('Gutter',displayName(cf.model)+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
         ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
         ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false)}
       </tbody></table>
@@ -7171,7 +7195,7 @@ function renderDocuments(){
       <div class="dl" style="margin-bottom:6px">
         <div class="li"><span class="k">Customer</span><span class="v">${c.cname||'—'}</span></div>
         <div class="li"><span class="k">Order / HQ No</span><span class="v">${j.hq||('HQ-'+j.quote)}</span></div>
-        <div class="li"><span class="k">Model</span><span class="v">${cf.model} (${cf.mount})</span></div>
+        <div class="li"><span class="k">Model</span><span class="v">${displayName(cf.model)} (${cf.mount})</span></div>
         <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>
         <div class="li"><span class="k">Colour</span><span class="v">${cf.colour}</span></div>
         <div class="li"><span class="k">Roof Type</span><span class="v">${cf.roof}</span></div>
