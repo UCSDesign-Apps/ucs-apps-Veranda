@@ -19,7 +19,8 @@
   --gold:#c2a14e; --gold-d:#a8863a; --ok:#0aa06e; --warn:#e0a106; --danger:#d9534f;
   --grey-head:#d9d9d9; --hl:#e9eef0;
   --serif:'Calluna',Georgia,'Times New Roman',serif;
-  --topnav-h:106px; /* row1 68px + row2 ~38px — used for sticky offset */
+  --topnav-h:106px; /* fallback only — syncTopnavHeight() overwrites it from the real header */
+  --sbw:0px;        /* scrollbar width, measured at runtime; see syncTopnavHeight() */
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
@@ -189,7 +190,10 @@ body.role-admin .admin-only-flex{display:flex!important;}
   .atabs::-webkit-scrollbar{display:none;}
   .atabs button{flex-shrink:0;font-size:12px;padding:8px 10px;}
   /* document viewer: scale 210mm sheet to fit screen */
-  .docwrap{margin:-10px;padding:12px 0 40px;overflow-x:hidden;}
+  .docwrap{margin:0 0 -10px;padding:12px 0 40px;overflow-x:hidden;}
+  /* The -10px was applied on all four sides, which pushed the wrapper past the left
+     viewport edge and produced a sliver of horizontal scroll on narrow screens. Only
+     the bottom pull was wanted. */
   .sheet{width:100% !important;min-height:unset;margin:0 0 10px;}
   .pg{padding:4mm 4mm 4mm;}
   /* drawbar sticks at top — reduce padding on mobile */
@@ -230,12 +234,18 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .qrow:hover{border-color:var(--brand);} .qrow .qref{font-weight:700;} .qrow .qmeta{color:var(--muted);font-size:13px;} .qrow .sp{flex:1;}
 .qprepbadge{width:38px;height:38px;border-radius:50%;background:var(--brand);color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-.5px;}
 .empty{text-align:center;color:var(--muted);padding:50px 0;}
-.doctabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;position:sticky;
-  top:var(--topnav-h);z-index:41;background:var(--bg);padding:8px 0 10px;
-  box-shadow:0 2px 6px rgba(0,0,0,.06);}
-/* The bar was pinned at 56px while the two-row topnav is 106px (90px on mobile),
-   so it slid up behind the header — and with z-index 30 under the header's 40 it
-   vanished. Pinned to the real header height and stacked above it. */
+/* The bar lives inside .content (centred, max-width 1180px) but should read as a
+   full-width strip under the header. calc(-50vw + 50%) margins pull it out to the
+   viewport edges and the matching padding puts the buttons back on the content grid —
+   a flat -50vw overflows and creates horizontal scroll.
+   top is --topnav-h, set from the header's MEASURED height at runtime: the hard-coded
+   106px was 8px short of the real 114px header, so the bar tucked under it. */
+.doctabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  margin-left:calc(-50vw + 50% + (var(--sbw,0px) / 2));
+  margin-right:calc(-50vw + 50% + (var(--sbw,0px) / 2));margin-bottom:14px;
+  padding:9px calc(50vw - 50% - (var(--sbw,0px) / 2) + 24px) 10px;
+  position:sticky;top:var(--topnav-h);z-index:39;background:var(--bg);
+  border-bottom:1px solid var(--line);box-shadow:0 2px 6px rgba(0,0,0,.06);}
 .doctabs button{border:1px solid var(--line);background:#fff;color:var(--muted);padding:8px 15px;border-radius:8px;font-weight:600;font-size:13.5px;cursor:pointer;}
 .doctabs button.active{background:var(--brand);color:#fff;border-color:var(--brand);}
 .atabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}
@@ -6868,6 +6878,19 @@ function fitPages(){
     }
   });
 }
+function syncTopnavHeight(){
+  const nav=document.querySelector('.topnav');
+  if(!nav)return;
+  const h=Math.round(nav.getBoundingClientRect().height);
+  if(h>0)document.documentElement.style.setProperty('--topnav-h',h+'px');
+  /* 50vw counts the scrollbar but 50% does not, so the full-bleed bar overhangs by
+     the scrollbar width and creates a sliver of horizontal scroll. Publish the real
+     width so the calc can subtract it. */
+  const sbw=Math.max(0,window.innerWidth-document.documentElement.clientWidth);
+  document.documentElement.style.setProperty('--sbw',sbw+'px');
+}
+window.addEventListener('resize',syncTopnavHeight);
+window.addEventListener('load',syncTopnavHeight);
 let _fitT=null;
 window.addEventListener('resize',()=>{clearTimeout(_fitT);_fitT=setTimeout(fitPages,120);});
 window.addEventListener('beforeprint',fitPages);
@@ -7036,13 +7059,18 @@ function renderDocuments(){
      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:175px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead>
      <tbody>${doorMerged.map((r,i)=>`<tr><td class="c">D${i+1}</td><td>${r[0]}</td>${imgCell(r[0])}<td style="font-family:monospace">${r[1]}</td><td class="c">${r[2]}</td><td class="c">${ck(false)}</td></tr>`).join('')}</tbody></table>`:'';
 
+  /* The survey carries two extra rows (Veranda Model, Dimensions) and already runs
+     to the foot of the sheet, so it keeps the smaller thumbnail; quote and contract
+     have room for a larger one. A single larger size pushed the survey page from
+     21px clipped to 151px. */
+  const CONF_IMG_W=state.doc==='survey'?64:104, CONF_IMG_H=state.doc==='survey'?40:66;
   const confirmRow=(name,detail,imgHTML,on)=>`<tr><td><b>${name}</b></td><td>${detail}</td><td class="c">${imgHTML}</td><td class="c tickwrap"><span class="ck${on?' on':''}" onclick="this.classList.toggle('on')"></span></td></tr>`;
   /* Currently unused: the decking row was taken off Confirmation of Finishes once
      decking got its own page. Kept because it is the row builder to reuse if it is
      ever wanted back. Must come after confirmRow — it is a const, so referencing
      it earlier hits the TDZ. */
   const deckingSpecRow=(dk.enabled&&dkSell>0&&dkBoard)
-    ? confirmRow('Composite Decking',`${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²${dkSteps?` · steps: ${esc(dkSteps)}`:''}`,docImg('decking',dkBoard.code,'DECKING',64,40,'margin:0 auto'),true)
+    ? confirmRow('Composite Decking',`${esc(dkBoard.name)} · ${esc(dkShape)} · ${dkArea}m²${dkSteps?` · steps: ${esc(dkSteps)}`:''}`,docImg('decking',dkBoard.code,'DECKING',CONF_IMG_W,CONF_IMG_H,'margin:0 auto'),true)
     : '';
 
   /* The four cards along the top: the board, and the three options the customer
@@ -7130,13 +7158,13 @@ function renderDocuments(){
         </div>
       </div>`}
       <div class="sh">Confirmation of Finishes</div>
-      <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:80px">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
-        ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
+      <table class="mt tall"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:${state.doc==='survey'?'80px':'120px'}">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
+        ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
         ${state.doc==='survey'?confirmRow('Dimensions (W×P)',`${cf.width} × ${cf.proj} mm${cf.bespoke?' · Bespoke':''}`,`<div style="font-size:11px;font-weight:700;color:var(--brand-d);text-align:center;line-height:1.3">${esc(displayName(cf.model))}</div>`,false):''}
-        ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',64,40,'margin:0 auto',RAL_HEX[cf.colour]),true)}
-        ${confirmRow('Gutter',displayName(cf.model)+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
-        ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
-        ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',64,40,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false)}
+        ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto',RAL_HEX[cf.colour]),true)}
+        ${confirmRow('Gutter',displayName(cf.model)+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
+        ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
+        ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false)}
       </tbody></table>
     </div></div>${pfoot()}
   </section>
