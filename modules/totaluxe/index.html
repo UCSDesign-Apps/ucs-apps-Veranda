@@ -2446,7 +2446,10 @@ function siteGroundVals(cf){
   return {ground,soffit,box,notch};
 }
 /** Four <div class="li"> rows — the same markup the existing spec lists use, so this
- *  drops into the survey `dl` list and the quote/contract 3-column grid unchanged. */
+ *  drops into the survey `dl` list and the quote/contract 3-column grid unchanged.
+ *  ⚠️ UNUSED since 2026-08-26: all three documents now print the unified Site & Install
+ *  table from the Qualify answers instead. Kept only because it is harmless and shows the
+ *  old shape; siteGroundVals() below IS still live, feeding the wsumm5 wizard summary. */
 function siteGroundRows(cf){
   const v=siteGroundVals(cf);
   return `<div class="li"><span class="k">Ground Type</span><span class="v">${esc(v.ground)}</span></div>`+
@@ -2610,6 +2613,69 @@ function qualifyAnswerLabel(qid){
 function qualifyAnswerText(qid){
   var a=(state.qualify||{})[qid];
   return (a&&typeof a==='object')?(a.text||''):'';
+}
+/* The EXACT REVERSE of syncQualifyToConfig below — read the two together, and change
+   them together.
+
+   ⚠️ WHY THIS EXISTS. Every document now draws its site section from qualifySurveyRows(),
+   i.e. from state.qualify. A quote saved BEFORE the Qualify stage existed has its site
+   answers only in state.config and nothing in state.qualify, so without this backfill
+   qualifySurveyRows() returns empty and the whole Site & Install section — answers and
+   photos — silently vanishes from that job's paperwork.
+
+   ⚠️ Only genuinely ABSENT answers are filled, so a real Qualify answer always wins over
+   a value inferred from config.
+
+   ⚠️ Ground type is matched on an EXACT normalised string, never a substring: the config
+   wording "Concrete Paving Slabs" contains "Concrete", so substring matching would file
+   patio slabs under Concrete. Aliases are listed explicitly instead. */
+function backfillQualifyFromConfig(){
+  var cf=state.config; if(!cf)return;
+  if(!state.qualify)state.qualify={};
+  var q=state.qualify;
+  var absent=function(id){return !qualifyAnswered(q[id]);};
+  var norm=function(v){return String(v==null?'':v).trim().toLowerCase().replace(/\s+/g,' ');};
+
+  /* q_ground options: 0 Grass · 1 Patio slabs · 2 Porcelain slabs · 3 Decking ·
+     4 Concrete · 5 Tarmac · 6 Other(specify). Keys are the CONFIG wording that
+     syncQualifyToConfig writes, plus the Qualify wording itself and a couple of
+     older/looser variants seen on saved jobs. */
+  var GROUND={
+    'grass':0,
+    'concrete paving slabs':1,'patio slabs':1,'paving slabs':1,'patio':1,'slabs':1,
+    'porcelain paving slabs':2,'porcelain slabs':2,'porcelain':2,
+    'decking':3,'composite decking':3,
+    'concrete':4,
+    'tarmac':5,'asphalt':5
+  };
+  if(absent('q_ground')&&cf.groundType){
+    var g=norm(cf.groundType);
+    if(g==='other'){ q.q_ground={opt:6,text:cf.groundTypeOther||''}; }
+    else if(GROUND[g]!=null){ q.q_ground=GROUND[g]; }
+    else if(cf.groundType){ q.q_ground={opt:6,text:cf.groundType}; }  /* unknown wording -> Other, keeping the text */
+  }
+
+  /* q_soffit is a plain number question, so the answer IS the value. */
+  if(absent('q_soffit')&&cf.soffitHeight!=null&&cf.soffitHeight!==''&&+cf.soffitHeight>0){
+    q.q_soffit=+cf.soffitHeight;
+  }
+
+  /* q_boxout options: 0 No · 1 Yes — downpipe · 2 Yes — soil pipe · 3 Yes — other(specify).
+     syncQualifyToConfig writes '150mm (Downpipe)' / '200mm (Waste Pipe)' / 'Other'. */
+  if(absent('q_boxout')&&cf.boxOutReq){
+    if(norm(cf.boxOutReq)==='no'){ q.q_boxout=0; }
+    else if(norm(cf.boxOutReq)==='yes'){
+      var sz=norm(cf.boxOutSize);
+      if(sz.indexOf('150')>-1||sz.indexOf('downpipe')>-1) q.q_boxout=1;
+      else if(sz.indexOf('200')>-1||sz.indexOf('waste')>-1||sz.indexOf('soil')>-1) q.q_boxout=2;
+      else q.q_boxout={opt:3,text:cf.boxOutOther||cf.boxOutSize||''};
+    }
+  }
+
+  /* q_notch options: 0 No · 1 Yes(specify). */
+  if(absent('q_notch')&&cf.roofNotch){
+    q.q_notch=(norm(cf.roofNotch)==='no')?0:{opt:1,text:''};
+  }
 }
 function syncQualifyToConfig(){
   var cf=state.config; if(!cf)return;
@@ -6579,6 +6645,16 @@ function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
     if(_c.boxOutReq==='Yes'&&!state.images.boxoutphoto)state.images.boxoutphoto=state.images.boxnotchphoto;
     else if(_c.roofNotch==='Yes'&&!state.images.notchphoto)state.images.notchphoto=state.images.boxnotchphoto;
   }
+  /* Box-out/notch photos used to live under their own keys, rendered by the old
+     Site & Groundworks block. Nothing renders those keys now, so carry them to the
+     Qualify photo slots or an older job's site photos disappear from its paperwork
+     — and its survey could no longer pass the photo check. */
+  if(state.images.boxoutphoto&&!state.images.qphoto_q_boxout)state.images.qphoto_q_boxout=state.images.boxoutphoto;
+  if(state.images.notchphoto&&!state.images.qphoto_q_notch)state.images.qphoto_q_notch=state.images.notchphoto;
+  /* A job saved before the Qualify stage has its site answers only in state.config.
+     Every document now reads them from state.qualify, so infer the missing ones or
+     the entire Site & Install section vanishes from that job. */
+  backfillQualifyFromConfig();
   /* decking added after earlier quotes were saved — backfill so older quotes open cleanly.
      Quotes saved before the shape calculator carried only width x length: those are
      rectangles, so map them onto the rect shape rather than losing the deck. */
@@ -7012,57 +7088,31 @@ function renderDocuments(){
           ${state.doc==='survey'?`<div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>`:''}
         </div>
       </div>`}
-      <!-- SITE & GROUNDWORKS — QUOTE AND CONTRACT ONLY (2026-08-26). The survey no longer
-           shows it: the "Site Questions — Confirm on Site" table and the "Site Photos" grid
-           below cover the same ground, from the Qualify answers, and do it better (tickable
-           on site, photo per flagged answer). The box-out/notch photo slots lived in here,
-           so they no longer render on the survey — their send gate moved with them, to the
-           qualifyPhotoList() check in sendSurveyToCustomer.
-           Still outside the survey/quote ternary above so both layout branches get it. -->
-      <!-- Site detail on the left, one photo per option stacked on the right. Each
-           photo appears only when its own option is Yes, so a job with a notch and
-           no box out never carries an empty box-out slot.
-           object-fit:contain: the whole point is the markup, and cover would crop it. -->
-      ${state.doc==='survey'?'':`<div class="sh">Site &amp; Groundworks</div>`}
-      ${state.doc==='survey'?'':(cf.boxOutReq==='Yes'||cf.roofNotch==='Yes')?`
-      <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:14px;align-items:start;margin-top:2px">
-        <div>
-          <!-- .dl is normally two columns; forced to one here so each detail gets its
-               own line and the text column can be narrow enough to give the photos
-               the wider half. Same on every document type. -->
-          <div class="dl" style="grid-template-columns:1fr">${siteGroundRows(cf)}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          ${cf.boxOutReq==='Yes'?`
-          <div>
-            <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Box Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
-            <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['boxoutphoto'])?'#ed1c2d':'var(--line)'}">
-              <div class="gimg" style="height:140px">${ph('boxoutphoto','BOX OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
-              <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; BOX OUT</div>
-            </div>
-          </div>`:''}
-          ${cf.roofNotch==='Yes'?`
-          <div>
-            <div class="sh" style="font-size:11px;color:var(--brand-d);margin-bottom:4px">Notch Out${state.doc==='survey'?' <span style="color:#ed1c2d;font-weight:400;font-size:10px">(required)</span>':''}</div>
-            <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images['notchphoto'])?'#ed1c2d':'var(--line)'}">
-              <div class="gimg" style="height:140px">${ph('notchphoto','NOTCH OUT PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8')}</div>
-              <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:10px;font-weight:600;text-align:center;padding:3px 6px;letter-spacing:.3px">SITE IMAGE &mdash; NOTCH OUT</div>
-            </div>
-          </div>`:''}
-        </div>
-      </div>`
-      : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;padding:6px 2px">${siteGroundRows(cf)}</div>`}
-      ${(state.doc==='survey'&&qualifySurveyRows().length)?`
-      <div class="sh" style="margin-top:10px">Site Questions &mdash; Confirm on Site</div>
-      <table class="mt tall"><thead><tr><th style="width:34%">Question</th><th style="width:30%">Answer given</th><th>Notes / actual</th><th class="c tickwrap" style="width:72px">Confirmed</th></tr></thead><tbody>
-        ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(r.value)}</b></td><td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td></tr>`).join('')}
+      <!-- SITE & INSTALL — ONE SOURCE FOR ALL THREE DOCUMENTS (2026-08-26).
+           Replaces the old Site & Groundworks block, which read state.config and printed a
+           different shape per document. Everything here comes from the Qualify answers, so
+           quote, contract and survey can no longer drift apart.
+           Per document: the survey adds a notes rule and a tick per row (it is filled in on
+           site) and outlines a missing photo in red; quote and contract simply state the
+           answers, with no red border and no "required" prompt — nobody fills those in.
+           ⚠️ A job saved before Qualify existed has its answers only in state.config;
+           backfillQualifyFromConfig() (called on load) infers them, or this whole section
+           would be empty for older jobs. -->
+      ${qualifySurveyRows().length?`
+      <div class="sh" style="margin-top:10px">Site &amp; Install${state.doc==='survey'?' &mdash; Confirm on Site':''}</div>
+      <table class="mt tall"><thead><tr>
+        <th style="width:${state.doc==='survey'?'34%':'45%'}">Question</th>
+        <th style="width:${state.doc==='survey'?'30%':'55%'}">Answer</th>
+        ${state.doc==='survey'?`<th>Notes / actual</th><th class="c tickwrap" style="width:72px">Confirmed</th>`:''}
+      </tr></thead><tbody>
+        ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(r.value)}</b></td>${state.doc==='survey'?`<td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td>`:''}</tr>`).join('')}
       </tbody></table>
       ${qualifyPhotoList().length?`
       <div class="sh" style="margin-top:10px">Site Photos</div>
       <div style="display:grid;grid-template-columns:repeat(${Math.min(3,qualifyPhotoList().length)},1fr);gap:10px;margin-top:4px">
         ${qualifyPhotoList().map(p=>`
-        <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${state.images[p.key]?'var(--line)':'#ed1c2d'}">
-          <div class="gimg" style="height:130px">${ph(p.key,'PHOTO REQUIRED',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[p.key])}</div>
+        <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&!state.images[p.key])?'#ed1c2d':'var(--line)'}">
+          <div class="gimg" style="height:130px">${ph(p.key,state.doc==='survey'?'PHOTO REQUIRED':'SITE PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[p.key])}</div>
           <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:9.5px;font-weight:600;text-align:center;padding:3px 5px;line-height:1.3">${esc(p.label)}<br><span style="font-weight:400;opacity:.85">${esc(p.answer)}</span></div>
         </div>`).join('')}
       </div>`:''}`:''}
