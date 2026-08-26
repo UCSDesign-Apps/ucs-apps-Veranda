@@ -2207,21 +2207,33 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>showView(b.dat
 const NEXT_FLOW=['customer','qualify','build','pricing','decking','docs'];
 const NEXT_LABEL={customer:'Qualify &amp; filter products',qualify:'Configure your veranda',build:'Pricing &amp; Fitting',pricing:'View Documents',docs:null};
 const NEXT_ICON={customer:'❓',qualify:'⚙',build:'£',pricing:'📄',docs:null};
+/* Keyed by DESTINATION, not by the page you are standing on. The maps above describe
+   "whatever literally follows me in NEXT_FLOW", which is wrong the moment a stage is
+   skipped — a user without Qualify would sit on Customer reading "Qualify & filter
+   products". These also fix a latent mismatch: pricing's next is decking, but
+   NEXT_LABEL.pricing already said "View Documents". */
+const NEXT_TO_LABEL={qualify:'Qualify &amp; filter products',build:'Configure your veranda',pricing:'Pricing &amp; Fitting',decking:'Composite Decking',docs:'View Documents'};
+const NEXT_TO_ICON={qualify:'❓',build:'⚙',pricing:'£',decking:'🪵',docs:'📄'};
 function renderNextBtn(){
   /* Remove any existing next buttons first */
   document.querySelectorAll('.view-next-btn').forEach(b=>b.remove());
   if(!currentUser)return;
   NEXT_FLOW.forEach((view,idx)=>{
-    const nextView=NEXT_FLOW[idx+1];
+    if(!currentUser.sections.includes(view))return;
+    /* Skip PAST any stage this user cannot reach rather than giving up: a user with
+       Qualify switched off still needs a Customer → Configurator button, or the
+       flow dead-ends on the customer page. */
+    let nextView=null;
+    for(let k=idx+1;k<NEXT_FLOW.length;k++){
+      if(currentUser.sections.includes(NEXT_FLOW[k])){nextView=NEXT_FLOW[k];break;}
+    }
     if(!nextView)return;
-    /* only show if both current and next are accessible to this user */
-    if(!currentUser.sections.includes(view)||!currentUser.sections.includes(nextView))return;
     const section=document.getElementById('view-'+view);
     if(!section)return;
     const btn=document.createElement('div');
     btn.className='view-next-btn no-print';
     btn.innerHTML=`<button class="btn primary" style="margin:24px 0 8px;float:right;font-size:15px;padding:13px 28px;border-radius:10px;display:flex;align-items:center;gap:10px" onclick="showView('${nextView}');window.scrollTo(0,0)">
-      ${NEXT_ICON[view]||''} ${NEXT_LABEL[view]||'Next'} <span style="font-size:18px;opacity:.8">›</span>
+      ${NEXT_TO_ICON[nextView]||NEXT_ICON[view]||''} ${NEXT_TO_LABEL[nextView]||NEXT_LABEL[view]||'Next'} <span style="font-size:18px;opacity:.8">›</span>
     </button><div style="clear:both"></div>`;
     section.appendChild(btn);
   });
@@ -2553,6 +2565,12 @@ function qualifyAnswered(a){var p=qualifyPick(a);return p!=null&&p!=='';}
 /* -> {allowed:Set|null, reasons:{model->question text}}. allowed===null means
    nothing answered so far narrows anything, so every product stays available. */
 function qualifyModelFilter(){
+  /* A user with the Qualify stage switched off must not meet a greyed-out product:
+     they have no way to reach the answers that ruled it out. For them the filter is
+     simply inactive — the configurator behaves as it did before Qualify existed.
+     Saved answers on the quote are left untouched, so a colleague who DOES have the
+     stage still sees the same filtering when they open it. */
+  if(typeof can==='function'&&currentUser&&!can('qualify'))return {allowed:null,reasons:{}};
   var qs=qualifyQuestions(); var ans=state.qualify||{}; var reasons={};
   var anyAnswered=false, allowed=null;
   qs.forEach(function(q){
