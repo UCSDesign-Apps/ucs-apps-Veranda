@@ -1886,6 +1886,23 @@ const ADMIN_DEFAULT={
        {label:'Wall mounted',models:['Bosco','Nebbiolo','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Verdeca']},
        {label:'Free standing',models:['Ribolla','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']}
      ]},
+    /* Colour families, not literal colour names: the model data spells the same
+       finish several ways (Traffic White / Traffic white / White 9016, and Grey
+       7024 / Anthracite 7024 are the same RAL), so the answers group by RAL and
+       the allow-lists are derived from every model carrying that family.
+       ⚠️ Verdeca (Aran) is listed under White although its only colour is
+       "White (fabric)" — it is a fabric awning, not a 9016 powder coat. That is
+       deliberate: a customer asking for white should still be offered it. Verified
+       2026-08-26 against every model's colours[]; the other three families match
+       the data exactly. */
+    {id:'q_colour',text:'Frame Colour',section:'Product',type:'select',filter:true,
+     options:[
+       {label:'Grey / Anthracite (RAL 7024)',models:['Bosco','Nebbiolo','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'White (RAL 9016)',models:['Bosco','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Verdeca','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Cream (RAL 9001)',models:['Bosco','Nebbiolo','Pigato','Giallo']},
+       {label:'Black (RAL 9005)',models:['Bosco','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Not decided yet',models:[]}
+     ]},
     {id:'q_rooftype',text:'Roof Type',section:'Product',type:'select',filter:true,
      options:[
        {label:'Polycarbonate roof',models:['Bosco','Nebbiolo','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus']},
@@ -2088,7 +2105,7 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    config keeps its own copy of the questions, so without a version to compare
    against, later seed edits — new answers, photo flags, corrected allow-lists —
    never reach it. */
-const QUALIFY_SEED_VERSION=3;
+const QUALIFY_SEED_VERSION=4;   /* 4: added q_colour (Frame Colour, RAL families) */
 /* Deep clone of the seed. Every field a question can carry has to come across —
    an earlier version copied only {id,text,options} and would have silently
    dropped section, type, filter, unit, placeholder and the per-option
