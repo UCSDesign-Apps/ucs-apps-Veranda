@@ -19,9 +19,9 @@ const msal = require('@azure/msal-node');
 // object returned on login drives the same UI nav as the client-side fallback.
 // KEEP IN SYNC with modules/totaluxe/index.html — the login response wins over
 // the client's USERS_SEED, so a section missing here is hidden for everyone.
-const ALL_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'decking', 'docs', 'costings', 'admin'];
+const ALL_SECTIONS = ['quotes', 'customer', 'qualify', 'build', 'pricing', 'decking', 'docs', 'costings', 'admin'];
 const ALL_DOCS = ['quote', 'contract', 'survey', 'picking'];
-const SALES_SECTIONS = ['quotes', 'customer', 'build', 'pricing', 'decking', 'docs'];
+const SALES_SECTIONS = ['quotes', 'customer', 'qualify', 'build', 'pricing', 'decking', 'docs'];
 
 // Azure app credentials (Railway env vars) for sending PDF emails via Graph.
 const msalConfig = {
