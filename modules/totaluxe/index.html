@@ -7197,8 +7197,6 @@ function renderDocuments(){
     ['D','Condensation','Condensation can form under the roof and on glass when warm, moist air meets a cold surface. It is caused by the weather and how the space is used, not by a fault in the product, and it clears as conditions change. Keeping the space ventilated reduces it.']
   ];
   if(!j.acks)j.acks={};
-  /* Quote only: contract and survey drop the breakdown and always fit on one page. */
-  const splitPay=(state.doc==='quote')&&!!deckingOrderBlock;
   const ackTick=(k)=>(state.doc==='quote')?'':`<span class="ck${j.acks[k]?' on':''}" onclick="toggleAck('${k}',this)" style="flex:0 0 16px;margin-top:1px"></span>`;
   const ackBlock=`<div class="ackblock" style="flex:0 0 auto;margin-top:8px;border:1px solid var(--line);border-radius:9px;padding:6px 11px">
       <div style="font-weight:800;font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--brand-d);margin-bottom:2px">Product Acknowledgements${state.doc==='quote'?' <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— for your information</span>':' <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— please tick each to confirm you have read it</span>'}</div>
@@ -7472,12 +7470,12 @@ function renderDocuments(){
   </section>`:''}
 
   <!-- PAYMENT SCHEDULE
-       Contract & survey (2026-09-24): no order breakdown. Staged payments first, the
-       total below them, then Before You Sign and the signatures straight after, so the
-       schedule and its sign-off always sit on ONE page.
-       Quote: unchanged. Breakdown (when decking is sold), total, schedule; its
-       acknowledgements move to their own sheet only when the decking breakdown shows. -->
-  ${state.doc!=='quote'?`<section class="sheet">${phead('Payment Schedule')}
+       All three documents (2026-09-24): no order breakdown. Staged payments first,
+       the total below them, then the acknowledgements, and on contract / survey the
+       signatures straight after, so the schedule and its sign-off sit on ONE page.
+       The quote states the acknowledgements under Please Note, with no tick boxes and
+       no sign-off. -->
+  <section class="sheet">${phead('Payment Schedule')}
     <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
       <div class="sh" style="margin-top:0">Staged Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">${calc.sched.tiers===4?'(order over £7,000)':'(order £7,000 or under)'}</span></div>
           <table class="mt tall paysched"><thead><tr><th>Stage</th><th class="r" style="width:140px">Amount</th><th style="width:200px">Payment Method</th></tr></thead><tbody>
@@ -7489,10 +7487,10 @@ function renderDocuments(){
           </tbody></table>
       <div class="pricebox"><div><div class="lbl">Total Price — You Pay <span style="font-weight:400;opacity:.85">(incl VAT &amp; installation)</span></div></div>
         <div class="big">£${money(calc.youpay)}</div></div>
-      ${state.doc==='contract'?`<div style="font-size:10px;color:#566;line-height:1.5;margin-top:6px">Prefer to spread the cost? See the <b>Finance Options</b> page for monthly payment illustrations based on your order. Finance packages available are subject to order value.</div>`:''}
-      <div class="sh" style="margin-top:12px">Before You Sign</div>
+      ${(state.doc==='quote'||state.doc==='contract')?`<div style="font-size:10px;color:#566;line-height:1.5;margin-top:6px">Prefer to spread the cost? See the <b>Finance Options</b> page for monthly payment illustrations based on your order. Finance packages available are subject to order value.</div>`:''}
+      <div class="sh" style="margin-top:12px">${state.doc==='quote'?'Please Note':'Before You Sign'}</div>
       ${ackBlock}
-      <div class="contract-only" style="margin-top:8px">
+      ${state.doc==='quote'?'':`<div class="contract-only" style="margin-top:8px">
         <div class="notebox" style="background:#fdecec;border-color:#f1b4b4;color:#a33;text-align:center;font-weight:700;padding:6px 10px;margin-bottom:6px">Please read carefully before signing — your order will be manufactured to the final specifications above. This document forms part of a legally binding contract.</div>
         <!-- Four across, not 2x2: the acknowledgements above need the height. -->
         <div class="sigrow signblock" style="margin-top:auto;flex-shrink:0;grid-template-columns:repeat(4,1fr);gap:10px">
@@ -7502,37 +7500,9 @@ function renderDocuments(){
           <div class="sigcard" data-signable="{signature:signer1:Representative+Signature}" style="min-height:70px"><div class="h">${state.doc==='survey'?'Surveyor':'Representative'} Signature</div></div>
         </div>
         <p style="font-size:9px;color:#a33;font-weight:700;margin-top:4px;margin-bottom:0">1a. I have read the terms &amp; conditions of this contract including those printed overleaf and agree with them.</p>
-      </div>
+      </div>`}
     </div></div>${pfoot()}
-  </section>`:`<section class="sheet">${phead('Payment Schedule')}
-    <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
-      <div class="sh">Order Breakdown &amp; Payment Schedule</div>
-      ${deckingOrderBlock}
-      <div class="pricebox"><div><div class="lbl">Total Price — You Pay <span style="font-weight:400;opacity:.85">(incl VAT &amp; installation)</span></div></div>
-        <div class="big">£${money(calc.youpay)}</div></div>
-      <div class="grow" style="display:flex;flex-direction:column;gap:14px;margin-top:8px;flex:1 0 auto">
-        <div>
-          <div class="sh">Staged Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">${calc.sched.tiers===4?'(order over £7,000)':'(order £7,000 or under)'}</span></div>
-          <table class="mt tall paysched"><thead><tr><th>Stage</th><th class="r" style="width:140px">Amount</th><th style="width:200px">Payment Method</th></tr></thead><tbody>
-            <tr><td><b>Total Price</b> (incl VAT &amp; installation)</td><td class="r"><b>£${money(calc.youpay)}</b></td><td style="color:#6a777c">Payment type: <b>${j.pay}</b></td></tr>
-            <tr><td><b>Deposit</b> — 25%<div class="substage">Contract date is deemed when both deposit is paid and contract is signed.</div></td><td class="r"><b>£${money(calc.sched.deposit)}</b></td><td>${paySelect('deposit')}</td></tr>
-            ${_stages.map((s,i)=>`<tr><td><b>${s[0]}</b><div class="substage">${i===0?'Paid when survey is complete.':'Paid when installation is booked.'}</div></td><td class="r"><b>£${money(s[1])}</b></td><td>${paySelect('stage'+i)}</td></tr>`).join('')}
-            <tr><td><b>Final Balance</b><div class="substage">Due on final scheduled day of installation.</div></td><td class="r"><b>£${money(_finalShown)}</b></td><td>${paySelect('final')}</td></tr>
-            ${_instDirect?`<tr><td><b>Installation Balance</b><div class="substage">This is paid directly to the installation team.</div></td><td class="r"><b>£${money(calc.fitting)}</b></td><td>Cash</td></tr>`:''}
-          </tbody></table>
-        </div>
-        <div>
-          ${(state.doc==='quote'||state.doc==='contract')?`<div style="font-size:10.5px;color:#566;line-height:1.55">Prefer to spread the cost? See the <b>Finance Options</b> page for monthly payment illustrations based on your order. Finance packages available are subject to order value.</div>`:''}
-        </div>
-      </div>
-      ${splitPay?`</div></div>${pfoot()}
   </section>
-  <section class="sheet">${phead(state.doc==='quote'?'Product Acknowledgements':'Acknowledgements & Signatures')}
-    <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
-      <div class="sh">${state.doc==='quote'?'Good to Know':'Before You Sign'} <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— order total £${money(calc.youpay)}, payable as set out on the Payment Schedule</span></div>`:''}
-      ${ackBlock}
-    </div></div>${pfoot()}
-  </section>`}
 
   <!-- FINANCE OPTIONS (quote & contract only) -->
   ${(state.doc==='quote'||state.doc==='contract')?`<section class="sheet">${phead('Finance Options')}
