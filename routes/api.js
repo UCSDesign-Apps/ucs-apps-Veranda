@@ -20,7 +20,7 @@ const msal = require('@azure/msal-node');
 // KEEP IN SYNC with modules/totaluxe/index.html — the login response wins over
 // the client's USERS_SEED, so a section missing here is hidden for everyone.
 const ALL_SECTIONS = ['quotes', 'customer', 'qualify', 'build', 'pricing', 'decking', 'docs', 'costings', 'admin'];
-const ALL_DOCS = ['quote', 'contract', 'survey', 'picking'];
+const ALL_DOCS = ['quote', 'contract', 'signed', 'survey', 'picking'];
 const SALES_SECTIONS = ['quotes', 'customer', 'qualify', 'build', 'pricing', 'decking', 'docs'];
 
 // Azure app credentials (Railway env vars) for sending PDF emails via Graph.
@@ -47,7 +47,7 @@ const USERS = {
     { u: 'damien', pin: '1111', name: 'Damien', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
     { u: 'ryan', pin: '2222', name: 'Ryan', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
     { u: 'richard', pin: '3333', name: 'Richard', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
-    { u: 'surveyor', pin: '4444', name: 'Surveyor', role: 'surveyor', sections: ['quotes', 'docs'], docs: ['contract', 'survey', 'picking'], signedOnly: true },
+    { u: 'surveyor', pin: '4444', name: 'Surveyor', role: 'surveyor', sections: ['quotes', 'docs'], docs: ['contract', 'signed', 'survey', 'picking'], signedOnly: true },
   ],
 };
 
@@ -396,6 +396,101 @@ function apiRouter(pool) {
     } catch (err) {
       console.error('send-email error:', err.message);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---- Signable proxy ----
+  // Signable is a server-to-server API: it sends no CORS headers, so a browser
+  // fetch to api.signable.co.uk is blocked before it leaves the page. Every
+  // Signable call goes through here instead.
+  // Key: SIGNABLE_API_KEY on the server wins; otherwise the key an admin saved in
+  // Admin -> Company is passed up by the client (body `apiKey` or header
+  // `x-signable-key`) so the existing setup keeps working until the env var is set.
+  const SIGNABLE_BASE = process.env.SIGNABLE_BASE_URL || 'https://api.signable.co.uk/v1'; // override for local testing only
+  function signableAuth(clientKey) {
+    const key = process.env.SIGNABLE_API_KEY || clientKey;
+    if (!key) return null;
+    return 'Basic ' + Buffer.from(`${key}:x`).toString('base64');
+  }
+  const validFingerprint = (fp) => /^[A-Za-z0-9_-]{6,128}$/.test(String(fp || ''));
+
+  // Signable's own 401/403 means the API key was refused. Pass it on as a 502 so
+  // the client does not mistake it for its own session expiring.
+  const KEY_REFUSED = 'Signable rejected the API key — check it in Admin -> Company or SIGNABLE_API_KEY';
+
+  async function signableJson(resp) {
+    const text = await resp.text();
+    try { return JSON.parse(text); } catch (e) { return { message: text.slice(0, 300) }; }
+  }
+
+  router.post('/signable/envelopes', requireAuth, async (req, res) => {
+    try {
+      const { envelope, apiKey } = req.body || {};
+      const auth = signableAuth(apiKey);
+      if (!auth) return res.status(503).json({ error: 'Signable API key not configured' });
+      if (!envelope || typeof envelope !== 'object') return res.status(400).json({ error: 'envelope object required' });
+      const resp = await fetch(`${SIGNABLE_BASE}/envelopes`, {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(envelope),
+      });
+      const data = await signableJson(resp);
+      if (resp.status === 401 || resp.status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      res.status(resp.status).json(data);
+    } catch (err) {
+      console.error('[signable] create error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
+    }
+  });
+
+  async function readEnvelope(req) {
+    const auth = signableAuth(req.get('x-signable-key'));
+    if (!auth) return { status: 503, data: { error: 'Signable API key not configured' } };
+    const resp = await fetch(`${SIGNABLE_BASE}/envelopes/${encodeURIComponent(req.params.fingerprint)}`, {
+      headers: { Authorization: auth, Accept: 'application/json' },
+    });
+    return { status: resp.status, data: await signableJson(resp), auth };
+  }
+
+  router.get('/signable/envelopes/:fingerprint', requireAuth, async (req, res) => {
+    try {
+      if (!validFingerprint(req.params.fingerprint)) return res.status(400).json({ error: 'Bad envelope reference' });
+      const { status, data } = await readEnvelope(req);
+      if (status === 401 || status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      res.status(status).json(data);
+    } catch (err) {
+      console.error('[signable] status error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
+    }
+  });
+
+  // Streams the executed PDF (or the document as sent, while still unsigned).
+  router.get('/signable/envelopes/:fingerprint/pdf', requireAuth, async (req, res) => {
+    try {
+      if (!validFingerprint(req.params.fingerprint)) return res.status(400).json({ error: 'Bad envelope reference' });
+      const { status, data, auth } = await readEnvelope(req);
+      if (status === 401 || status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      if (status === 503) return res.status(503).json(data);
+      if (status !== 200) return res.status(status === 404 ? 404 : 502).json({ error: data.message || data.error || `Signable returned ${status}` });
+      const pdfUrl = data.envelope_signed_pdf || data.envelope_pdf;
+      if (!pdfUrl) return res.status(409).json({ error: 'Signable has no PDF for this envelope yet', envelope_status: data.envelope_status });
+      // The PDF link is normally pre-signed storage: send no credentials to it.
+      // Only if that is refused AND it is Signable's own host, retry with the key.
+      let pdf = await fetch(pdfUrl);
+      if ((pdf.status === 401 || pdf.status === 403) && /^https:\/\/[^/]*signable\.co\.uk\//.test(pdfUrl)) {
+        pdf = await fetch(pdfUrl, { headers: { Authorization: auth } });
+      }
+      if (!pdf.ok) return res.status(502).json({ error: `PDF download failed (${pdf.status})` });
+      const buf = Buffer.from(await pdf.arrayBuffer());
+      if (!buf.length) return res.status(502).json({ error: 'Signable returned an empty PDF' });
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', `inline; filename="contract-${req.params.fingerprint}.pdf"`);
+      res.set('Cache-Control', 'private, no-store');
+      res.set('X-Envelope-Status', String(data.envelope_status || ''));
+      res.send(buf);
+    } catch (err) {
+      console.error('[signable] pdf error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
     }
   });
 

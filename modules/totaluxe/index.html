@@ -350,6 +350,9 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .paysel{font-family:inherit;font-size:11px;padding:3px 7px;border:1px solid #c3ced0;border-radius:6px;background:#fff;color:var(--brand-d);max-width:160px;}
 .substage{font-size:9px;color:#8a969a;font-weight:400;font-style:italic;margin-top:2px;line-height:1.3;}
 .paysched td.r{font-size:15px;}
+/* Tighter than .mt.tall: the product acknowledgements share this page, and a
+   four-stage schedule (orders over £7,000) otherwise pushes the signatures into the footer. */
+.mt.tall.paysched td,.mt.tall.paysched th{padding-top:8px;padding-bottom:8px;}
 .paysched th:last-child,.paysched td:last-child{text-align:right;}
 @media print{.paysel{border:none;background:transparent;-webkit-appearance:none;appearance:none;padding:0;font-weight:600;}}
 .ck{width:16px;height:16px;border:2px solid var(--brand);border-radius:5px;display:inline-block;position:relative;cursor:pointer;vertical-align:middle;}
@@ -383,6 +386,8 @@ body:not(.dm-survey) .survey-only{display:none !important;}
 .internal-notes-only{display:none;}
 body.dm-survey .internal-notes-only{display:block;}
 @media print{ .internal-notes-only{display:none !important;} }
+.print-only-note{display:none;}
+@media print{ .print-only-note{display:block;margin-top:14px;padding:14px 16px;border:1px solid #d3dadb;border-radius:10px;font-size:12px;line-height:1.6;color:#3a4448;} }
 /* Only shown when explicitly printing for internal use */
 body.print-internal .internal-notes-only{display:block !important;}
 .picking-only{display:none;} body.dm-picking .sheet:not(.picking-only){display:none;} body.dm-picking .picking-only{display:flex;}
@@ -892,9 +897,12 @@ body.print-internal .internal-notes-only{display:block !important;}
         <div class="doctabs no-print">
           <button data-doc="quote" onclick="setDoc('quote')">Quotation</button>
           <button data-doc="contract" class="active" onclick="setDoc('contract')">Contract</button>
+          <button data-doc="signed" onclick="setDoc('signed')">Signed Contract</button>
           <button data-doc="survey" onclick="setDoc('survey')">Survey</button>
           <button data-doc="picking" onclick="setDoc('picking')">Picking List</button>
           <div style="flex:1"></div>
+          <button class="btn sm" id="forceBoxOutBtn" onclick="toggleForceSection('boxout')" style="display:none">＋ Box Out</button>
+          <button class="btn sm" id="forceNotchBtn" onclick="toggleForceSection('notch')" style="display:none">＋ Notch Out</button>
           <button class="btn sm" id="surveyCompletedBtn" onclick="completeSurvey()" style="display:none;background:#ede0ff;color:#6200aa;border-color:#c9a0f0">✓ Survey Completed</button>
           <button class="btn sm" id="sendToCustomerBtn" onclick="sendSurveyToCustomer()" style="display:none;background:#e0f4ee;color:#1a6b3a;border-color:#a0d9bf">📤 Send Survey</button>
           <button class="btn sm" id="quoteSendCustomerBtn" onclick="sendQuoteToCustomer()" style="display:none;background:#e0f0ff;color:#1155aa;border-color:#a0c8f0">📤 Send Quote</button>
@@ -1854,13 +1862,13 @@ const PARTS_SEED=[
 ];
 
 const ALL_SECTIONS=['quotes','customer','qualify','build','pricing','decking','docs','costings','admin'];
-const ALL_DOCS=['quote','contract','survey','picking'];
+const ALL_DOCS=['quote','contract','signed','survey','picking'];
 const USERS_SEED=[
  {u:'admin',pin:'0000',name:'Administrator',role:'admin',sections:ALL_SECTIONS.slice(),docs:ALL_DOCS.slice(),signedOnly:false},
  {u:'damien',pin:'1111',name:'Damien',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
  {u:'ryan',pin:'2222',name:'Ryan',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
  {u:'richard',pin:'3333',name:'Richard',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'surveyor',pin:'4444',name:'Surveyor',role:'surveyor',sections:['quotes','docs'],docs:['contract','survey','picking'],signedOnly:true}
+ {u:'surveyor',pin:'4444',name:'Surveyor',role:'surveyor',sections:['quotes','docs'],docs:['contract','signed','survey','picking'],signedOnly:true}
 ];
 
 /* ===== ADMIN (persisted) ===== */
@@ -1933,7 +1941,7 @@ const ADMIN_DEFAULT={
   decking:JSON.parse(JSON.stringify(DECKING_SEED)),
   users:JSON.parse(JSON.stringify(USERS_SEED)),
   images:[],
-  imgmap:{finish:{},gutter:{},post:{},gutterStyle:{},postStyle:{},model:{},roof:{},side:{},lifestyle:{},siderender:{},component:{},decking:{},deckboard:{},deckfascia:{},decklifestyle:{},stepSingle:{},stepDouble:{},finance:{}},
+  imgmap:{finish:{},gutter:{},post:{},gutterStyle:{},postStyle:{},model:{},roof:{},side:{},lifestyle:{},siderender:{},component:{},decking:{},deckboard:{},deckfascia:{},decklifestyle:{},stepSingle:{},stepDouble:{},finance:{},boxout:{},notch:{}},
   pickImages:false,
   logo:TL_LOGO, logoDark:''
 };
@@ -1953,7 +1961,7 @@ function loadAdmin(){
     healQualifyQuestions(m);
     healUserSections(m.users);
     if(!m.logo)m.logo=TL_LOGO;
-    ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
+    ['finish','gutter','post','gutterStyle','postStyle','model','roof','side','lifestyle','siderender','component','decking','boxout','notch'].forEach(k=>{if(!m.imgmap[k])m.imgmap[k]={};});
     const pm=m.priceMatrix||{};
     Object.entries(PRICE_LIST_2026_DEFAULT).forEach(([k,v])=>{
       if(k.startsWith('_'))return;
@@ -2033,7 +2041,8 @@ async function loadAdminFromServer(){
       /* Ensure all imgmap categories exist (in case server config predates a new category) */
       const requiredCats=['finish','gutter','gutterStyle','post','postStyle','model',
                           'roof','side','siderender','lifestyle','component','decking',
-                          'deckboard','deckfascia','decklifestyle','stepSingle','stepDouble','finance'];
+                          'deckboard','deckfascia','decklifestyle','stepSingle','stepDouble','finance',
+                          'boxout','notch'];
       if(!admin.imgmap)admin.imgmap={};
       requiredCats.forEach(cat=>{if(!admin.imgmap[cat])admin.imgmap[cat]={};});
       /* keep derived pricing constants in sync with the merged matrix */
@@ -2190,6 +2199,12 @@ function healUserSections(list){
     if(!u||!Array.isArray(u.sections))return;
     if(u.sections.indexOf('build')>=0&&u.sections.indexOf('qualify')<0){
       u.sections.splice(u.sections.indexOf('build'),0,'qualify');changed++;
+    }
+    /* The Signed Contract tab postdates every saved user record, and a saved docs
+       list wins over the defaults — so anyone who can see the contract gets the
+       signed copy too, slotted in right after it. */
+    if(Array.isArray(u.docs)&&u.docs.indexOf('contract')>=0&&u.docs.indexOf('signed')<0){
+      u.docs.splice(u.docs.indexOf('contract')+1,0,'signed');changed++;
     }
   });
   return changed>0;
@@ -2380,6 +2395,7 @@ function updateSentButtons(){
   const hasFingerprint=!!(state.job&&state.job.signableFingerprint);
   const isContractSent=state.status==='Contract Sent';
   if(chk)chk.style.display=(hasFingerprint&&isContractSent)?'':'none';
+  if(typeof updateForceButtons==='function')updateForceButtons();
 }
 
 /* ===== CONFIGURATOR ===== */
@@ -2751,6 +2767,47 @@ function syncQualifyToConfig(){
   }
   var nl=qualifyAnswerLabel('q_notch');
   if(nl)cf.roofNotch=(nl==='No')?'No':'Yes';
+}
+/* BOX OUT / NOTCH OUT PAGE — is it needed?
+   The Qualify answer wins when there is one; a job saved before Qualify existed
+   falls back to the legacy state.config field. The surveyor can ADD the page
+   (state.job.forceBoxOut / forceNotch) but can never remove one Qualify requires:
+   the override catches what was missed at qualifying, it does not undo what the
+   customer agreed. */
+function boxOutByQualify(){
+  var l=qualifyAnswerLabel('q_boxout');
+  if(l)return l!=='No';
+  return !!(state.config&&state.config.boxOutReq==='Yes');
+}
+function notchByQualify(){
+  var l=qualifyAnswerLabel('q_notch');
+  if(l)return l!=='No';
+  return !!(state.config&&state.config.roofNotch==='Yes');
+}
+function boxOutRequired(){return boxOutByQualify()||!!(state.job&&state.job.forceBoxOut);}
+function notchRequired(){return notchByQualify()||!!(state.job&&state.job.forceNotch);}
+function toggleForceSection(key){
+  var byQ=key==='boxout'?boxOutByQualify():notchByQualify();
+  var flag=key==='boxout'?'forceBoxOut':'forceNotch';
+  if(byQ){
+    state.job[flag]=false;
+    toast('Still required by the qualifying answers — page stays on.');
+  }else{
+    state.job[flag]=!state.job[flag];
+    toast((key==='boxout'?'Box Out':'Notch Out')+' page '+(state.job[flag]?'added':'removed'));
+    if(typeof scheduleAutoSave==='function')scheduleAutoSave();
+  }
+  updateForceButtons();
+  renderDocuments();
+}
+function updateForceButtons(){
+  [['boxout','forceBoxOutBtn','Box Out',boxOutRequired()],['notch','forceNotchBtn','Notch Out',notchRequired()]].forEach(function(b){
+    var el=document.getElementById(b[1]);if(!el)return;
+    el.style.display=(state.doc==='survey')?'':'none';
+    el.textContent=(b[3]?'✓ ':'＋ ')+b[2];
+    el.classList.toggle('primary',b[3]);
+    el.title=b[3]?(b[0]==='boxout'?(boxOutByQualify()?'Required by Qualify':'Added by surveyor — click to remove'):(notchByQualify()?'Required by Qualify':'Added by surveyor — click to remove')):'Add the '+b[2]+' page to this job';
+  });
 }
 function setQualify(qid,optIdx){
   if(!state.qualify)state.qualify={};
@@ -6118,6 +6175,8 @@ function renderImageMap(){
     ['decklifestyle','Decking page — lifestyle image',['1']],
     ['stepSingle','Decking steps — single step photo',['1']],
     ['stepDouble','Decking steps — double step photo',['1']],
+    ['boxout','Box out — how it is built <span style="font-weight:400;color:#8a969a">(Box Out &amp; Notch Out page · Step 1 / 2 / 3)</span>',['1','2','3']],
+    ['notch','Notch out — how it is built <span style="font-weight:400;color:#8a969a">(Box Out &amp; Notch Out page · Step 1 / 2 / 3)</span>',['1','2','3']],
     ['lifestyle','Lifestyle images — cover &amp; leaflet',['1','2','3','4','5','6']],
     ['finance','Finance partner logo (Finance Options page)',['logo']]];
   const w=document.getElementById('imgMapWrap');if(!w)return;w.innerHTML='';
@@ -6896,12 +6955,12 @@ window.addEventListener('resize',()=>{clearTimeout(_fitT);_fitT=setTimeout(fitPa
 window.addEventListener('beforeprint',fitPages);
 
 /* ===== DOCUMENTS ===== */
-const DOC_BANNER={quote:'* QUOTATION *',contract:'* OFFICIAL CONTRACT *',survey:'* SURVEY *',picking:'* PICKING LIST *'};
-const DOC_TITLE={quote:'Quotation',contract:'Official Order',survey:'Survey',picking:'Picking List'};
+const DOC_BANNER={quote:'* QUOTATION *',contract:'* OFFICIAL CONTRACT *',signed:'* SIGNED CONTRACT *',survey:'* SURVEY *',picking:'* PICKING LIST *'};
+const DOC_TITLE={quote:'Quotation',contract:'Official Order',signed:'Signed Contract',survey:'Survey',picking:'Picking List'};
 function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.docs[0]||'contract';}
   state.doc=d;
   /* Update dm- class without removing role- or other classes */
-  document.body.classList.remove('dm-quote','dm-contract','dm-survey','dm-picking');
+  document.body.classList.remove('dm-quote','dm-contract','dm-signed','dm-survey','dm-picking');
   document.body.classList.add('dm-'+d);
   document.querySelectorAll('.doctabs button').forEach(b=>b.classList.toggle('active',b.dataset.doc===d));
   const sb=document.getElementById('signableBtn');sb.style.display=(d==='contract')?'':'none';
@@ -6912,13 +6971,15 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   updateSentButtons();
   renderDocuments();
 }
+function toggleAck(k,el){if(!state.job.acks)state.job.acks={};state.job.acks[k]=!state.job.acks[k];el.classList.toggle('on',state.job.acks[k]);if(typeof scheduleAutoSave==='function')scheduleAutoSave();}
 function ralLabel(c){const n=(c.match(/\d{4}/)||[''])[0];return n?('RAL '+n+' '+c.replace(n,'').trim()):c;}
 function cword(c){return (c.split(' ')[0]||'').toUpperCase();}
-const DLAB={quote:'QUOTATION',contract:'OFFICIAL CONTRACT',survey:'SURVEY DOCUMENT',picking:'PICKING LIST'};
+const DLAB={quote:'QUOTATION',contract:'OFFICIAL CONTRACT',signed:'SIGNED CONTRACT',survey:'SURVEY DOCUMENT',picking:'PICKING LIST'};
 const SIDE_LBL={front:'Front',left:'Left',right:'Right',back:'Back'};
 function setPM(k,v){if(!state.job.payMethods)state.job.payMethods={};state.job.payMethods[k]=v;}
 function paySelect(k){const opts=['Cash','Card','Bank Transfer','Finance'];const cur=(state.job.payMethods&&state.job.payMethods[k])||'Cash';if(state.doc==='survey')return cur;return `<select class="paysel" onchange="setPM('${k}',this.value)">`+opts.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('')+`</select>`;}
 function renderDocuments(){
+  if(state.doc==='signed')return renderSignedContract();
   const a=admin.company,c=state.customer,j=state.job,cf=state.config;recalc();const calc=state._calc;if(!j.payMethods)j.payMethods={};const _instDirect=(j.pay==='Direct'&&calc.fitting>0);let _dep=calc.sched.deposit,_stages=calc.sched.stages.map(s=>[s[0],s[1]]),_finalShown=calc.sched.final;if(_instDirect){const M=Math.round((calc.youpay-calc.fitting)*100)/100;if(_stages.length===2){const s1=Math.round(M*0.25*100)/100,s2=Math.round(M*0.25*100)/100;_stages=[[calc.sched.stages[0][0],s1],[calc.sched.stages[1][0],s2]];_finalShown=Math.round((M-_dep-s1-s2)*100)/100;}else if(_stages.length===1){const s1=Math.round(M*0.5*100)/100;_stages=[[calc.sched.stages[0][0],s1]];_finalShown=Math.round((M-_dep-s1)*100)/100;}else{_finalShown=Math.round((M-_dep)*100)/100;}}
   const cw=cword(cf.colour);
   const glaze=(cf.roof==='Without Poly'||cf.roof==='No poly')?`${displayName(cf.model)} — Prepared (no polycarbonate)`:(cf.roof==='Glass Roof'||cf.roof==='Prepared for Glass')?`${displayName(cf.model)} — Glass Roof`:`${displayName(cf.model)} with ${cf.roof} roof`;
@@ -7090,6 +7151,61 @@ function renderDocuments(){
     dkCard('Steps',dkAnySteps?esc(dkSteps):'None',dkStepCardImg)
   ].join(''):'';
 
+  /* BOX OUT & NOTCH OUT — one sheet, half a page each, placed straight after the
+     sides / infills. Only the half (or halves) the job needs is drawn. The customer
+     sign-off sits on contract and survey only — a quote is not signed. */
+  const bxOn=boxOutRequired(), ntOn=notchRequired();
+  const bxDetail=()=>{const l=qualifyAnswerLabel('q_boxout'),t=qualifyAnswerText('q_boxout');
+    return l&&l!=='No'?esc(l)+(t?' — '+esc(t):''):(cf.boxOutReq==='Yes'?esc(cf.boxOutSize||'Yes')+(cf.boxOutOther?' — '+esc(cf.boxOutOther):''):'Added at survey');};
+  const ntDetail=()=>{const l=qualifyAnswerLabel('q_notch'),t=qualifyAnswerText('q_notch');
+    return l&&l!=='No'?esc(l)+(t?' — '+esc(t):''):(cf.roofNotch==='Yes'?'Yes':'Added at survey');};
+  const bnHalf=(cat,title,detail,para,what)=>`<div class="bnhalf" data-bn="${cat}" style="flex:1 1 0;display:flex;flex-direction:column;min-height:0">
+      <div class="sh" style="margin-top:0">${title} <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">(${detail})</span></div>
+      <p style="font-size:11px;line-height:1.55;margin:0 0 8px;color:#3a4448">${para}</p>
+      <div style="flex:1 1 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;min-height:0">
+        ${['1','2','3'].map(n=>`<div style="display:flex;flex-direction:column;min-height:0">
+          <div style="flex:1 1 0;min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">${docImg(cat,n,'STEP '+n,0,0,'width:100%;height:100%;border:none;border-radius:0;object-fit:contain;background:#f6f7f8')}</div>
+          <div style="flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--brand-d);text-align:center;margin-top:4px">Step ${n}</div></div>`).join('')}
+      </div>
+      ${(state.doc==='contract'||state.doc==='survey')?`<div class="sigrow" style="grid-template-columns:1.4fr 1fr;margin-top:8px;flex:0 0 auto">
+        <div class="sigcard" data-signable="{signature:signer2:Customer+Signature}" style="min-height:58px;padding:8px 12px"><div class="h" style="margin-bottom:0">Customer signature — I understand ${what} is needed and how it will be built</div></div>
+        <div class="sigcard" style="padding:8px 12px"><div class="h" style="margin-bottom:0">Customer name — print</div><div class="nm" style="padding-top:3px">${c.cname||''}</div></div>
+      </div>`:''}
+    </div>`;
+  /* ⚠️ Wording to be checked against how TotaLuxe actually builds these before it
+     goes to customers. */
+  const BX_TEXT='Pipework on the wall where the veranda fixes to the house &mdash; a downpipe, soil pipe or similar &mdash; sits in the line of the wall plate and roof. Rather than move the pipe, the installers build a box out: the wall plate and roof are cut back around the pipe and the opening is closed with a made-to-measure aluminium box, colour matched to the frame and sealed to the wall. The pipe stays where it is, stays accessible, and the roof still drains into the gutter as normal. The three steps below show how it is built.';
+  const NT_TEXT='Where the house wall is not a straight run &mdash; a bay, a corner, a chimney breast, a step in the brickwork or a fixture that cannot move &mdash; the veranda roof is notched to fit around it. The roof sheet and its supporting bar are cut to the measured shape on site, the cut edges are capped with aluminium trim, and the joint to the wall is flashed and sealed. The notch changes the shape of the roof at that point only; the rest of the veranda is built to the standard specification. The three steps below show how it is built.';
+  const boxNotchSheet=(bxOn||ntOn)?`<section class="sheet boxnotch-sheet">${phead(bxOn&&ntOn?'Box Out & Notch Out':bxOn?'Box Out':'Notch Out')}
+    <div class="pg"><div class="fill" style="display:flex;flex-direction:column;gap:14px">
+      ${bxOn?bnHalf('boxout','Box Out',bxDetail(),BX_TEXT,'a box out'):''}
+      ${(bxOn&&ntOn)?'<div style="flex:0 0 auto;border-top:1px dashed #c8d0d2"></div>':''}
+      ${ntOn?bnHalf('notch','Notch Out',ntDetail(),NT_TEXT,'a notch out'):''}
+      ${(bxOn!==ntOn)?'<div style="flex:1 1 0"></div>':''}
+    </div></div>${pfoot()}
+  </section>`:'';
+
+  /* PRODUCT ACKNOWLEDGEMENTS — under the payment schedule on all three documents.
+     Lettered A-D, NOT numbered: TERMS_PAGES already runs to clause 21, so 19-22
+     would have produced two clause 19s, 20s and 21s in one contract.
+     TotaLuxe's own wording. ⚠️ To be read by whoever handles the contracts before
+     it goes to customers. Quote: information only. Contract / survey: a tick each. */
+  const ACKS=[
+    ['A','Weatherproof, not waterproof','The roof and guttering are designed to carry rain away, but a veranda is not a sealed building. In driving rain or strong wind some water can get in at open sides, panel joints or where the veranda meets the house. This is how the product is designed, not a fault.'],
+    ['B','An outdoor space','A veranda &mdash; including one enclosed with glass doors or side panels &mdash; is an outdoor structure. It is not insulated or sealed like a room of the house, so furniture, flooring and belongings kept under it should be suitable for outdoor use.'],
+    ['C','Temperature','The temperature under the roof follows the weather outside: it can be much warmer in sunshine and cold in winter. The aluminium frame and roof sheets expand and contract as the temperature changes, which can cause occasional ticking or creaking sounds.'],
+    ['D','Condensation','Condensation can form under the roof and on glass when warm, moist air meets a cold surface. It is caused by the weather and how the space is used, not by a fault in the product, and it clears as conditions change. Keeping the space ventilated reduces it.']
+  ];
+  if(!j.acks)j.acks={};
+  /* A decking breakdown always needs the split. The quote has no signature area,
+     so a long plain schedule still fits there without one. */
+  const splitPay=!!deckingOrderBlock||(state.doc!=='quote'&&_instDirect&&_stages.length>=2);
+  const ackTick=(k)=>(state.doc==='quote')?'':`<span class="ck${j.acks[k]?' on':''}" onclick="toggleAck('${k}',this)" style="flex:0 0 16px;margin-top:1px"></span>`;
+  const ackBlock=`<div class="ackblock" style="flex:0 0 auto;margin-top:8px;border:1px solid var(--line);border-radius:9px;padding:6px 11px">
+      <div style="font-weight:800;font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--brand-d);margin-bottom:2px">Product Acknowledgements${state.doc==='quote'?' <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— for your information</span>':' <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— please tick each to confirm you have read it</span>'}</div>
+      ${ACKS.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;font-size:9px;line-height:1.38;padding:3px 0;border-top:1px solid #f0f2f3;color:#3a4448">${ackTick(x[0])}<div><b style="color:var(--brand-d)">${x[0]}. ${x[1]}.</b> ${x[2]}</div></div>`).join('')}
+    </div>`;
+
   const html=`
   <!-- COVER -->
   <section class="sheet">
@@ -7223,6 +7339,7 @@ function renderDocuments(){
       ${(()=>{const notes=relSides.filter(sideHas).map(s=>(cf.sideNotes&&cf.sideNotes[s])?`${SIDE_LBL[s]}: ${esc(cf.sideNotes[s])}`:'').filter(Boolean);return notes.length?`<div style="margin-top:12px;padding:10px 14px;background:#fff8e8;border:1px solid #ecdca0;border-radius:8px"><div style="font-weight:700;font-size:12px;color:#8a6d1a;margin-bottom:4px">Special Notes from Quote</div><div style="font-size:11.5px;line-height:1.5;color:#5a4a12">${notes.join(' · ')}</div></div>`:'';})()}
     </div></div>${pfoot()}
   </section>`:''}
+  ${state.doc==='survey'?boxNotchSheet:''}
 
   <!-- COMPOSITE DECKING (only when decking is actually sold; not on the picking list) -->
   ${(dk.enabled&&dkSell>0&&dkBoard&&state.doc!=='picking')?`<section class="sheet">
@@ -7327,6 +7444,7 @@ function renderDocuments(){
       </div>
     </div></div>${pfoot()}
   </section>
+  ${(state.doc==='quote'||state.doc==='contract')?boxNotchSheet:''}
 
   <!-- YOUR VERANDA OR GLASS ROOM (quote & contract only) -->
   ${(state.doc==='quote'||state.doc==='contract')?`<section class="sheet">${phead('Your Veranda or Glass Room')}
@@ -7361,7 +7479,7 @@ function renderDocuments(){
       ${deckingOrderBlock}
       <div class="pricebox"><div><div class="lbl">Total Price — You Pay <span style="font-weight:400;opacity:.85">(incl VAT &amp; installation)</span></div></div>
         <div class="big">£${money(calc.youpay)}</div></div>
-      <div class="grow" style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
+      <div class="grow" style="display:flex;flex-direction:column;gap:14px;margin-top:8px;flex:1 0 auto">
         <div>
           <div class="sh">Staged Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">${calc.sched.tiers===4?'(order over £7,000)':'(order £7,000 or under)'}</span></div>
           <table class="mt tall paysched"><thead><tr><th>Stage</th><th class="r" style="width:140px">Amount</th><th style="width:200px">Payment Method</th></tr></thead><tbody>
@@ -7370,15 +7488,26 @@ function renderDocuments(){
             ${_stages.map((s,i)=>`<tr><td><b>${s[0]}</b><div class="substage">${i===0?'Paid when survey is complete.':'Paid when installation is booked.'}</div></td><td class="r"><b>£${money(s[1])}</b></td><td>${paySelect('stage'+i)}</td></tr>`).join('')}
             <tr><td><b>Final Balance</b><div class="substage">Due on final scheduled day of installation.</div></td><td class="r"><b>£${money(_finalShown)}</b></td><td>${paySelect('final')}</td></tr>
             ${_instDirect?`<tr><td><b>Installation Balance</b><div class="substage">This is paid directly to the installation team.</div></td><td class="r"><b>£${money(calc.fitting)}</b></td><td>Cash</td></tr>`:''}
-          </tbody><tfoot><tr><td class="r">Total</td><td class="r">£${money(calc.youpay)}</td><td></td></tr></tfoot></table>
+          </tbody></table>
         </div>
         <div>
           ${(state.doc==='quote'||state.doc==='contract')?`<div style="font-size:10.5px;color:#566;line-height:1.55">Prefer to spread the cost? See the <b>Finance Options</b> page for monthly payment illustrations based on your order. Finance packages available are subject to order value.</div>`:''}
         </div>
       </div>
-      <div class="contract-only">
+      ${splitPay?`</div></div>${pfoot()}
+  </section>
+  <!-- ACKNOWLEDGEMENTS & SIGNATURES — its own sheet only when the schedule is too long
+       to share a page with them (decking breakdown, or a four-stage schedule with a
+       direct installation balance). Before this split those orders drew the payment
+       table underneath the signature boxes. -->
+  <section class="sheet">${phead(state.doc==='quote'?'Product Acknowledgements':'Acknowledgements & Signatures')}
+    <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
+      <div class="sh">${state.doc==='quote'?'Good to Know':'Before You Sign'} <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">— order total £${money(calc.youpay)}, payable as set out on the Payment Schedule</span></div>`:''}
+      ${ackBlock}
+      <div class="contract-only"${splitPay?' style="margin-top:auto"':''}>
         <div class="notebox" style="background:#fdecec;border-color:#f1b4b4;color:#a33;text-align:center;font-weight:700;padding:6px 10px;margin-bottom:6px">Please read carefully before signing — your order will be manufactured to the final specifications above. This document forms part of a legally binding contract.</div>
-        <div class="sigrow signblock" style="margin-top:auto;flex-shrink:0">
+        <!-- Four across, not 2x2: the acknowledgements above need the height. -->
+        <div class="sigrow signblock" style="margin-top:auto;flex-shrink:0;grid-template-columns:repeat(4,1fr);gap:10px">
           <div class="sigcard"><div class="h">Customer Name — Print</div><div class="nm">${c.cname||''}</div><div class="line" style="margin-top:6px"></div></div>
           <div class="sigcard" data-signable="{signature:signer2:Customer+Signature}" style="min-height:70px"><div class="h">Customer Signature</div></div>
           <div class="sigcard"><div class="h">${state.doc==='survey'?'Surveyor':'Representative'} Name — Print</div>${state.doc==='survey'?surveyorField('fit'):`<div class="nm">${esc(j.prep||'')}</div><div class="line" style="margin-top:6px"></div>`}</div>
@@ -7496,6 +7625,139 @@ function renderDocuments(){
   </section>`;
   document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
 }
+/* ===== SIGNED CONTRACT TAB =====
+   Shows the executed PDF from Signable. It shares nothing with the quote /
+   contract / survey pipeline, so renderDocuments() hands straight over to it.
+   The PDF is FETCHED and shown from a blob URL rather than pointing the iframe
+   at the route: an iframe whose request 401s or 404s renders a blank grey box
+   with no explanation, which looks exactly like a broken app. Fetching first lets
+   the pane say what actually went wrong. */
+let _signedBlobUrl=null;
+function signedState(){
+  const j=state.job||{};
+  if(!j.signableFingerprint&&!j.signedPdfData)return 'unsent';
+  return (state.status==='Signed'||j.signedAt)?'signed':'awaiting';
+}
+function signableKeyHeader(){
+  const k=admin.company&&admin.company.signableKey;
+  return k?{'x-signable-key':k}:{};
+}
+function fmtStamp(iso){
+  if(!iso)return '—';
+  const d=new Date(iso);if(isNaN(d))return esc(iso);
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+function renderSignedContract(){
+  const c=state.customer,j=state.job,a=admin.company;
+  const st=signedState();
+  const pill={unsent:['NOT SENT','#6a777c','#eef1f2'],awaiting:['AWAITING SIGNATURES','#8a5a00','#fff1d6'],signed:['SIGNED'+(j.signedAt?' · '+fmtStamp(j.signedAt):''),'#1a6b3a','#e0f4ee']}[st];
+  const dis=st==='unsent'?' disabled':'';
+  const ref=j.signableFingerprint||'—';
+  const row=(k,v)=>`<div class="li"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+  const body=st==='unsent'
+    ?`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1.5px dashed #c3ced0;border-radius:12px;padding:30px;color:#566">
+        <div style="font-size:15px;font-weight:700;color:var(--brand-d)">This contract has not been sent for signing yet</div>
+        <div style="font-size:12px;margin-top:8px;max-width:420px;line-height:1.6">Open the <b>Contract</b> tab and use <b>📧 Send Contract</b>. Once Signable has the envelope the document appears here, and the signed copy replaces it when every party has signed.</div>
+      </div>`
+    :`${st==='awaiting'?`<div class="notebox" style="margin:0 0 8px;background:#fff1d6;border-color:#f0cf8a;color:#8a5a00;font-weight:600">Awaiting signatures — this is the document <u>as sent</u>. It is not a signed contract yet.</div>`:''}
+      <div id="signedPdfPane" class="no-print" style="flex:1;min-height:170mm;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f6f7f8;display:flex;align-items:center;justify-content:center;color:#6a777c;font-size:12px">Loading the contract from Signable…</div>
+      <div class="print-only-note">The ${st==='signed'?'signed':'unsigned'} contract is held electronically by Signable. Envelope reference: <b>${esc(ref)}</b>. Open the Signed Contract tab in the TotaLuxe app, or download the PDF, to view or print it.</div>`;
+  document.getElementById('docwrap').innerHTML=`<section class="sheet">
+    <div class="phead">${admin.logo?`<div style="background:#fff;border-radius:9px;padding:6px 12px;display:inline-flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18)"><img src="${admin.logo}" style="max-height:56px;max-width:175px;display:block"></div>`:`<div class="wm">TotaLuxe&trade;<small>COLLECTION</small></div>`}
+      <div class="meta"><span class="dt">${DLAB.signed}</span><br>Quote ${j.quote}${j.hq?(' · HQ '+j.hq):''}<br>${j.date}</div></div>
+    <div class="pg"><div class="fill" style="display:flex;flex-direction:column">
+      <div class="sh" style="display:flex;justify-content:space-between;align-items:center">Execution Record
+        <span class="signed-pill" style="font-size:10.5px;font-weight:800;letter-spacing:.6px;padding:4px 11px;border-radius:20px;color:${pill[1]};background:${pill[2]}">${pill[0]}</span></div>
+      <div class="dl" style="margin-bottom:10px">
+        ${row('Customer',esc(c.cname||'—'))}
+        ${row('Status',pill[0])}
+        ${row('Envelope reference',`<span style="font-family:monospace;font-size:10px">${esc(ref)}</span>`)}
+        ${row('Date sent',fmtStamp(j.signableSentAt))}
+        ${row('Local copy held',j.signedPdfData?'Yes — opens without signal':'No')}
+      </div>
+      ${body}
+      <div class="no-print signed-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn sm"${dis} onclick="loadSignedPdfPane(true)">🔄 Refresh from Signable</button>
+        <button class="btn sm"${dis} onclick="openSignedPdf()">↗ Open full screen</button>
+        <button class="btn sm"${dis} onclick="downloadSignedPdf()">⬇ Download PDF</button>
+        <button class="btn sm"${dis} onclick="checkSignableNow()">✓ Check status</button>
+        ${j.signedPdfData?`<button class="btn sm"${dis} onclick="clearSignedPdfCache()">✕ Remove saved copy</button>`:`<button class="btn sm"${dis} onclick="cacheSignedPdf()">💾 Save a copy in this job</button>`}
+      </div>
+    </div></div>
+    <div class="pfoot">${a.name} · Company No. ${a.cono} · ${a.group}</div>
+  </section>`;
+  fitPages();
+  if(st!=='unsent')loadSignedPdfPane(false);
+}
+function dataUrlToBlob(u){
+  const parts=u.split(',');const bin=atob(parts[1]);const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:(parts[0].match(/data:([^;]+)/)||[])[1]||'application/pdf'});
+}
+/* Resolves to a PDF Blob, or throws an Error whose message is fit to show the user. */
+async function fetchSignedPdf(){
+  const fp=state.job&&state.job.signableFingerprint;
+  if(!fp)throw new Error('No Signable envelope is linked to this job.');
+  let r;
+  try{r=await fetch('/api/signable/envelopes/'+encodeURIComponent(fp)+'/pdf',{credentials:'include',headers:signableKeyHeader()});}
+  catch(e){throw new Error('Could not reach the server — check your connection.'+(state.job.signedPdfData?'':' Use "Save a copy in this job" while you have signal to view it offline.'));}
+  if(!r.ok){
+    let msg='';try{const d=await r.json();msg=d.error||d.message||'';}catch(e){}
+    if(r.status===401)throw new Error('Your session has expired — log out and back in, then try again.');
+    if(r.status===404)throw new Error('Signable cannot find this envelope ('+fp+'). It may have been deleted or sent from another account.');
+    if(r.status===409)throw new Error('Signable has no PDF for this envelope yet. Try again in a minute.');
+    if(r.status===503)throw new Error(msg||'Signable is not configured on the server.');
+    throw new Error('Signable returned an error ('+r.status+')'+(msg?': '+msg:'')+'.');
+  }
+  const blob=await r.blob();
+  if(!blob.size)throw new Error('Signable returned an empty document.');
+  return blob;
+}
+async function getSignedPdfBlob(force){
+  if(!force&&state.job.signedPdfData)return dataUrlToBlob(state.job.signedPdfData);
+  return fetchSignedPdf();
+}
+async function loadSignedPdfPane(force){
+  const pane=document.getElementById('signedPdfPane');if(!pane)return;
+  pane.innerHTML='Loading the contract from Signable…';
+  try{
+    const blob=await getSignedPdfBlob(force);
+    if(_signedBlobUrl)URL.revokeObjectURL(_signedBlobUrl);
+    _signedBlobUrl=URL.createObjectURL(blob);
+    const p=document.getElementById('signedPdfPane');if(!p)return;
+    p.innerHTML=`<iframe src="${_signedBlobUrl}" title="Signed contract" style="width:100%;height:100%;min-height:170mm;border:0;background:#fff"></iframe>`;
+  }catch(e){
+    const p=document.getElementById('signedPdfPane');if(!p)return;
+    p.innerHTML=`<div class="signed-err" style="padding:24px;text-align:center;max-width:460px;line-height:1.6"><div style="font-weight:700;color:#a33;margin-bottom:6px">Could not show the contract</div>${qesc(e.message)}</div>`;
+  }
+}
+async function openSignedPdf(){
+  const w=window.open('','_blank');
+  try{const blob=await getSignedPdfBlob(false);const u=URL.createObjectURL(blob);if(w)w.location=u;else window.location=u;}
+  catch(e){if(w)w.close();toast(e.message);}
+}
+async function downloadSignedPdf(){
+  try{
+    const blob=await getSignedPdfBlob(false);
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`TotaLuxe-Signed-Contract-${(state.customer.cname||state.job.quote||'job').replace(/\s+/g,'-')}.pdf`;
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){toast(e.message);}
+}
+/* Deliberately a button, not automatic: a PDF is far larger than a site photo.
+   It exists so the surveyor can open the contract on site with no signal. */
+async function cacheSignedPdf(){
+  try{
+    const blob=await fetchSignedPdf();
+    const data=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(blob);});
+    state.job.signedPdfData=data;state.job.signedPdfCachedAt=new Date().toISOString();
+    saveQuote(true);renderSignedContract();toast('Saved a copy in this job');
+  }catch(e){toast(e.message);}
+}
+function clearSignedPdfCache(){
+  delete state.job.signedPdfData;delete state.job.signedPdfCachedAt;
+  saveQuote(true);renderSignedContract();toast('Saved copy removed');
+}
 const UPLOADABLE_IMG_KEYS=['sitephoto','boxoutphoto','notchphoto'];
 /* The per-question site photos are created on demand, so they cannot be listed —
    match them by prefix. A key that is neither renders no-click with its file
@@ -7561,35 +7823,38 @@ function startSignablePoll(){
   setTimeout(pollSignableStatuses,3000);
 }
 
+/* All Signable calls go through the server (/api/signable/...). Signable sends no
+   CORS headers, so a browser request straight to api.signable.co.uk is blocked
+   before it leaves the page — that is why sending never worked from the app. */
+function signableEnvelopeUrl(fp){return '/api/signable/envelopes/'+encodeURIComponent(fp);}
 async function pollSignableStatuses(){
-  const apiKey=admin.company&&admin.company.signableKey;
-  if(!apiKey)return; /* no key configured — skip */
   const qs=getQuotes();
   /* Find all Contract Sent quotes with a fingerprint */
   const pending=qs.filter(q=>q.status==='Contract Sent'&&q.job&&q.job.signableFingerprint);
   if(!pending.length)return;
-  const creds=btoa(apiKey+':x');
   let anyUpdated=false;
   for(const q of pending){
     try{
-      const resp=await fetch(
-        `https://api.signable.co.uk/v1/envelopes/${q.job.signableFingerprint}`,
-        {headers:{'Authorization':'Basic '+creds}}
-      );
+      const resp=await fetch(signableEnvelopeUrl(q.job.signableFingerprint),
+        {credentials:'include',headers:signableKeyHeader()});
       if(!resp.ok)continue;
       const data=await resp.json();
       if(data.envelope_status==='signed'){
         /* Update the stored quote */
         const ix=qs.findIndex(x=>x.id===q.id);
         if(ix>=0){
+          const at=new Date().toISOString();
           qs[ix].status='Signed';
+          if(!qs[ix].job.signedAt)qs[ix].job.signedAt=at;
           if(data.envelope_signed_pdf)qs[ix].job.signedPdfUrl=data.envelope_signed_pdf;
           anyUpdated=true;
           /* If this is the currently loaded quote, update live state too */
           if(state.id===q.id){
             state.status='Signed';
+            if(!state.job.signedAt)state.job.signedAt=at;
             if(data.envelope_signed_pdf)state.job.signedPdfUrl=data.envelope_signed_pdf;
             updateTop();
+            if(state.doc==='signed')renderSignedContract();
           }
           console.log(`Signable: quote ${q.id} (${q.job.quote}) marked Contract Signed`);
         }
@@ -7607,20 +7872,20 @@ async function pollSignableStatuses(){
 
 async function checkSignableNow(){
   /* Manual "check now" — same as poll but with user feedback */
-  const apiKey=admin.company&&admin.company.signableKey;
-  if(!apiKey){toast('Signable API key not configured in Admin → Company');return;}
   const fp=state.job&&state.job.signableFingerprint;
   if(!fp){toast('No Signable envelope linked to this quote');return;}
   toast('Checking Signable…');
-  const creds=btoa(apiKey+':x');
   try{
-    const resp=await fetch(`https://api.signable.co.uk/v1/envelopes/${fp}`,
-      {headers:{'Authorization':'Basic '+creds}});
+    const resp=await fetch(signableEnvelopeUrl(fp),{credentials:'include',headers:signableKeyHeader()});
     const data=await resp.json();
+    if(!resp.ok){toast('Signable: '+(data.error||data.message||('error '+resp.status)));return;}
     const status=data.envelope_status||'unknown';
     if(status==='signed'){
+      if(!state.job.signedAt)state.job.signedAt=new Date().toISOString();
+      if(data.envelope_signed_pdf)state.job.signedPdfUrl=data.envelope_signed_pdf;
       setStatus('Signed');
-      if(data.envelope_signed_pdf){state.job.signedPdfUrl=data.envelope_signed_pdf;saveQuote(true);}
+      saveQuote(true);
+      if(state.doc==='signed')renderSignedContract();
       toast('✓ All parties have signed — status updated to Contract Signed');
     } else if(status==='sent'){
       /* Check individual party statuses */
@@ -7636,11 +7901,9 @@ async function checkSignableNow(){
   }
 }
 function sendSignable(){
+  /* May be empty: the server prefers its own SIGNABLE_API_KEY and only falls back
+     to the key saved in Admin -> Company. A 503 from the proxy means neither is set. */
   const apiKey=admin.company.signableKey||'';
-  if(!apiKey){
-    alert('Signable API key not set.\n\nGo to Admin → Company and paste your Signable API key, then click Save Admin.');
-    return;
-  }
   const c=state.customer,j=state.job;
   const custEmail=c.cemail||'';
   const custName=c.cname||'Customer';
@@ -7692,21 +7955,29 @@ async function doSendSignable(apiKey,custName,custEmail,j){
       document_file_content:pdfB64
     }]
   };
-  const creds=btoa(apiKey+':x');
-  const resp=await fetch('https://api.signable.co.uk/v1/envelopes',{
-    method:'POST',
-    headers:{'Authorization':'Basic '+creds,'Content-Type':'application/json'},
-    body:JSON.stringify(body)
+  /* DRAFT MODE — not wired yet. Signable's field for "create as draft, don't send"
+     is unconfirmed; the proxy passes this object through untouched, so once
+     Signable support confirms the name it is a one-line addition here. */
+  const resp=await fetch('/api/signable/envelopes',{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({envelope:body,apiKey:apiKey||undefined})
   });
-  const data=await resp.json();
+  let data={};try{data=await resp.json();}catch(e){}
   if(!resp.ok||data.http>=400){
-    throw new Error(data.message||`Signable error ${resp.status}`);
+    if(resp.status===401&&!data.message)throw new Error('Session expired — log out and back in, then send again');
+    if(resp.status===503)throw new Error('Signable API key not set — add it in Admin → Company (or SIGNABLE_API_KEY on the server)');
+    throw new Error(data.message||data.error||`Signable error ${resp.status}`);
   }
+  if(!data.envelope_fingerprint)throw new Error('Signable accepted the request but returned no envelope reference');
   setSignableStep(2,'✓ Sent to Signable',true);
   /* Step 3: Update status */
   setSignableStep(3,'Updating quote status…');
   state.job.signableFingerprint=data.envelope_fingerprint;
   state.job.signableUrl=data.href;
+  state.job.signableSentAt=new Date().toISOString();
+  /* A resend is a new envelope: forget the previous one's signing and saved copy. */
+  delete state.job.signedAt;delete state.job.signedPdfData;delete state.job.signedPdfCachedAt;
   setStatus('Contract Sent');
   saveQuote(true);
   setSignableStep(3,'✓ Status updated',true);
