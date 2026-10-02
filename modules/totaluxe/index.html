@@ -2090,6 +2090,13 @@ async function doLogin(){
   currentUser=u;
   /* merge any admin-saved config from the server before rendering the UI */
   await loadAdminFromServer();
+  /* Now that the session cookie exists, load the quote list. Without this the
+     list loaded at page-open (pre-login, so 401) stayed empty until a refresh. */
+  await initStorage();
+  /* The working quote was numbered at page-open, before any quotes were known,
+     so it carries the 57576 default. If it has never been saved, give it the
+     next real number so it cannot collide with an issued quote. */
+  if(state&&!state.id&&state.job){state.job.quote=nextQuoteNo();}
   /* set role class on body for CSS admin-only visibility */
   document.body.classList.remove('role-admin','role-sales','role-surveyor');
   document.body.classList.add('role-'+u.role);
@@ -2104,6 +2111,7 @@ async function doLogin(){
   applyPerms();
   if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; fillForm(); }
   showView(u.sections[0]||'quotes');
+  renderQuotes(); updateTop();
   /* Paint the configurator chips LAST — after the server image map is merged and
      the view is shown — so uploaded product images appear immediately rather than
      waiting for the first chip interaction. renderModelGrid lists every model
@@ -6664,10 +6672,21 @@ async function idbDelete(id){
 }
 /* Sync wrappers used by the app — these now call indexedDB async,
    but maintain a local cache so reads stay synchronous where needed */
+/* Loads the quote list. Called once at page load AND again after every login.
+   BUG FIXED 2026-10: this used to run only at page load — before the user had
+   signed in — so on a fresh visit (or after the 12h session expired) the server
+   answered 401, the code treated that as "offline" and fell back to IndexedDB,
+   which is empty because online saves go to the server. doLogin() never
+   reloaded, so the list stayed empty until a refresh. It also left _quoteNo at
+   its 57576 default, so new quotes reused numbers already issued.
+   Returns 'server' | 'auth' | 'offline' so callers know what they got. */
 async function initStorage(){
   try{
     /* Try server API first */
     const r=await fetch('/api/quotes',{credentials:'include'});
+    /* Not signed in yet — online, so do NOT fall back to the local cache as if
+       offline. doLogin() calls this again once the session exists. */
+    if(r.status===401)return 'auth';
     if(r.ok){
       const d=await r.json();
       _quotesCache=d.quotes||[];
@@ -6676,7 +6695,7 @@ async function initStorage(){
         const nums=_quotesCache.map(q=>+(q.job&&q.job.quote)||0).filter(Boolean);
         if(nums.length)_quoteNo=Math.max(...nums)+1;
       }
-      return;
+      return 'server';
     }
   }catch(e){console.warn('API unavailable, using IndexedDB:',e);}
   /* Offline fallback — IndexedDB */
@@ -6688,6 +6707,7 @@ async function initStorage(){
       if(nums.length)_quoteNo=Math.max(...nums)+1;
     }
   }catch(e){console.warn('IndexedDB unavailable:',e);_quotesCache=[];}
+  return 'offline';
 }
 function getQuotes(){return _quotesCache;}
 function setQuotes(qs){
