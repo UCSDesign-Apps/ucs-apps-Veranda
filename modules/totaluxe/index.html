@@ -542,7 +542,7 @@ body.print-internal .internal-notes-only{display:block !important;}
           </div>
           <div class="sectiontitle" style="margin-top:14px">Job</div>
           <div class="grid g4">
-            <div class="field"><label>Quote No</label><input id="f_quote" oninput="syncFromForm()"></div>
+            <div class="field"><label>Quote No</label><div style="display:flex;gap:6px"><input id="f_quote" oninput="syncFromForm()" onkeydown="if(event.key==='Enter')crmLookup()" style="flex:1;min-width:0"><button class="btn sm" id="crmLookupBtn" type="button" onclick="crmLookup()" title="Fill the customer details from Maximizer using this quotation number">Look up</button></div><div class="muted" id="crmMsg" style="font-size:12px;margin-top:4px"></div></div>
             <div class="field"><label>HQ No</label><input id="f_hq" oninput="syncFromForm()"></div>
             <div class="field"><label>Date</label><input id="f_date" oninput="syncFromForm()"></div>
             <div class="field"><label>Valid until</label><input id="f_valid" oninput="syncFromForm()"></div>
@@ -2389,6 +2389,27 @@ function fillForm(){
   const ps=own?[currentUser.name]:prepOptions();fillSelect('f_prep',ps,own?currentUser.name:(j.prep&&ps.includes(j.prep)?j.prep:ps[0]));
   const fp=document.getElementById('f_prep');if(fp)fp.disabled=own;
   V('f_quote',j.quote);V('f_hq',j.hq);V('f_date',j.date);V('f_valid',j.valid);
+}
+/* Fill the Customer fields from Maximizer using the quotation number in Quote No
+   (server: GET /api/crm/quotation/:number, via Power BI). Email is not in the CRM
+   data, so it is left alone. Asks before replacing anything already typed. */
+async function crmLookup(){
+  const no=val('f_quote').trim(), msg=document.getElementById('crmMsg'), btn=document.getElementById('crmLookupBtn');
+  const say=(t,bad)=>{msg.textContent=t;msg.style.color=bad?'var(--danger,#c0392b)':'';};
+  if(!/^\d{3,9}$/.test(no)){say('Enter the Maximizer quotation number in Quote No first',true);return;}
+  btn.disabled=true;say('Looking up '+no+' in Maximizer…');
+  let r,d={};
+  try{r=await fetch('/api/crm/quotation/'+encodeURIComponent(no),{credentials:'include',cache:'no-store'});try{d=await r.json();}catch(e){}}
+  catch(e){btn.disabled=false;say("Can't reach the server — check your connection",true);return;}
+  btn.disabled=false;
+  if(!r.ok){say(d.error||('Lookup failed ('+r.status+')'),true);return;}
+  const c=state.customer,got=d.customer||{};
+  const keys=['cname','ctel','caddr1','caddr2','cpost'].filter(k=>got[k]);
+  const clash=keys.filter(k=>c[k]&&c[k].trim()&&c[k].trim()!==got[k]);
+  if(clash.length&&!confirm('Replace the customer details already entered with the ones from Maximizer?\n\n'+got.cname+(got.caddr1?'\n'+got.caddr1:'')+(got.cpost?'\n'+got.cpost:''))){say('Not changed');return;}
+  keys.forEach(k=>{c[k]=got[k];V('f_'+k,got[k]);});
+  syncFromForm();
+  say('Filled from Maximizer'+(d.owner?' ('+d.owner+'\'s opportunity)':'')+(c.cemail?'':' — email still needs typing'),false);
 }
 function syncFromForm(){
   const c=state.customer,j=state.job;
