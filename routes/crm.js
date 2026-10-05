@@ -14,8 +14,11 @@
  *   AMGR_Client_Tbl       Client_Id + Contact_Number 0 = the customer's own record
  *                         (Name, First_Name, Address_Line_1/2, City, Zip_Code, Phone_1)
  *
- * Email is NOT available: the dataset leaves out the customer email columns, and
- * Email_Tbl only holds leads. Reps keep typing email by hand.
+ *   AMGR_User_Fields_Tbl  Type_Id 58850 "E-mail Address", Client_Id = the customer,
+ *                         AlphaNumericCol = the email (found 2026-10-05 via quotation
+ *                         58038). NOT Email_Tbl, which only holds leads. A few customers
+ *                         have two rows and some values are not emails, so only a value
+ *                         that looks like an email is used.
  *
  * Only opportunities owned by THI reps are returned, so the app cannot be used to
  * read UCS Belfast/Dublin customers. Read-only throughout.
@@ -29,6 +32,8 @@ const msal = require('@azure/msal-node');
 const SCOPE = 'https://analysis.windows.net/powerbi/api/.default';
 const QUERY_TIMEOUT_MS = 20000; // DirectQuery → on-prem SQL via the gateway can be slow
 const QUOTATION_TYPE_ID = 365;
+const EMAIL_TYPE_ID = 58850;
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Maximizer Owner_Ids of the THI reps (as in the dashboard's config/reps.js).
 const THI_OWNERS = ['RBRIER', 'RRINGLAND', 'DMALLON'];
 const OWNER_NAMES = { RBRIER: 'Richard', RRINGLAND: 'Ryan', DMALLON: 'Damien' };
@@ -90,6 +95,7 @@ function toCustomer(c) {
     caddr1: [line1, line2].filter(Boolean).join(', '),
     caddr2: text(c.City),
     cpost: text(c.Zip_Code).toUpperCase(),
+    cemail: EMAIL_FORMAT.test(text(c.Email)) ? text(c.Email) : '',
   };
 }
 
@@ -108,7 +114,10 @@ async function lookupQuotation(number) {
     `EVALUATE SELECTCOLUMNS(FILTER(ALL(AMGR_Client_Tbl), AMGR_Client_Tbl[Client_Id] = ${daxStr(clients[0])} && AMGR_Client_Tbl[Contact_Number] = 0), ` +
     `"Name", AMGR_Client_Tbl[Name], "First_Name", AMGR_Client_Tbl[First_Name], "Address_Line_1", AMGR_Client_Tbl[Address_Line_1], ` +
     `"Address_Line_2", AMGR_Client_Tbl[Address_Line_2], "City", AMGR_Client_Tbl[City], "Zip_Code", AMGR_Client_Tbl[Zip_Code], ` +
-    `"Phone_1", AMGR_Client_Tbl[Phone_1], "Phone_2", AMGR_Client_Tbl[Phone_2])`
+    `"Phone_1", AMGR_Client_Tbl[Phone_1], "Phone_2", AMGR_Client_Tbl[Phone_2], ` +
+    `"Email", CALCULATE(MAX(AMGR_User_Fields_Tbl[AlphaNumericCol]), FILTER(ALL(AMGR_User_Fields_Tbl), ` +
+    `AMGR_User_Fields_Tbl[Type_Id] = ${EMAIL_TYPE_ID} && AMGR_User_Fields_Tbl[Client_Id] = ${daxStr(clients[0])} && ` +
+    `CONTAINSSTRING(AMGR_User_Fields_Tbl[AlphaNumericCol], "@"))))`
   );
   if (!rows.length) return { status: 404 };
   const latest = opps.slice().sort((a, b) => String(b.created).localeCompare(String(a.created)))[0];
