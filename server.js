@@ -49,6 +49,8 @@ if (process.env.DATABASE_URL) {
 } else {
   console.warn('[startup] DATABASE_URL not set — running without Postgres (sessions will use in-memory store).');
 }
+// Name any staff PIN variables that are missing or invalid (never their values).
+apiRouter.reportPinConfig();
 
 // ---------------------------------------------------------------------------
 // Core middleware

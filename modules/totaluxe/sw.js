@@ -1,4 +1,5 @@
-const CACHE = 'totaluxe-v3';
+// v4 (2026-10): bumped so devices delete cached copies of the old page, which held staff PINs and the Signable key.
+const CACHE = 'totaluxe-v4';
 const SHELL = [
   '/totaluxe/',
   '/totaluxe/index.html',
