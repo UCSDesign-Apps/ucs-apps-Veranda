@@ -554,7 +554,7 @@ body.print-internal .internal-notes-only{display:block !important;}
       <!-- QUALIFY — Q&A that narrows the product range before configuring -->
       <section class="view" id="view-qualify">
         <div style="margin-bottom:6px"><h2 style="margin:0 0 2px">Qualify</h2>
-        <div class="sub">A few quick questions to narrow the product range before configuring. Answers filter which products are available.</div></div>
+        <div class="sub">One question at a time — tap an answer to move on. Product answers narrow the range on the right.</div></div>
         <div id="qualifyBody"></div>
       </section>
 
@@ -1905,7 +1905,8 @@ const ADMIN_DEFAULT={
     {id:'q_mount',text:'Mounting Type',section:'Product',type:'select',filter:true,
      options:[
        {label:'Wall mounted',models:['Bosco','Nebbiolo','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Verdeca']},
-       {label:'Free standing',models:['Ribolla','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']}
+       {label:'Free standing',models:['Ribolla','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
+       {label:'Not decided yet',models:[]}
      ]},
     /* Colour families, not literal colour names: the model data spells the same
        finish several ways (Traffic White / Traffic white / White 9016, and Grey
@@ -1924,7 +1925,9 @@ const ADMIN_DEFAULT={
        {label:'Black (RAL 9005)',models:['Bosco','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
        {label:'Not decided yet',models:[]}
      ]},
-    {id:'q_rooftype',text:'Roof Type',section:'Product',type:'select',filter:true,
+    /* multi:true — the customer may be open to more than one roof; the products of
+       EVERY ticked answer stay available (see qualifyModelFilter). */
+    {id:'q_rooftype',text:'Roof Type',section:'Product',type:'select',filter:true,multi:true,
      options:[
        {label:'Polycarbonate roof',models:['Bosco','Nebbiolo','Ribolla','Pigato','Pigato Plus','Giallo','Giallo Plus']},
        {label:'Glass roof',models:['Pigato','Pigato Plus','Giallo','Giallo Plus','Trebbiano','Pinela Glass']},
@@ -2150,7 +2153,10 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    config keeps its own copy of the questions, so without a version to compare
    against, later seed edits — new answers, photo flags, corrected allow-lists —
    never reach it. */
-const QUALIFY_SEED_VERSION=4;   /* 4: added q_colour (Frame Colour, RAL families) */
+const QUALIFY_SEED_VERSION=5;   /* 4: added q_colour (Frame Colour, RAL families)
+                                  5: q_mount "Not decided yet"; q_rooftype multi. An admin-edited
+                                     list is not reseeded — the server applies these two to saved
+                                     config once (routes/api.js migrateQualifyGuided). */
 /* Deep clone of the seed. Every field a question can carry has to come across —
    an earlier version copied only {id,text,options} and would have silently
    dropped section, type, filter, unit, placeholder and the per-option
@@ -2488,20 +2494,16 @@ function fillSelectPH(id,arr,v,placeholder){
 function qualifyPhotoKey(qid){return 'qphoto_'+String(qid).replace(/[^a-z0-9_]/gi,'');}
 function qualifyPhotoWanted(q){
   if(!q||q.filter||(q.section||'')==='Product')return false;
-  var pick=(typeof qualifyPick==='function')?qualifyPick((state.qualify||{})[q.id]):(state.qualify||{})[q.id];
-  if(pick==null||pick==='')return false;
-  var o=q.options&&q.options[pick];
-  return !!(o&&o.photo);
+  return qualifyPicks((state.qualify||{})[q.id]).some(function(p){var o=q.options&&q.options[p];return !!(o&&o.photo);});
 }
 function qualifyPhotoList(){
   var out=[];
   ((typeof qualifyQuestions==='function')?qualifyQuestions():[]).forEach(function(q){
     if(!qualifyPhotoWanted(q))return;
     var a=(state.qualify||{})[q.id];
-    var pick=(typeof qualifyPick==='function')?qualifyPick(a):a;
-    var o=q.options&&q.options[pick];
+    var lab=qualifyPicks(a).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean).join(', ');
     var t=(a&&typeof a==='object')?(a.text||''):'';
-    out.push({id:q.id,key:qualifyPhotoKey(q.id),label:q.text,answer:((o&&o.label)||'')+(t?(' — '+t):'')});
+    out.push({id:q.id,key:qualifyPhotoKey(q.id),label:q.text,answer:lab+(t?(' — '+t):'')});
   });
   return out;
 }
@@ -2533,14 +2535,11 @@ function qualifySurveyRows(){
       var n=ans[q.id];
       if(n!==''&&n!=null)v=n+(q.unit?(' '+q.unit):'');
     }else{
-      var pick=(typeof qualifyPick==='function')?qualifyPick(ans[q.id]):ans[q.id];
-      if(pick!=null&&pick!==''){
-        var o=q.options&&q.options[pick];
-        if(o){
-          v=o.label||'';
-          var t=(ans[q.id]&&typeof ans[q.id]==='object')?(ans[q.id].text||''):'';
-          if(t)v+=' — '+t;
-        }
+      var labels=qualifyPicks(ans[q.id]).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean);
+      if(labels.length){
+        v=labels.join(', ');
+        var t=(ans[q.id]&&typeof ans[q.id]==='object')?(ans[q.id].text||''):'';
+        if(t)v+=' — '+t;
       }
     }
     out.push({label:q.text,value:v||SITE_DASH});
@@ -2681,7 +2680,13 @@ function qualifyQuestions(){return (admin&&Array.isArray(admin.qualifyQuestions)
    number question. These read the parts out of any of those shapes. */
 function qualifyPick(a){return (a&&typeof a==='object')?a.opt:a;}
 function qualifyText(a){return (a&&typeof a==='object')?(a.text||''):'';}
-function qualifyAnswered(a){var p=qualifyPick(a);return p!=null&&p!=='';}
+/* Every chosen option index, whatever the shape — the one way to read a multi
+   answer ({opts:[i,j],text}). For a single answer it is a one-item list. */
+function qualifyPicks(a){
+  if(a&&typeof a==='object'&&Array.isArray(a.opts))return a.opts.slice();
+  var p=qualifyPick(a);return (p==null||p==='')?[]:[p];
+}
+function qualifyAnswered(a){return qualifyPicks(a).length>0;}
 /* -> {allowed:Set|null, reasons:{model->question text}}. allowed===null means
    nothing answered so far narrows anything, so every product stays available. */
 function qualifyModelFilter(){
@@ -2696,9 +2701,13 @@ function qualifyModelFilter(){
   qs.forEach(function(q){
     /* capture-only questions record site context and must never grey a product */
     if(!q.filter)return;
-    var pick=qualifyPick(ans[q.id]); if(pick==null||pick==='')return;
-    var opt=q.options&&q.options[pick]; if(!opt)return;
-    var models=Array.isArray(opt.models)?opt.models:[]; if(!models.length)return;
+    /* Several ticked answers (multi) keep the products of ANY of them. If one of
+       them filters nothing (e.g. "Not decided yet") the question narrows nothing. */
+    var picks=qualifyPicks(ans[q.id]); if(!picks.length)return;
+    var models=[], open=false;
+    picks.forEach(function(p){var opt=q.options&&q.options[p]; if(!opt)return;
+      var m=Array.isArray(opt.models)?opt.models:[]; if(!m.length)open=true; models=models.concat(m);});
+    if(open||!models.length)return;
     anyAnswered=true;
     var set=new Set(models);
     /* Array.from, not [].slice.call — a Set has no length so slice returns [] and
@@ -2722,10 +2731,7 @@ function qualifyMatches(){
 function qualifyAnswerLabel(qid){
   var q=qualifyQuestions().filter(function(x){return x.id===qid;})[0];
   if(!q)return '';
-  var pick=qualifyPick((state.qualify||{})[qid]);
-  if(pick==null||pick==='')return '';
-  var o=q.options&&q.options[pick];
-  return o?(o.label||''):'';
+  return qualifyPicks((state.qualify||{})[qid]).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean).join(', ');
 }
 function qualifyAnswerText(qid){
   var a=(state.qualify||{})[qid];
@@ -2869,7 +2875,12 @@ function setQualify(qid,optIdx){
   var cur=state.qualify[qid];
   /* clicking the chosen answer again clears it, so a rep can undo a question
      without guessing which answer was the neutral one */
-  if(String(qualifyPick(cur))===String(optIdx)){
+  if(q&&q.multi){
+    var picks=qualifyPicks(cur).map(Number), ix=picks.indexOf(Number(optIdx));
+    if(ix>=0)picks.splice(ix,1); else picks.push(Number(optIdx));
+    picks.sort(function(a,b){return a-b;});
+    state.qualify[qid]=picks.length?{opts:picks,text:qualifyText(cur)}:'';
+  }else if(String(qualifyPick(cur))===String(optIdx)){
     state.qualify[qid]='';
   }else if(opt&&opt.specify){
     state.qualify[qid]={opt:optIdx,text:''};
@@ -2905,7 +2916,8 @@ function setQualifyNumber(qid,v){
   renderQualifyResult();
 }
 function clearQualify(){
-  state.qualify={};
+  if(!confirm('Clear every Qualify answer for this quote?'))return;
+  state.qualify={};qStep=0;
   renderQualify();
   if(typeof renderModelGrid==='function')renderModelGrid();
   scheduleAutoSave();
@@ -2924,6 +2936,24 @@ function renderQualifyResult(){
     +(none?'<div style="margin-top:8px;font-size:12px;color:#a33">No product satisfies every answer. Change an answer to widen the range.</div>':'')
     +'</div>';
 }
+/* GUIDED QUALIFY (2026-10-05) — one question per screen, then a summary.
+   qStep is the question index; qStep===qs.length is the summary. Tapping an answer
+   on a plain single-choice question moves straight on; a question that needs more
+   (several answers, a text box, a photo, a number) waits for Next. Every question
+   is still optional: Skip moves on without answering. */
+var qStep=0, qStepFor=null;
+function qualifyStepKey(){return String(state.id||'new')+'|'+String((state.job&&state.job.quote)||'');}
+function qualifyIsAnswered(q,a){return q.type==='number'?(a!=null&&a!==''):qualifyAnswered(a);}
+function qualifyGo(i){var n=qualifyQuestions().length;qStep=Math.max(0,Math.min(n,i));renderQualify();
+  var v=document.getElementById('view-qualify');if(v&&v.scrollIntoView)v.scrollIntoView({block:'start'});}
+function qualifyChoose(qid,i){
+  var q=qualifyQuestions().filter(function(x){return x.id===qid;})[0];
+  setQualify(qid,i);
+  if(!q||q.multi||q.type==='number')return;
+  var o=q.options&&q.options[i], chosen=String(qualifyPick((state.qualify||{})[qid]))===String(i);
+  /* a short pause so the tick is seen before the next question replaces it */
+  if(chosen&&o&&!o.specify&&!o.photo)setTimeout(function(){qualifyGo(qStep+1);},220);
+}
 function renderQualify(){
   var body=document.getElementById('qualifyBody'); if(!body)return;
   var qs=qualifyQuestions(), ans=state.qualify||{};
@@ -2931,67 +2961,104 @@ function renderQualify(){
     body.innerHTML='<div class="card"><div class="empty">No qualification questions have been set up yet. An administrator can add them in <b>Admin → Qualify</b>.</div></div>';
     return;
   }
-  /* grouped in the order the sections first appear, so Admin controls the order */
-  var groups=[];
-  qs.forEach(function(q){
-    var sec=q.section||'General', g=null;
-    for(var i=0;i<groups.length;i++)if(groups[i].sec===sec)g=groups[i];
-    if(!g){g={sec:sec,items:[]};groups.push(g);}
-    g.items.push(q);
-  });
-  function cardFor(q){
-    var a=ans[q.id];
-    if(q.type==='number'){
-      return '<div class="card" style="margin-bottom:12px">'
-        +'<div style="font-weight:700;font-size:14px;margin-bottom:6px">'+qesc(q.text)+'</div>'
-        +'<div style="display:flex;align-items:center;gap:8px">'
-        +'<input type="number" value="'+qesc(a==null?'':a)+'" placeholder="'+qesc(q.placeholder||'')+'"'
-        +' oninput="setQualifyNumber(&#39;'+qesc(q.id)+'&#39;,this.value)"'
-        +' style="width:190px;padding:8px 10px;border:1px solid #cfd8da;border-radius:8px;font-size:13.5px">'
-        +(q.unit?'<span class="sub" style="font-size:12px">'+qesc(q.unit)+'</span>':'')
-        +'</div></div>';
-    }
-    var pick=qualifyPick(a);
-    var opts=(q.options||[]).map(function(o,i){
-      var on=(pick!=null&&pick!==''&&String(pick)===String(i));
-      var n=Array.isArray(o.models)?o.models.length:0;
-      var tag;
-      if(q.filter){tag=n?(n+' product'+(n===1?'':'s')):'no filter';}
-      else{var bits=[];if(o.specify)bits.push('text box');if(o.photo)bits.push('photo');tag=bits.join(' · ');}
-      var row='<div onclick="setQualify(&#39;'+qesc(q.id)+'&#39;,'+i+')" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'#f2f6f7':'#fff')+';border-radius:9px;cursor:pointer;margin-top:6px">'
-        +'<span style="width:16px;height:16px;border-radius:50%;border:2px solid '+(on?'var(--brand)':'#c3ced0')+';background:'+(on?'var(--brand)':'#fff')+';box-shadow:'+(on?'inset 0 0 0 3px #fff':'none')+';flex:0 0 auto"></span>'
-        +'<span style="font-size:13.5px;font-weight:'+(on?'700':'500')+'">'+qesc(o.label)+'</span>'
-        +'<span class="sub" style="margin-left:auto;font-size:11px">'+tag+'</span>'
-        +'</div>';
+  /* A different quote opens at its first unanswered question (the summary if all are). */
+  if(qStepFor!==qualifyStepKey()){
+    qStepFor=qualifyStepKey();
+    qStep=qs.findIndex(function(q){return !qualifyIsAnswered(q,ans[q.id]);});
+    if(qStep<0)qStep=qs.length;
+  }
+  if(qStep>qs.length)qStep=qs.length;
+  var done=qs.filter(function(q){return qualifyIsAnswered(q,ans[q.id]);}).length;
+  var pct=Math.round(done/qs.length*100);
+  var bar='<div style="height:6px;background:#e7eded;border-radius:4px;overflow:hidden;margin:6px 0 14px"><div style="height:100%;width:'+pct+'%;background:var(--brand);transition:width .2s"></div></div>';
+  var main;
+  if(qStep===qs.length)main=qualifySummaryHtml(qs,ans,done,bar);
+  else main=qualifyQuestionHtml(qs,ans,bar);
+  body.innerHTML='<div class="qwiz" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start">'
+    +'<div>'+main+'</div><div id="qualifyResult" style="position:sticky;top:12px"></div></div>';
+  renderQualifyResult();
+}
+function qualifyQuestionHtml(qs,ans,bar){
+  var q=qs[qStep], a=ans[q.id], n=qs.length;
+  var head='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand)">'+qesc(q.section||'General')+'</div>'
+    +'<div class="sub" style="font-size:12px">Question '+(qStep+1)+' of '+n+'</div></div>'+bar
+    +'<div style="font-size:21px;font-weight:800;line-height:1.25;margin-bottom:4px">'+qesc(q.text)+'</div>'
+    +(q.multi?'<div class="sub" style="font-size:12.5px;margin-bottom:6px">Choose all that apply</div>':'<div style="height:6px"></div>');
+  var inner;
+  if(q.type==='number'){
+    inner='<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'
+      +'<input id="qNum" type="number" inputmode="decimal" value="'+qesc(a==null?'':a)+'" placeholder="'+qesc(q.placeholder||'')+'"'
+      +' oninput="setQualifyNumber(&#39;'+qesc(q.id)+'&#39;,this.value)" onkeydown="if(event.key===&#39;Enter&#39;)qualifyGo(qStep+1)"'
+      +' style="width:220px;padding:13px 14px;border:1.5px solid #cfd8da;border-radius:10px;font-size:17px">'
+      +(q.unit?'<span class="sub" style="font-size:14px">'+qesc(q.unit)+'</span>':'')+'</div>';
+  }else{
+    var picks=qualifyPicks(a).map(String);
+    inner=(q.options||[]).map(function(o,i){
+      var on=picks.indexOf(String(i))>=0;
+      var mark=q.multi
+        ?'<span style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'var(--brand)':'#c3ced0')+';background:'+(on?'var(--brand)':'#fff')+';color:#fff;font-size:15px;line-height:18px;text-align:center;flex:0 0 auto">'+(on?'✓':'')+'</span>'
+        :'<span style="width:22px;height:22px;border-radius:50%;border:2px solid '+(on?'var(--brand)':'#c3ced0')+';background:'+(on?'var(--brand)':'#fff')+';box-shadow:'+(on?'inset 0 0 0 4px #fff':'none')+';flex:0 0 auto"></span>';
+      var tag='';
+      if(q.filter){var m=Array.isArray(o.models)?o.models.length:0;tag=m?(m+' product'+(m===1?'':'s')):'';}
+      var row='<div role="button" tabindex="0" onclick="qualifyChoose(&#39;'+qesc(q.id)+'&#39;,'+i+')" onkeydown="if(event.key===&#39;Enter&#39;)qualifyChoose(&#39;'+qesc(q.id)+'&#39;,'+i+')"'
+        +' style="display:flex;align-items:center;gap:14px;padding:15px 16px;min-height:54px;border:2px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'#eef4f5':'#fff')+';border-radius:12px;cursor:pointer;margin-top:9px;user-select:none">'
+        +mark+'<span style="font-size:16px;font-weight:'+(on?'700':'500')+'">'+qesc(o.label)+'</span>'
+        +(tag?'<span class="sub" style="margin-left:auto;font-size:11.5px">'+tag+'</span>':'')+'</div>';
       if(on&&o.specify){
         row+='<input type="text" value="'+qesc(qualifyText(a))+'" placeholder="Please specify…"'
           +' oninput="setQualifySpecify(&#39;'+qesc(q.id)+'&#39;,this.value)"'
-          +' style="width:100%;margin-top:6px;padding:8px 10px;border:1px solid #cfd8da;border-radius:8px;font-size:13px">';
+          +' style="width:100%;margin-top:7px;padding:12px 13px;border:1.5px solid #cfd8da;border-radius:10px;font-size:15px">';
       }
       if(on&&o.photo){
-        var pk=qualifyPhotoKey(q.id);
-        var has=!!(state.images&&state.images[pk]);
+        var pk=qualifyPhotoKey(q.id), has=!!(state.images&&state.images[pk]);
         /* src is passed through: this stage is outside #docwrap, so restoreImages
            never reaches it and a re-render would otherwise drop the picture. */
-        row+='<div style="margin-top:6px;border:1px dashed '+(has?'var(--line)':'#e0a0a0')+';border-radius:8px;padding:8px;background:'+(has?'#fbfcfc':'#fdf6f6')+'">'
-          +'<div class="sub" style="font-size:11px;margin-bottom:5px">'+(has?'Photo added — tap to replace':'Add a photo of this (required on the survey)')+'</div>'
-          +'<div class="gimg" style="height:130px;border-radius:6px;border:1px solid var(--line)">'
+        row+='<div style="margin-top:7px;border:1px dashed '+(has?'var(--line)':'#e0a0a0')+';border-radius:10px;padding:9px;background:'+(has?'#fbfcfc':'#fdf6f6')+'">'
+          +'<div class="sub" style="font-size:12px;margin-bottom:6px">'+(has?'Photo added — tap to replace':'Add a photo of this (required on the survey)')+'</div>'
+          +'<div class="gimg" style="height:150px;border-radius:8px;border:1px solid var(--line)">'
           +ph(pk,'TAP TO ADD PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[pk])
           +'</div></div>';
       }
       return row;
-    }).join('')||'<div class="sub" style="margin-top:6px">No answers configured for this question.</div>';
-    return '<div class="card" style="margin-bottom:12px"><div style="font-weight:700;font-size:14px">'+qesc(q.text)+'</div>'+opts+'</div>';
+    }).join('')||'<div class="sub" style="margin-top:8px">No answers configured for this question.</div>';
   }
-  var cards=groups.map(function(g){
-    return '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand);border-bottom:2px solid var(--gold);padding-bottom:5px;margin:0 0 10px">'+qesc(g.sec)+'</div>'
-      +g.items.map(cardFor).join('');
-  }).join('<div style="height:18px"></div>');
-  var anyAns=qs.some(function(q){var a=ans[q.id];return q.type==='number'?(a!=null&&a!==''):qualifyAnswered(a)});
-  body.innerHTML='<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">'
-    +'<div>'+cards+(anyAns?'<button class="btn sm" onclick="clearQualify()">Clear answers</button>':'')+'</div>'
-    +'<div id="qualifyResult"></div></div>';
-  renderQualifyResult();
+  var answered=qualifyIsAnswered(q,a);
+  var nav='<div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="qualifyGo(qStep-1)"'+(qStep===0?' disabled':'')+' style="min-width:96px;padding:11px 16px">← Back</button>'
+    +(answered?'':'<button class="btn" onclick="qualifyGo(qStep+1)" style="padding:11px 16px">Skip</button>')
+    +'<span style="flex:1"></span>'
+    +(answered?'<button class="btn primary" onclick="qualifyGo(qStep+1)" style="min-width:130px;padding:11px 18px">'+(qStep===qs.length-1?'Review answers →':'Next →')+'</button>':'')
+    +'</div>'
+    +'<div style="margin-top:12px"><a href="javascript:void 0" onclick="qualifyGo('+qs.length+')" class="sub" style="font-size:12.5px">See all answers</a></div>';
+  return '<div class="card" style="padding:20px 22px">'+head+inner+nav+'</div>';
+}
+function qualifySummaryHtml(qs,ans,done,bar){
+  var rows=qs.map(function(q,i){
+    var a=ans[q.id], v='';
+    if(q.type==='number'){if(a!=null&&a!=='')v=a+(q.unit?(' '+q.unit):'');}
+    else{
+      v=qualifyPicks(a).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean).join(', ');
+      var t=qualifyText(a); if(v&&t)v+=' — '+t;
+    }
+    return '<div role="button" tabindex="0" onclick="qualifyGo('+i+')" onkeydown="if(event.key===&#39;Enter&#39;)qualifyGo('+i+')"'
+      +' style="display:flex;gap:12px;align-items:baseline;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer">'
+      +'<div style="flex:0 0 42%;font-size:13px;color:var(--brand-d)">'+qesc(q.text)+'</div>'
+      +'<div style="flex:1;font-size:14px;font-weight:'+(v?'700':'400')+'">'+(v?qesc(v):'<span class="sub">Skipped</span>')+'</div>'
+      +'<div class="sub" style="font-size:12px">Change</div></div>';
+  }).join('');
+  return '<div class="card" style="padding:20px 22px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand)">Summary</div>'
+    +'<div class="sub" style="font-size:12px">'+done+' of '+qs.length+' answered</div></div>'+bar
+    +'<div style="font-size:21px;font-weight:800;margin-bottom:6px">Check the answers</div>'
+    +'<div class="sub" style="font-size:12.5px;margin-bottom:6px">Tap any answer to change it. When you are happy, carry on to configure the veranda.</div>'
+    +rows
+    +'<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="qualifyGo('+(qs.length-1)+')" style="padding:11px 16px">← Back</button>'
+    +(done?'<button class="btn" onclick="clearQualify()" style="padding:11px 16px">Clear answers</button>':'')
+    +'<span style="flex:1"></span>'
+    +((typeof can==='function'&&can('build'))?'<button class="btn primary" onclick="showView(&#39;build&#39;)" style="padding:11px 18px">Configure your veranda →</button>':'')
+    +'</div></div>';
 }
 
 /* ===== ADMIN -> QUALIFY ===================================================
@@ -3020,7 +3087,9 @@ function renderQualifyAdmin(){
       +'<option value="select"'+(isNum?'':' selected')+'>Choice</option>'
       +'<option value="number"'+(isNum?' selected':'')+'>Number</option></select></label>'
       +(isNum?'':'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px">'
-        +'<input type="checkbox" '+(q.filter?'checked':'')+' onchange="toggleQualifyFilter('+qi+',this.checked)">Filters products</label>')
+        +'<input type="checkbox" '+(q.filter?'checked':'')+' onchange="toggleQualifyFilter('+qi+',this.checked)">Filters products</label>'
+        +'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="The rep can tick several answers. For a product filter, products matching ANY ticked answer stay available.">'
+        +'<input type="checkbox" '+(q.multi?'checked':'')+' onchange="toggleQualifyMulti('+qi+',this.checked)">More than one answer</label>')
       +'</div>';
     if(isNum){
       return '<div class="card" style="margin-bottom:14px">'+head
@@ -3079,7 +3148,7 @@ function setQualifyType(qi,v){
   var q=admin.qualifyQuestions[qi];
   if(v==='number'){
     q.type='number';
-    delete q.options; delete q.filter;
+    delete q.options; delete q.filter; delete q.multi;
     if(q.unit==null)q.unit='mm';
     if(q.placeholder==null)q.placeholder='Enter value';
   }else{
@@ -3094,6 +3163,11 @@ function setQualifyType(qi,v){
 function toggleQualifyFilter(qi,on){
   var q=admin.qualifyQuestions[qi];
   if(on)q.filter=true; else{delete q.filter;(q.options||[]).forEach(function(o){delete o.models;});}
+  persistAdmin();renderQualifyAdmin();
+}
+function toggleQualifyMulti(qi,on){
+  var q=admin.qualifyQuestions[qi];
+  if(on)q.multi=true; else delete q.multi;
   persistAdmin();renderQualifyAdmin();
 }
 function setQualifyNumUnit(qi,v){admin.qualifyQuestions[qi].unit=v;persistAdmin();}
