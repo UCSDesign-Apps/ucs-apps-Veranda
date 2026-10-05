@@ -554,7 +554,7 @@ body.print-internal .internal-notes-only{display:block !important;}
       <!-- QUALIFY — Q&A that narrows the product range before configuring -->
       <section class="view" id="view-qualify">
         <div style="margin-bottom:6px"><h2 style="margin:0 0 2px">Qualify</h2>
-        <div class="sub">One question at a time — tap an answer to move on. Product answers narrow the range on the right.</div></div>
+        <div class="sub">One question at a time — choose an answer and press Submit. Product answers narrow the range in the Configurator.</div></div>
         <div id="qualifyBody"></div>
       </section>
 
@@ -2936,23 +2936,26 @@ function renderQualifyResult(){
     +(none?'<div style="margin-top:8px;font-size:12px;color:#a33">No product satisfies every answer. Change an answer to widen the range.</div>':'')
     +'</div>';
 }
-/* GUIDED QUALIFY (2026-10-05) — one question per screen, then a summary.
-   qStep is the question index; qStep===qs.length is the summary. Tapping an answer
-   on a plain single-choice question moves straight on; a question that needs more
-   (several answers, a text box, a photo, a number) waits for Next. Every question
-   is still optional: Skip moves on without answering. */
+/* GUIDED QUALIFY (2026-10-05, revised same day at Richard's request) — ONE question
+   on screen at a time, nothing else. Tapping an answer only selects it; Submit moves
+   on. Submit on the last question goes straight to the next stage (the Configurator).
+   No summary screen and no products panel: if the answers rule out every product, a
+   one-line warning shows under the question instead, so the rep is not surprised at
+   the Configurator. Every question is still optional — Skip moves on unanswered. */
 var qStep=0, qStepFor=null;
 function qualifyStepKey(){return String(state.id||'new')+'|'+String((state.job&&state.job.quote)||'');}
 function qualifyIsAnswered(q,a){return q.type==='number'?(a!=null&&a!==''):qualifyAnswered(a);}
-function qualifyGo(i){var n=qualifyQuestions().length;qStep=Math.max(0,Math.min(n,i));renderQualify();
+function qualifyGo(i){var n=qualifyQuestions().length;qStep=Math.max(0,Math.min(n-1,i));renderQualify();
   var v=document.getElementById('view-qualify');if(v&&v.scrollIntoView)v.scrollIntoView({block:'start'});}
-function qualifyChoose(qid,i){
-  var q=qualifyQuestions().filter(function(x){return x.id===qid;})[0];
-  setQualify(qid,i);
-  if(!q||q.multi||q.type==='number')return;
-  var o=q.options&&q.options[i], chosen=String(qualifyPick((state.qualify||{})[qid]))===String(i);
-  /* a short pause so the tick is seen before the next question replaces it */
-  if(chosen&&o&&!o.specify&&!o.photo)setTimeout(function(){qualifyGo(qStep+1);},220);
+function qualifyChoose(qid,i){setQualify(qid,i);}
+/* The stage after Qualify that this user can reach (normally the Configurator). */
+function qualifyFinish(){
+  var at=NEXT_FLOW.indexOf('qualify');
+  for(var k=at+1;k<NEXT_FLOW.length;k++){if(can(NEXT_FLOW[k])){showView(NEXT_FLOW[k]);return;}}
+}
+function qualifySubmit(){
+  var n=qualifyQuestions().length;
+  if(qStep>=n-1)qualifyFinish(); else qualifyGo(qStep+1);
 }
 function renderQualify(){
   var body=document.getElementById('qualifyBody'); if(!body)return;
@@ -2961,25 +2964,19 @@ function renderQualify(){
     body.innerHTML='<div class="card"><div class="empty">No qualification questions have been set up yet. An administrator can add them in <b>Admin → Qualify</b>.</div></div>';
     return;
   }
-  /* A different quote opens at its first unanswered question (the summary if all are). */
+  /* A different quote opens at its first unanswered question (the first one if all are answered). */
   if(qStepFor!==qualifyStepKey()){
     qStepFor=qualifyStepKey();
     qStep=qs.findIndex(function(q){return !qualifyIsAnswered(q,ans[q.id]);});
-    if(qStep<0)qStep=qs.length;
+    if(qStep<0)qStep=0;
   }
-  if(qStep>qs.length)qStep=qs.length;
-  var done=qs.filter(function(q){return qualifyIsAnswered(q,ans[q.id]);}).length;
-  var pct=Math.round(done/qs.length*100);
+  if(qStep>qs.length-1)qStep=qs.length-1;
+  var pct=Math.round(qStep/qs.length*100);
   var bar='<div style="height:6px;background:#e7eded;border-radius:4px;overflow:hidden;margin:6px 0 14px"><div style="height:100%;width:'+pct+'%;background:var(--brand);transition:width .2s"></div></div>';
-  var main;
-  if(qStep===qs.length)main=qualifySummaryHtml(qs,ans,done,bar);
-  else main=qualifyQuestionHtml(qs,ans,bar);
-  body.innerHTML='<div class="qwiz" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start">'
-    +'<div>'+main+'</div><div id="qualifyResult" style="position:sticky;top:12px"></div></div>';
-  renderQualifyResult();
+  body.innerHTML='<div class="qwiz" style="max-width:720px">'+qualifyQuestionHtml(qs,ans,bar)+'</div>';
 }
 function qualifyQuestionHtml(qs,ans,bar){
-  var q=qs[qStep], a=ans[q.id], n=qs.length;
+  var q=qs[qStep], a=ans[q.id], n=qs.length, last=(qStep===n-1);
   var head='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
     +'<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand)">'+qesc(q.section||'General')+'</div>'
     +'<div class="sub" style="font-size:12px">Question '+(qStep+1)+' of '+n+'</div></div>'+bar
@@ -2989,7 +2986,7 @@ function qualifyQuestionHtml(qs,ans,bar){
   if(q.type==='number'){
     inner='<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'
       +'<input id="qNum" type="number" inputmode="decimal" value="'+qesc(a==null?'':a)+'" placeholder="'+qesc(q.placeholder||'')+'"'
-      +' oninput="setQualifyNumber(&#39;'+qesc(q.id)+'&#39;,this.value)" onkeydown="if(event.key===&#39;Enter&#39;)qualifyGo(qStep+1)"'
+      +' oninput="setQualifyNumber(&#39;'+qesc(q.id)+'&#39;,this.value)" onkeydown="if(event.key===&#39;Enter&#39;)qualifySubmit()"'
       +' style="width:220px;padding:13px 14px;border:1.5px solid #cfd8da;border-radius:10px;font-size:17px">'
       +(q.unit?'<span class="sub" style="font-size:14px">'+qesc(q.unit)+'</span>':'')+'</div>';
   }else{
@@ -3024,41 +3021,18 @@ function qualifyQuestionHtml(qs,ans,bar){
     }).join('')||'<div class="sub" style="margin-top:8px">No answers configured for this question.</div>';
   }
   var answered=qualifyIsAnswered(q,a);
+  /* Only shown when the answers leave nothing to configure. */
+  var none=qualifyMatches().length===0;
+  var warn=none?'<div style="margin-top:12px;padding:10px 12px;border:1px solid #e4b4b4;background:#fdf2f2;border-radius:10px;font-size:13px;color:#a33">No product matches every answer so far. Change an answer to widen the range.</div>':'';
+  var anyAns=qs.some(function(x){return qualifyIsAnswered(x,ans[x.id]);});
   var nav='<div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">'
     +'<button class="btn" onclick="qualifyGo(qStep-1)"'+(qStep===0?' disabled':'')+' style="min-width:96px;padding:11px 16px">← Back</button>'
-    +(answered?'':'<button class="btn" onclick="qualifyGo(qStep+1)" style="padding:11px 16px">Skip</button>')
+    +(answered?'':'<button class="btn" onclick="qualifySubmit()" style="padding:11px 16px">Skip</button>')
     +'<span style="flex:1"></span>'
-    +(answered?'<button class="btn primary" onclick="qualifyGo(qStep+1)" style="min-width:130px;padding:11px 18px">'+(qStep===qs.length-1?'Review answers →':'Next →')+'</button>':'')
+    +'<button class="btn primary" onclick="qualifySubmit()"'+(answered?'':' disabled')+' style="min-width:140px;padding:11px 18px">'+(last?'Submit &amp; configure →':'Submit')+'</button>'
     +'</div>'
-    +'<div style="margin-top:12px"><a href="javascript:void 0" onclick="qualifyGo('+qs.length+')" class="sub" style="font-size:12.5px">See all answers</a></div>';
-  return '<div class="card" style="padding:20px 22px">'+head+inner+nav+'</div>';
-}
-function qualifySummaryHtml(qs,ans,done,bar){
-  var rows=qs.map(function(q,i){
-    var a=ans[q.id], v='';
-    if(q.type==='number'){if(a!=null&&a!=='')v=a+(q.unit?(' '+q.unit):'');}
-    else{
-      v=qualifyPicks(a).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean).join(', ');
-      var t=qualifyText(a); if(v&&t)v+=' — '+t;
-    }
-    return '<div role="button" tabindex="0" onclick="qualifyGo('+i+')" onkeydown="if(event.key===&#39;Enter&#39;)qualifyGo('+i+')"'
-      +' style="display:flex;gap:12px;align-items:baseline;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer">'
-      +'<div style="flex:0 0 42%;font-size:13px;color:var(--brand-d)">'+qesc(q.text)+'</div>'
-      +'<div style="flex:1;font-size:14px;font-weight:'+(v?'700':'400')+'">'+(v?qesc(v):'<span class="sub">Skipped</span>')+'</div>'
-      +'<div class="sub" style="font-size:12px">Change</div></div>';
-  }).join('');
-  return '<div class="card" style="padding:20px 22px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand)">Summary</div>'
-    +'<div class="sub" style="font-size:12px">'+done+' of '+qs.length+' answered</div></div>'+bar
-    +'<div style="font-size:21px;font-weight:800;margin-bottom:6px">Check the answers</div>'
-    +'<div class="sub" style="font-size:12.5px;margin-bottom:6px">Tap any answer to change it. When you are happy, carry on to configure the veranda.</div>'
-    +rows
-    +'<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">'
-    +'<button class="btn" onclick="qualifyGo('+(qs.length-1)+')" style="padding:11px 16px">← Back</button>'
-    +(done?'<button class="btn" onclick="clearQualify()" style="padding:11px 16px">Clear answers</button>':'')
-    +'<span style="flex:1"></span>'
-    +((typeof can==='function'&&can('build'))?'<button class="btn primary" onclick="showView(&#39;build&#39;)" style="padding:11px 18px">Configure your veranda →</button>':'')
-    +'</div></div>';
+    +(anyAns?'<div style="margin-top:12px"><a href="javascript:void 0" onclick="clearQualify()" class="sub" style="font-size:12.5px">Clear all answers</a></div>':'');
+  return '<div class="card" style="padding:20px 22px">'+head+inner+warn+nav+'</div>';
 }
 
 /* ===== ADMIN -> QUALIFY ===================================================
