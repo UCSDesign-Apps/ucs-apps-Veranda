@@ -43,7 +43,9 @@ const REP_EMAILS = {
 // Users per module. Identity and default permissions live here; PINs do NOT.
 // Each user's PIN is read from the environment variable named in `pinVar`
 // (e.g. TOTALUXE_PIN_ADMIN). A user whose variable is unset, or set to anything
-// other than 6+ digits, cannot sign in — there is deliberately no default PIN.
+// other than 4+ digits, cannot sign in — there is deliberately no default PIN.
+// 4 digits is Richard's choice (2026-10-05), made knowing the guessing odds; the
+// per-IP attempt limit below is what keeps that tolerable.
 // Admin -> Users in the page never set a PIN: login has only ever read PINs from
 // here, never from admin_config.
 const USERS = {
@@ -56,13 +58,17 @@ const USERS = {
   ],
 };
 
-const PIN_FORMAT = /^\d{6,}$/;
+const PIN_FORMAT = /^\d{4,}$/;
 
-// The user's configured PIN, or null if it is unset or too short (that user is
-// then refused). Read on every login so a changed variable needs no code change.
+// The original PINs were published in the page and stay in git history, so they
+// are refused for everyone even if someone sets one of them again by mistake.
+const RETIRED_PINS = new Set(['0000', '1111', '2222', '3333', '4444']);
+
+// The user's configured PIN, or null if it is unset, too short or retired (that
+// user is then refused). Read on every login so a changed variable needs no code change.
 function configuredPin(user) {
   const pin = String(process.env[user.pinVar] || '').trim();
-  return PIN_FORMAT.test(pin) ? pin : null;
+  return PIN_FORMAT.test(pin) && !RETIRED_PINS.has(pin) ? pin : null;
 }
 
 // Constant-time comparison (hash first so differing lengths are not leaked).
@@ -72,7 +78,7 @@ function pinMatches(given, expected) {
   return crypto.timingSafeEqual(a, b);
 }
 
-// Find the user a PIN belongs to. Refuses PINs under 6 digits outright, and
+// Find the user a PIN belongs to. Refuses PINs under 4 digits outright, and
 // refuses a PIN that two users share rather than guessing between them.
 function userForPin(list, pin) {
   const given = String(pin == null ? '' : pin).trim();
@@ -89,7 +95,7 @@ function reportPinConfig() {
   for (const [mod, list] of Object.entries(USERS)) {
     const bad = list.filter((entry) => configuredPin(entry) === null).map((entry) => entry.pinVar);
     const pins = list.map(configuredPin).filter(Boolean);
-    if (bad.length) console.warn(`[auth] ${mod}: these users cannot sign in until a 6+ digit PIN is set: ${bad.join(', ')}`);
+    if (bad.length) console.warn(`[auth] ${mod}: these users cannot sign in until a 4+ digit PIN (not 0000/1111/2222/3333/4444) is set: ${bad.join(', ')}`);
     if (new Set(pins).size !== pins.length) console.warn(`[auth] ${mod}: two users share a PIN — neither of them can sign in with it`);
   }
 }
