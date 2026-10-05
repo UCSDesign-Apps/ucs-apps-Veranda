@@ -26,7 +26,7 @@ needs to behave correctly when online.
 ## Users (hardcoded, server-side)
 
 > **Changed 2026-10:** the original 4-digit PINs were published in the page and
-> are retired. Each PIN now comes from a Railway environment variable (4+ digits; the old 0000–4444 are always refused;
+> are retired. Each PIN now comes from a Railway environment variable (4+ digits; the old 0000, 3333 and 4444 are always refused;
 > no default — a user whose variable is unset cannot sign in), the page holds no
 > PINs, and failed sign-ins are limited to 5 per IP per 15 minutes.
 

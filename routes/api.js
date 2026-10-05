@@ -62,7 +62,9 @@ const PIN_FORMAT = /^\d{4,}$/;
 
 // The original PINs were published in the page and stay in git history, so they
 // are refused for everyone even if someone sets one of them again by mistake.
-const RETIRED_PINS = new Set(['0000', '1111', '2222', '3333', '4444']);
+// 1111 (Damien) and 2222 (Ryan) are deliberately NOT here: Richard chose to keep
+// them on 2026-10-05, knowing they were published.
+const RETIRED_PINS = new Set(['0000', '3333', '4444']);
 
 // The user's configured PIN, or null if it is unset, too short or retired (that
 // user is then refused). Read on every login so a changed variable needs no code change.
@@ -95,7 +97,7 @@ function reportPinConfig() {
   for (const [mod, list] of Object.entries(USERS)) {
     const bad = list.filter((entry) => configuredPin(entry) === null).map((entry) => entry.pinVar);
     const pins = list.map(configuredPin).filter(Boolean);
-    if (bad.length) console.warn(`[auth] ${mod}: these users cannot sign in until a 4+ digit PIN (not 0000/1111/2222/3333/4444) is set: ${bad.join(', ')}`);
+    if (bad.length) console.warn(`[auth] ${mod}: these users cannot sign in until a 4+ digit PIN (not 0000/3333/4444) is set: ${bad.join(', ')}`);
     if (new Set(pins).size !== pins.length) console.warn(`[auth] ${mod}: two users share a PIN — neither of them can sign in with it`);
   }
 }
