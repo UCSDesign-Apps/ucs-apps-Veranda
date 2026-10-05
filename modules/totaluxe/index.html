@@ -2120,7 +2120,8 @@ async function afterLogin(u){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('topWho').textContent=u.name+' · '+u.role;
   applyPerms();
-  if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; fillForm(); }
+  if(u.role==='sales'){ if(!state.job.prep) state.job.prep=u.name; }
+  fillForm(); /* every role: "Prepared by" is locked for sales and free for admin */
   showView(u.sections[0]||'quotes');
   renderQuotes(); updateTop();
   /* Paint the configurator chips LAST — after the server image map is merged and
@@ -2135,7 +2136,10 @@ async function afterLogin(u){
     if(typeof renderPostChips==='function')renderPostChips();
   }catch(e){}
 }
-function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{});document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');}
+/* Sign-out reloads the page once the session is gone, so nothing of the last
+   person's (their quote list, the quote open on screen) carries over to whoever
+   signs in next on a shared iPad. */
+function logout(){currentUser=null;if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}document.getElementById('loginScreen').classList.remove('hidden');V('loginPin','');fetch('/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{}).then(()=>location.reload());}
 function can(sec){return currentUser&&currentUser.sections.includes(sec);}
 /* Every user record saved before the Qualify stage existed carries a sections
    array without it, so the nav button stays hidden on an install that has ever
@@ -2378,7 +2382,12 @@ function setSurveyorOther(v){
 function fillForm(){
   const c=state.customer,j=state.job;
   for(const k in c) if(document.getElementById('f_'+k))document.getElementById('f_'+k).value=c[k];
-  const ps=prepOptions();fillSelect('f_prep',ps,j.prep&&ps.includes(j.prep)?j.prep:ps[0]);
+  /* A sales rep's quotes are always their own, so "Prepared by" is fixed to them
+     (the server enforces this too). Admin picks any rep, which is how a quote is
+     handed to someone. */
+  const own=!!(currentUser&&currentUser.role==='sales');
+  const ps=own?[currentUser.name]:prepOptions();fillSelect('f_prep',ps,own?currentUser.name:(j.prep&&ps.includes(j.prep)?j.prep:ps[0]));
+  const fp=document.getElementById('f_prep');if(fp)fp.disabled=own;
   V('f_quote',j.quote);V('f_hq',j.hq);V('f_date',j.date);V('f_valid',j.valid);
 }
 function syncFromForm(){
@@ -6700,10 +6709,12 @@ async function initStorage(){
       const d=await r.json();
       _quotesCache=d.quotes||[];
       _quotesCache.sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
-      if(_quotesCache.length){
-        const nums=_quotesCache.map(q=>+(q.job&&q.job.quote)||0).filter(Boolean);
-        if(nums.length)_quoteNo=Math.max(...nums)+1;
-      }
+      const nums=_quotesCache.map(q=>+(q.job&&q.job.quote)||0).filter(Boolean);
+      /* A sales rep only receives their own quotes, so also use the server's
+         highest number across EVERY rep — otherwise new quotes would reuse
+         numbers already issued by someone else. */
+      if(d.maxQuoteNo)nums.push(+d.maxQuoteNo);
+      if(nums.length)_quoteNo=Math.max(...nums)+1;
       return 'server';
     }
   }catch(e){console.warn('API unavailable, using IndexedDB:',e);}

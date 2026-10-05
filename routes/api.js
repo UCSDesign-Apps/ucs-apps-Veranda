@@ -312,19 +312,48 @@ function apiRouter(pool) {
     });
   });
 
-  // ---- Quotes (shared across all users in the module) ----
+  // ---- Quotes ----
+  // Who sees what (Richard, 2026-10-05):
+  //   admin    → every quote
+  //   sales    → only quotes they own; the owner is the quote's "Prepared by" (job.prep)
+  //   surveyor → every Signed quote, whoever prepared it (signedOnly)
+  // Enforced here, not just in the page, so a rep cannot read, overwrite or delete
+  // another rep's quote by calling the API directly. Admin hands a quote to a rep
+  // by changing its "Prepared by".
+  const isSalesRep = (user) => user.role === 'sales' && !user.signedOnly;
+  const samePerson = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const PREP_SQL = "lower(trim(data->'job'->>'prep'))";
+
+  // The current owner (job.prep) of a saved quote, or undefined if it does not exist.
+  async function existingPrep(module, id) {
+    const r = await pool.query(`SELECT data->'job'->>'prep' AS prep FROM quotes WHERE module = $1 AND id = $2`, [module, id]);
+    return r.rows[0] ? r.rows[0].prep || '' : undefined;
+  }
+
   router.get('/quotes', requireAuth, requireDb, async (req, res, next) => {
     try {
-      const { module, signedOnly } = req.session.user;
+      const user = req.session.user;
+      const { module, signedOnly } = user;
       const params = [module];
       let sql = 'SELECT data FROM quotes WHERE module = $1';
       if (signedOnly) {
         params.push('Signed');
-        sql += ' AND status = $2';
+        sql += ` AND status = $${params.length}`;
+      } else if (user.role !== 'admin') {
+        // Sales (and any other non-admin role) see only their own quotes.
+        params.push(user.name);
+        sql += ` AND ${PREP_SQL} = lower(trim($${params.length}))`;
       }
       sql += ' ORDER BY saved_at DESC NULLS LAST';
       const result = await pool.query(sql, params);
-      res.json({ quotes: result.rows.map((row) => row.data) });
+      // Highest quote number across the WHOLE module, not just this user's list,
+      // so a rep who sees only their own quotes never reuses another rep's number.
+      const max = await pool.query(
+        `SELECT max((data->'job'->>'quote')::bigint) AS m FROM quotes
+          WHERE module = $1 AND data->'job'->>'quote' ~ '^[0-9]{1,15}$'`,
+        [module]
+      );
+      res.json({ quotes: result.rows.map((row) => row.data), maxQuoteNo: max.rows[0].m != null ? Number(max.rows[0].m) : null });
     } catch (err) {
       next(err);
     }
@@ -332,9 +361,19 @@ function apiRouter(pool) {
 
   router.post('/quotes', requireAuth, requireDb, async (req, res, next) => {
     try {
-      const { module, name } = req.session.user;
+      const user = req.session.user;
+      const { module, name } = user;
       const quote = req.body;
       if (!quote || !quote.id) return res.status(400).json({ error: 'Quote id required' });
+
+      if (isSalesRep(user)) {
+        const prep = await existingPrep(module, quote.id);
+        if (prep !== undefined && !samePerson(prep, name)) {
+          return res.status(403).json({ error: 'This quote belongs to another rep' });
+        }
+        // A rep's quotes are always theirs: "Prepared by" is set to them on every save.
+        quote.job = Object.assign({}, quote.job, { prep: name });
+      }
 
       const status = quote.status || 'Draft';
       const savedBy = quote.savedBy || name;
@@ -359,7 +398,16 @@ function apiRouter(pool) {
 
   router.delete('/quotes/:id', requireAuth, requireDb, async (req, res, next) => {
     try {
-      const { module } = req.session.user;
+      const user = req.session.user;
+      const { module } = user;
+      // Admin deletes anything; a sales rep only their own quotes; nobody else deletes.
+      if (user.role !== 'admin') {
+        if (!isSalesRep(user)) return res.status(403).json({ error: 'Not allowed to delete quotes' });
+        const prep = await existingPrep(module, req.params.id);
+        if (prep !== undefined && !samePerson(prep, user.name)) {
+          return res.status(403).json({ error: 'This quote belongs to another rep' });
+        }
+      }
       await pool.query('DELETE FROM quotes WHERE module = $1 AND id = $2', [module, req.params.id]);
       res.json({ ok: true });
     } catch (err) {
