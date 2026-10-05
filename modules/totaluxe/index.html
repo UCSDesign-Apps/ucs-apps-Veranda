@@ -7979,7 +7979,7 @@ async function doSendSignable(custName,custEmail,j){
   let data={};try{data=await resp.json();}catch(e){}
   if(!resp.ok||data.http>=400){
     if(resp.status===401&&!data.message)throw new Error('Session expired — log out and back in, then send again');
-    if(resp.status===503)throw new Error('Signable API key not set — add it in Admin → Company (or SIGNABLE_API_KEY on the server)');
+    if(resp.status===503)throw new Error('Sending through Signable is switched off — no SIGNABLE_API_KEY is set on the server');
     throw new Error(data.message||data.error||`Signable error ${resp.status}`);
   }
   if(!data.envelope_fingerprint)throw new Error('Signable accepted the request but returned no envelope reference');
