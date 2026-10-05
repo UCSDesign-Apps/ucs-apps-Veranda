@@ -25,16 +25,18 @@ needs to behave correctly when online.
 
 ## Users (hardcoded, server-side)
 
-PINs are already visible in the client HTML — they select role/identity, not
-real secrets (internal staff tool). Mirrors the client's `USERS_SEED`:
+> **Changed 2026-10:** the original 4-digit PINs were published in the page and
+> are retired. Each PIN now comes from a Railway environment variable (6+ digits,
+> no default — a user whose variable is unset cannot sign in), the page holds no
+> PINs, and failed sign-ins are limited to 5 per IP per 15 minutes.
 
-| PIN  | u        | name          | role     | signedOnly |
-|------|----------|---------------|----------|------------|
-| 0000 | admin    | Administrator | admin    | false      |
-| 1111 | damien   | Damien        | sales    | false      |
-| 2222 | ryan     | Ryan          | sales    | false      |
-| 3333 | richard  | Richard       | sales    | false      |
-| 4444 | surveyor | Surveyor      | surveyor | true       |
+| PIN variable            | u        | name          | role     | signedOnly |
+|-------------------------|----------|---------------|----------|------------|
+| `TOTALUXE_PIN_ADMIN`    | admin    | Administrator | admin    | false      |
+| `TOTALUXE_PIN_DAMIEN`   | damien   | Damien        | sales    | false      |
+| `TOTALUXE_PIN_RYAN`     | ryan     | Ryan          | sales    | false      |
+| `TOTALUXE_PIN_RICHARD`  | richard  | Richard       | sales    | false      |
+| `TOTALUXE_PIN_SURVEYOR` | surveyor | Surveyor      | surveyor | true       |
 
 `sections`/`docs` arrays match the client seed (`ALL_SECTIONS`/`ALL_DOCS`) so the
 returned user drives the same UI nav as the local fallback.

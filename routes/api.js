@@ -12,6 +12,7 @@
  * are unavailable, so the contract here only needs to be correct when online.
  */
 
+const crypto = require('crypto');
 const express = require('express');
 const msal = require('@azure/msal-node');
 
@@ -39,23 +40,102 @@ const REP_EMAILS = {
   Richard: 'Richard.Brier@totalhomeni.co.uk',
 };
 
-// Hardcoded users per module. PINs are already visible in the client HTML — they
-// select role/identity, not real secrets (internal staff tool). Mirrors USERS_SEED.
+// Users per module. Identity and default permissions live here; PINs do NOT.
+// Each user's PIN is read from the environment variable named in `pinVar`
+// (e.g. TOTALUXE_PIN_ADMIN). A user whose variable is unset, or set to anything
+// other than 6+ digits, cannot sign in — there is deliberately no default PIN.
+// Admin -> Users in the page never set a PIN: login has only ever read PINs from
+// here, never from admin_config.
 const USERS = {
   totaluxe: [
-    { u: 'admin', pin: '0000', name: 'Administrator', role: 'admin', sections: ALL_SECTIONS, docs: ALL_DOCS, signedOnly: false },
-    { u: 'damien', pin: '1111', name: 'Damien', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
-    { u: 'ryan', pin: '2222', name: 'Ryan', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
-    { u: 'richard', pin: '3333', name: 'Richard', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
-    { u: 'surveyor', pin: '4444', name: 'Surveyor', role: 'surveyor', sections: ['quotes', 'docs'], docs: ['contract', 'signed', 'survey', 'picking'], signedOnly: true },
+    { u: 'admin', pinVar: 'TOTALUXE_PIN_ADMIN', name: 'Administrator', role: 'admin', sections: ALL_SECTIONS, docs: ALL_DOCS, signedOnly: false },
+    { u: 'damien', pinVar: 'TOTALUXE_PIN_DAMIEN', name: 'Damien', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
+    { u: 'ryan', pinVar: 'TOTALUXE_PIN_RYAN', name: 'Ryan', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
+    { u: 'richard', pinVar: 'TOTALUXE_PIN_RICHARD', name: 'Richard', role: 'sales', sections: SALES_SECTIONS, docs: ALL_DOCS, signedOnly: false },
+    { u: 'surveyor', pinVar: 'TOTALUXE_PIN_SURVEYOR', name: 'Surveyor', role: 'surveyor', sections: ['quotes', 'docs'], docs: ['contract', 'signed', 'survey', 'picking'], signedOnly: true },
   ],
 };
 
-// Strip the PIN before returning a user to the client / storing in the session.
+const PIN_FORMAT = /^\d{6,}$/;
+
+// The user's configured PIN, or null if it is unset or too short (that user is
+// then refused). Read on every login so a changed variable needs no code change.
+function configuredPin(user) {
+  const pin = String(process.env[user.pinVar] || '').trim();
+  return PIN_FORMAT.test(pin) ? pin : null;
+}
+
+// Constant-time comparison (hash first so differing lengths are not leaked).
+function pinMatches(given, expected) {
+  const a = crypto.createHash('sha256').update(String(given)).digest();
+  const b = crypto.createHash('sha256').update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+// Find the user a PIN belongs to. Refuses PINs under 6 digits outright, and
+// refuses a PIN that two users share rather than guessing between them.
+function userForPin(list, pin) {
+  const given = String(pin == null ? '' : pin).trim();
+  if (!PIN_FORMAT.test(given)) return null;
+  const hits = list.filter((entry) => {
+    const expected = configuredPin(entry);
+    return expected !== null && pinMatches(given, expected);
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// Startup report: names the variables that are missing or invalid, never their values.
+function reportPinConfig() {
+  for (const [mod, list] of Object.entries(USERS)) {
+    const bad = list.filter((entry) => configuredPin(entry) === null).map((entry) => entry.pinVar);
+    const pins = list.map(configuredPin).filter(Boolean);
+    if (bad.length) console.warn(`[auth] ${mod}: these users cannot sign in until a 6+ digit PIN is set: ${bad.join(', ')}`);
+    if (new Set(pins).size !== pins.length) console.warn(`[auth] ${mod}: two users share a PIN — neither of them can sign in with it`);
+  }
+}
+
+// What a user looks like to the client / in the session: no PIN variable name.
 function publicUser(user) {
-  const { pin, ...rest } = user;
+  const { pinVar, ...rest } = user;
   return rest;
 }
+
+// Fields that must never reach a browser or be stored in admin_config:
+// staff PINs (login reads them from the environment) and the Signable API key
+// (the server reads it from SIGNABLE_API_KEY). Stripping on GET as well as POST
+// means copies already saved in admin_config are never sent out either.
+function scrubConfig(config) {
+  if (!config || typeof config !== 'object') return config;
+  if (config.company && typeof config.company === 'object') delete config.company.signableKey;
+  if (Array.isArray(config.users)) {
+    for (const entry of config.users) if (entry && typeof entry === 'object') delete entry.pin;
+  }
+  return config;
+}
+
+// Failed sign-in limit: 5 failures per IP per 15 minutes, then 429 until the
+// window has passed. In memory, so a restart clears it — acceptable for one
+// instance. Uses req.ip, which honours server.js's `trust proxy` (Railway).
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginFailures = new Map(); // ip -> { count, first }
+
+function loginBlocked(ip, now = Date.now()) {
+  const rec = loginFailures.get(ip);
+  if (!rec) return 0;
+  if (now - rec.first >= LOGIN_WINDOW_MS) { loginFailures.delete(ip); return 0; }
+  return rec.count >= LOGIN_MAX_FAILURES ? Math.ceil((rec.first + LOGIN_WINDOW_MS - now) / 1000) : 0;
+}
+function recordLoginFailure(ip, now = Date.now()) {
+  const rec = loginFailures.get(ip);
+  if (!rec || now - rec.first >= LOGIN_WINDOW_MS) loginFailures.set(ip, { count: 1, first: now });
+  else rec.count += 1;
+}
+// Keep the map from growing without bound.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of loginFailures) if (now - rec.first >= LOGIN_WINDOW_MS) loginFailures.delete(ip);
+}, LOGIN_WINDOW_MS).unref();
 
 async function ensureSchema(pool) {
   await pool.query(`
@@ -155,13 +235,24 @@ function apiRouter(pool) {
   // ---- Auth ----
   router.post('/auth/login', async (req, res, next) => {
     try {
+      const ip = req.ip;
+      const wait = loginBlocked(ip);
+      if (wait) {
+        res.set('Retry-After', String(wait));
+        return res.status(429).json({ error: 'Too many attempts — try again in ' + Math.ceil(wait / 60) + ' minutes' });
+      }
       const { pin, module } = req.body || {};
       const mod = module || 'totaluxe';
       const list = USERS[mod];
       if (!list) return res.status(400).json({ error: 'Unknown module' });
 
-      const user = list.find((entry) => entry.pin === String(pin));
-      if (!user) return res.status(401).json({ error: 'Incorrect PIN' });
+      const user = userForPin(list, pin);
+      if (!user) {
+        recordLoginFailure(ip);
+        console.warn(`[auth/login] failed sign-in from ${ip}`);
+        return res.status(401).json({ error: 'Incorrect PIN' });
+      }
+      loginFailures.delete(ip);
 
       req.session.user = { ...publicUser(user), module: mod };
       // Per-user permission overrides: admins grant/revoke sections & docs via
@@ -191,13 +282,18 @@ function apiRouter(pool) {
       await new Promise((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
-      // TEMP DEBUG: trace session creation — remove once auth is confirmed.
-      console.log('[auth/login] session saved, id=', req.session.id, 'user=', req.session.user.name);
       res.json({ user: req.session.user });
     } catch (err) {
       console.error('[auth/login] error:', err.message);
       next(err);
     }
+  });
+
+  // The signed-in user, so the page can skip the PIN screen while the session is
+  // still valid (e.g. after a refresh).
+  router.get('/auth/me', requireAuth, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ user: req.session.user });
   });
 
   router.post('/auth/logout', (req, res) => {
@@ -269,19 +365,11 @@ function apiRouter(pool) {
     try {
       const { module } = req.session.user;
       const result = await pool.query('SELECT config FROM admin_config WHERE module = $1', [module]);
-      // TEMP DEBUG: trace image load — remove once image persistence is confirmed.
-      console.log(`[admin/config] GET module=${module} — found=${!!result.rows[0]}`);
-      if (result.rows[0]) {
-        const cfg = result.rows[0].config;
-        const imgCount = cfg && cfg.imgmap ? Object.keys(cfg.imgmap).reduce((n, cat) =>
-          n + Object.values(cfg.imgmap[cat] || {}).filter(Boolean).length, 0) : 0;
-        console.log(`[admin/config] GET returning imgCount=${imgCount}`);
-      }
       // Never let the browser serve a cached/304 config — admins expect the
       // freshest image map immediately after another admin saves.
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.set('Pragma', 'no-cache');
-      res.json({ config: result.rows[0] ? result.rows[0].config : null });
+      res.json({ config: result.rows[0] ? scrubConfig(result.rows[0].config) : null });
     } catch (err) {
       next(err);
     }
@@ -294,12 +382,10 @@ function apiRouter(pool) {
       if (!config || typeof config !== 'object' || Array.isArray(config)) {
         return res.status(400).json({ error: 'Config object required' });
       }
-      // TEMP DEBUG: trace image save — remove once image persistence is confirmed.
+      scrubConfig(config);
       const payloadKB = Math.round(JSON.stringify(config).length / 1024);
-      const imgmapCats = config.imgmap ? Object.keys(config.imgmap) : [];
-      const imgCount = imgmapCats.reduce((n, cat) =>
-        n + Object.values(config.imgmap[cat] || {}).filter(Boolean).length, 0);
-      console.log(`[admin/config] POST module=${module} user=${name} payload=${payloadKB}KB imgCats=${imgmapCats.length} imgs=${imgCount}`);
+      const imgCount = config.imgmap ? Object.keys(config.imgmap).reduce((n, cat) =>
+        n + Object.values(config.imgmap[cat] || {}).filter(Boolean).length, 0) : 0;
       await pool.query(
         `INSERT INTO admin_config (module, config, updated_by, updated_at)
          VALUES ($1, $2, $3, now())
@@ -309,7 +395,6 @@ function apiRouter(pool) {
                updated_at = now()`,
         [module, config, name]
       );
-      console.log(`[admin/config] POST saved OK for module=${module} (${payloadKB}KB, ${imgCount} imgs)`);
       res.json({ ok: true, payloadKB, imgCount });
     } catch (err) {
       console.error(`[admin/config] POST error:`, err.message);
@@ -403,12 +488,10 @@ function apiRouter(pool) {
   // Signable is a server-to-server API: it sends no CORS headers, so a browser
   // fetch to api.signable.co.uk is blocked before it leaves the page. Every
   // Signable call goes through here instead.
-  // Key: SIGNABLE_API_KEY on the server wins; otherwise the key an admin saved in
-  // Admin -> Company is passed up by the client (body `apiKey` or header
-  // `x-signable-key`) so the existing setup keeps working until the env var is set.
+  // Key: SIGNABLE_API_KEY on the server only. It is never sent to or accepted from a browser.
   const SIGNABLE_BASE = process.env.SIGNABLE_BASE_URL || 'https://api.signable.co.uk/v1'; // override for local testing only
-  function signableAuth(clientKey) {
-    const key = process.env.SIGNABLE_API_KEY || clientKey;
+  function signableAuth() {
+    const key = process.env.SIGNABLE_API_KEY;
     if (!key) return null;
     return 'Basic ' + Buffer.from(`${key}:x`).toString('base64');
   }
@@ -416,7 +499,7 @@ function apiRouter(pool) {
 
   // Signable's own 401/403 means the API key was refused. Pass it on as a 502 so
   // the client does not mistake it for its own session expiring.
-  const KEY_REFUSED = 'Signable rejected the API key — check it in Admin -> Company or SIGNABLE_API_KEY';
+  const KEY_REFUSED = 'Signable rejected the API key — check SIGNABLE_API_KEY on the server';
 
   async function signableJson(resp) {
     const text = await resp.text();
@@ -425,8 +508,8 @@ function apiRouter(pool) {
 
   router.post('/signable/envelopes', requireAuth, async (req, res) => {
     try {
-      const { envelope, apiKey } = req.body || {};
-      const auth = signableAuth(apiKey);
+      const { envelope } = req.body || {};
+      const auth = signableAuth();
       if (!auth) return res.status(503).json({ error: 'Signable API key not configured' });
       if (!envelope || typeof envelope !== 'object') return res.status(400).json({ error: 'envelope object required' });
       const resp = await fetch(`${SIGNABLE_BASE}/envelopes`, {
@@ -444,7 +527,7 @@ function apiRouter(pool) {
   });
 
   async function readEnvelope(req) {
-    const auth = signableAuth(req.get('x-signable-key'));
+    const auth = signableAuth();
     if (!auth) return { status: 503, data: { error: 'Signable API key not configured' } };
     const resp = await fetch(`${SIGNABLE_BASE}/envelopes/${encodeURIComponent(req.params.fingerprint)}`, {
       headers: { Authorization: auth, Accept: 'application/json' },
@@ -498,4 +581,5 @@ function apiRouter(pool) {
 }
 
 apiRouter.ensureSchema = ensureSchema;
+apiRouter.reportPinConfig = reportPinConfig;
 module.exports = apiRouter;

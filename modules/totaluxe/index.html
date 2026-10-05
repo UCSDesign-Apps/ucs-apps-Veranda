@@ -458,10 +458,9 @@ body.print-internal .internal-notes-only{display:block !important;}
   <div class="box">
     <h1>TotaLuxe</h1><div class="sub">Veranda Sales Suite — sign in</div>
     <label>User</label><select id="loginUser"></select>
-    <label>PIN</label><input id="loginPin" type="password" maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <label>PIN</label><input id="loginPin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="12" placeholder="6+ digit PIN" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="err" id="loginErr"></div>
     <button class="btn primary" style="width:100%;margin-top:6px" onclick="doLogin()">Sign in</button>
-    <div class="hint" id="loginHint"></div>
   </div>
 </div>
 
@@ -1036,7 +1035,6 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="field"><label>Short name (docs)</label><input id="a_coshort"></div>
           <div class="field"><label>Company number</label><input id="a_cono"></div>
           <div class="field"><label>VAT number</label><input id="a_vat"></div>
-          <div class="field"><label>Signable API key</label><input id="a_signable_key" type="password" placeholder="Paste Signable API key..." autocomplete="off"></div>
           <div class="field"><label>Signable rep email <span class="muted">(company signer)</span></label><input id="a_signable_rep" type="email" placeholder="e.g. richard@totalhomeni.co.uk"></div>
           <div class="field"><label>Address line 1</label><input id="a_addr1"></div>
           <div class="field"><label>Address line 2</label><input id="a_addr2"></div>
@@ -1866,17 +1864,19 @@ const PARTS_SEED=[
 
 const ALL_SECTIONS=['quotes','customer','qualify','build','pricing','decking','docs','costings','admin'];
 const ALL_DOCS=['quote','contract','signed','survey','picking'];
+/* Identity and default permissions only. PINs are NOT kept in the page: the
+   server checks them against its environment variables (routes/api.js). */
 const USERS_SEED=[
- {u:'admin',pin:'0000',name:'Administrator',role:'admin',sections:ALL_SECTIONS.slice(),docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'damien',pin:'1111',name:'Damien',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'ryan',pin:'2222',name:'Ryan',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'richard',pin:'3333',name:'Richard',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
- {u:'surveyor',pin:'4444',name:'Surveyor',role:'surveyor',sections:['quotes','docs'],docs:['contract','signed','survey','picking'],signedOnly:true}
+ {u:'admin',name:'Administrator',role:'admin',sections:ALL_SECTIONS.slice(),docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'damien',name:'Damien',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'ryan',name:'Ryan',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'richard',name:'Richard',role:'sales',sections:['quotes','customer','qualify','build','pricing','decking','docs'],docs:ALL_DOCS.slice(),signedOnly:false},
+ {u:'surveyor',name:'Surveyor',role:'surveyor',sections:['quotes','docs'],docs:['contract','signed','survey','picking'],signedOnly:true}
 ];
 
 /* ===== ADMIN (persisted) ===== */
 const ADMIN_DEFAULT={
-  company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"4xmrG6UQQJwKttWtzcgWhsGHxD2SkdJS",signableRepEmail:"info@totalhomeni.co.uk"},
+  company:{name:"Total Home Improvements (NI) Ltd",short:"Total Home NI",cono:"NI612937",vat:"",addr1:"2 Advantage Way",addr2:"Ballygomartin Road",town:"Belfast",post:"BT13 3LZ",tel:"028 9072 9688",fax:"028 9039 1364",group:"a retail division of the UCS Group",signableKey:"",signableRepEmail:"info@totalhomeni.co.uk"},
   markup:150,deckingMarkup:150,deckingFitPerM2:45,deckingFabPerM2:15,vatRate:20,depPct:10,
   /* Starting defaults only — every question is editable in Admin -> Qualify.
      type:'select' renders answers as radio rows; type:'number' renders a numeric
@@ -1985,7 +1985,6 @@ function clone(o){return JSON.parse(JSON.stringify(o));}
 let currentUser=null;
 function initLogin(){
   document.getElementById('loginUser').innerHTML=admin.users.map(u=>`<option value="${u.u}">${u.name} (${u.role})</option>`).join('');
-  document.getElementById('loginHint').textContent='Demo PINs — admin 0000 · Damien 1111 · Ryan 2222 · Richard 3333 · Surveyor 4444';
 }
 /* Pull shared admin config from the server (written by an admin's Save Admin)
    and merge it over the local defaults so every user gets the latest company
@@ -2065,28 +2064,40 @@ async function loadAdminFromServer(){
     console.warn('Could not load server admin config — using local defaults:',e);
   }
 }
+/* Sign-in is checked by the server only. The page holds no PINs, so there is
+   no offline sign-in: if the server can't be reached, say so. */
 async function doLogin(){
   const pin=val('loginPin');
   const errEl=document.getElementById('loginErr');
   errEl.textContent='Checking…';
-  let u; /* function-scoped so it's available after the try/catch */
+  let r,d={};
   try{
-    const r=await fetch('/api/auth/login',{
+    r=await fetch('/api/auth/login',{
       method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pin,module:'totaluxe'})
     });
-    if(r.ok){
-      const d=await r.json();
-      u=d.user;
-    } else {
-      u=admin.users.find(x=>String(x.pin)===pin);
-    }
+    try{d=await r.json();}catch(e){}
   }catch(e){
-    u=admin.users.find(x=>String(x.pin)===pin);
+    errEl.textContent="Can't reach the server — check your connection";return;
   }
-  if(!u){errEl.textContent='Incorrect PIN';return;}
+  if(r.status===401){errEl.textContent='Incorrect PIN';return;}
+  if(r.status===429){errEl.textContent=d.error||'Too many attempts — try again later';return;}
+  if(!r.ok||!d.user){errEl.textContent="Can't reach the server — check your connection";return;}
   errEl.textContent='';
+  await afterLogin(d.user);
+}
+/* At page load: if the session cookie is still valid, skip the PIN screen. */
+async function resumeSession(){
+  try{
+    const r=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d&&d.user)await afterLogin(d.user);
+  }catch(e){}
+}
+/* Everything that follows a successful sign-in (fresh, or a resumed session). */
+async function afterLogin(u){
   currentUser=u;
   /* merge any admin-saved config from the server before rendering the UI */
   await loadAdminFromServer();
@@ -6015,7 +6026,7 @@ function adminTab(t,btn){document.querySelectorAll('.apane').forEach(p=>p.classL
 function liveRates(){admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;}
 function renderAdmin(){
   const c=admin.company;
-  V('a_coname',c.name);V('a_coshort',c.short);V('a_cono',c.cono);V('a_vat',c.vat);V('a_addr1',c.addr1);V('a_addr2',c.addr2);V('a_town',c.town);V('a_post',c.post);V('a_tel',c.tel);V('a_fax',c.fax);V('a_group',c.group);V('a_signable_key',c.signableKey||'');V('a_signable_rep',c.signableRepEmail||'');
+  V('a_coname',c.name);V('a_coshort',c.short);V('a_cono',c.cono);V('a_vat',c.vat);V('a_addr1',c.addr1);V('a_addr2',c.addr2);V('a_town',c.town);V('a_post',c.post);V('a_tel',c.tel);V('a_fax',c.fax);V('a_group',c.group);V('a_signable_rep',c.signableRepEmail||'');
   V('a_markup',admin.markup);V('a_deckingmarkup',admin.deckingMarkup);V('a_deckingfit',admin.deckingFitPerM2);V('a_deckingfab',admin.deckingFabPerM2);V('a_vatrate',admin.vatRate);V('a_deppct',admin.depPct);
   // fitting
   const fb=document.getElementById('adminFitRows');fb.innerHTML='';
@@ -6073,7 +6084,6 @@ function renderUsers(){
     card.innerHTML=`<div class="grid g4">
       <div class="field"><label>Name</label><input value="${esc(u.name)}" oninput="admin.users[${i}].name=this.value"></div>
       <div class="field"><label>Username</label><input value="${esc(u.u)}" oninput="admin.users[${i}].u=this.value"></div>
-      <div class="field"><label>PIN</label><input value="${esc(u.pin)}" oninput="admin.users[${i}].pin=this.value"></div>
       <div class="field"><label>Role</label><select onchange="admin.users[${i}].role=this.value;admin.users[${i}].signedOnly=(this.value==='surveyor')">
         ${['admin','sales','surveyor'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
       <div style="margin-top:10px"><div class="muted" style="font-size:12px;margin-bottom:4px">Sections</div><div class="permgrid">${secs}</div></div>
@@ -6277,7 +6287,7 @@ function togglePerm(i,kind,key,on){
      login, because applyPerms is what hides nav buttons and nothing re-ran it. */
   if(currentUser&&admin.users[i]&&admin.users[i].u===currentUser.u){currentUser=admin.users[i];applyPerms();renderNextBtn();}
 }
-function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),pin:'0000',name:'New User',role:'sales',sections:['quotes','customer','qualify','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
+function adminAddUser(){admin.users.push({u:'user'+(admin.users.length+1),name:'New User',role:'sales',sections:['quotes','customer','qualify','build','pricing','docs'],docs:ALL_DOCS.slice(),signedOnly:false});renderUsers();}
 function adminAddFit(){admin.fitting.push({desc:"New item",direct:0,finance:0});renderAdmin();}
 function adminAddPart(){admin.parts.push({desc:"New part",matCost:0,fitCost:0});renderAdmin();}
 
@@ -6603,7 +6613,6 @@ async function exportApp(){
 }
 function saveAdmin(){const c=admin.company;
   c.name=val('a_coname');c.short=val('a_coshort');c.cono=val('a_cono');c.vat=val('a_vat');c.addr1=val('a_addr1');c.addr2=val('a_addr2');c.town=val('a_town');c.post=val('a_post');c.tel=val('a_tel');c.fax=val('a_fax');c.group=val('a_group');
-  if(val('a_signable_key'))c.signableKey=val('a_signable_key');
   c.signableRepEmail=val('a_signable_rep')||c.signableRepEmail||'';
   admin.markup=+val('a_markup')||0;admin.deckingMarkup=+val('a_deckingmarkup')||0;admin.deckingFitPerM2=+val('a_deckingfit')||0;admin.deckingFabPerM2=+val('a_deckingfab')||0;admin.vatRate=+val('a_vatrate')||0;admin.depPct=+val('a_deppct')||0;
   initLogin();renderPricing();renderSurvey();
@@ -7647,10 +7656,6 @@ function signedState(){
   if(!j.signableFingerprint&&!j.signedPdfData)return 'unsent';
   return (state.status==='Signed'||j.signedAt)?'signed':'awaiting';
 }
-function signableKeyHeader(){
-  const k=admin.company&&admin.company.signableKey;
-  return k?{'x-signable-key':k}:{};
-}
 function fmtStamp(iso){
   if(!iso)return '—';
   const d=new Date(iso);if(isNaN(d))return esc(iso);
@@ -7708,7 +7713,7 @@ async function fetchSignedPdf(){
   const fp=state.job&&state.job.signableFingerprint;
   if(!fp)throw new Error('No Signable envelope is linked to this job.');
   let r;
-  try{r=await fetch('/api/signable/envelopes/'+encodeURIComponent(fp)+'/pdf',{credentials:'include',headers:signableKeyHeader()});}
+  try{r=await fetch('/api/signable/envelopes/'+encodeURIComponent(fp)+'/pdf',{credentials:'include'});}
   catch(e){throw new Error('Could not reach the server — check your connection.'+(state.job.signedPdfData?'':' Use "Save a copy in this job" while you have signal to view it offline.'));}
   if(!r.ok){
     let msg='';try{const d=await r.json();msg=d.error||d.message||'';}catch(e){}
@@ -7845,7 +7850,7 @@ async function pollSignableStatuses(){
   for(const q of pending){
     try{
       const resp=await fetch(signableEnvelopeUrl(q.job.signableFingerprint),
-        {credentials:'include',headers:signableKeyHeader()});
+        {credentials:'include'});
       if(!resp.ok)continue;
       const data=await resp.json();
       if(data.envelope_status==='signed'){
@@ -7885,7 +7890,7 @@ async function checkSignableNow(){
   if(!fp){toast('No Signable envelope linked to this quote');return;}
   toast('Checking Signable…');
   try{
-    const resp=await fetch(signableEnvelopeUrl(fp),{credentials:'include',headers:signableKeyHeader()});
+    const resp=await fetch(signableEnvelopeUrl(fp),{credentials:'include'});
     const data=await resp.json();
     if(!resp.ok){toast('Signable: '+(data.error||data.message||('error '+resp.status)));return;}
     const status=data.envelope_status||'unknown';
@@ -7910,9 +7915,8 @@ async function checkSignableNow(){
   }
 }
 function sendSignable(){
-  /* May be empty: the server prefers its own SIGNABLE_API_KEY and only falls back
-     to the key saved in Admin -> Company. A 503 from the proxy means neither is set. */
-  const apiKey=admin.company.signableKey||'';
+  /* The Signable API key lives only on the server (SIGNABLE_API_KEY). A 503 from
+     the proxy means it is not set there. */
   const c=state.customer,j=state.job;
   const custEmail=c.cemail||'';
   const custName=c.cname||'Customer';
@@ -7931,13 +7935,13 @@ function sendSignable(){
   if(state.doc!=='contract')setDoc('contract');
   setTimeout(async()=>{
     try{
-      await doSendSignable(apiKey,custName,custEmail,j);
+      await doSendSignable(custName,custEmail,j);
     }catch(err){
       signableError(err.message||String(err));
     }
   },600);
 }
-async function doSendSignable(apiKey,custName,custEmail,j){
+async function doSendSignable(custName,custEmail,j){
   /* Step 1 complete — now render PDF */
   setSignableStep(0,'✓ Contract ready',true);
   setSignableStep(1,'Generating PDF…');
@@ -7970,7 +7974,7 @@ async function doSendSignable(apiKey,custName,custEmail,j){
   const resp=await fetch('/api/signable/envelopes',{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({envelope:body,apiKey:apiKey||undefined})
+    body:JSON.stringify({envelope:body})
   });
   let data={};try{data=await resp.json();}catch(e){}
   if(!resp.ok||data.http>=400){
@@ -8112,7 +8116,7 @@ function boot(){
   initLogin();fillForm();initConfig();renderPricing();renderSurvey();updateTop();
 }
 /* Initialise storage then boot */
-initStorage().then(()=>boot()).catch(()=>boot());
+initStorage().then(()=>boot()).catch(()=>boot()).then(resumeSession);
 </script>
 
 <script>
