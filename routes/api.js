@@ -174,6 +174,37 @@ async function ensureSchema(pool) {
   `);
 
   await backfillDeckingSection(pool);
+  await migrateQualifyGuided(pool);
+}
+
+// Guided Qualify (2026-10-05): Roof Type takes several answers and Mounting Type
+// gains "Not decided yet". The page only reseeds an UNEDITED question list, and the
+// live list had been edited in Admin, so apply just these two changes to saved
+// config — leaving every other admin edit alone — then set a flag so an admin who
+// later undoes either is not overridden on the next boot.
+async function migrateQualifyGuided(pool) {
+  try {
+    const { rows } = await pool.query('SELECT module, config FROM admin_config');
+    for (const row of rows) {
+      const cfg = row.config;
+      if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.qualifyQuestions)) continue;
+      if (cfg._migrations && cfg._migrations.qualifyGuided) continue;
+      const done = [];
+      const roof = cfg.qualifyQuestions.find((q) => q && q.id === 'q_rooftype');
+      if (roof && roof.type !== 'number' && !roof.multi) { roof.multi = true; done.push('Roof Type multi'); }
+      const mount = cfg.qualifyQuestions.find((q) => q && q.id === 'q_mount');
+      if (mount && Array.isArray(mount.options) && !mount.options.some((o) => o && /not decided/i.test(o.label || ''))) {
+        mount.options.push({ label: 'Not decided yet', models: [] });
+        done.push('Mounting "Not decided yet"');
+      }
+      cfg._migrations = Object.assign({}, cfg._migrations, { qualifyGuided: true });
+      await pool.query('UPDATE admin_config SET config = $2 WHERE module = $1', [row.module, cfg]);
+      console.log(`[migration] guided qualify — module=${row.module}: ${done.join(', ') || '(nothing to change)'}`);
+    }
+  } catch (e) {
+    // Never block boot; the page still works, the two defaults just stay as saved.
+    console.warn('[migration] guided qualify skipped:', e.message);
+  }
 }
 
 // The Decking section shipped after admin configs were already saved. A saved
