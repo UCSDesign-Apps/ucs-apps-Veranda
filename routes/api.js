@@ -312,6 +312,9 @@ function apiRouter(pool) {
     });
   });
 
+  // ---- CRM (Maximizer via Power BI): quotation number → customer details ----
+  require('./crm').mount(router, requireAuth);
+
   // ---- Quotes ----
   // Who sees what (Richard, 2026-10-05):
   //   admin    → every quote
