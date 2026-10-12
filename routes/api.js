@@ -732,7 +732,108 @@ function apiRouter(pool) {
     }
   });
 
+  // ---- Embedded sending: draft -> field setup in an iframe -> send ----
+  // The browser creates the envelope with is_draft:true (route above), then:
+  //   POST   /signable/envelopes/:fp/embed-session  -> { session_url, expires_at }
+  //   POST   /signable/envelopes/:fp/send           -> sends the prepared draft
+  //   DELETE /signable/envelopes/:fp                -> discards a draft (drafts only)
+  // The session_url carries a short-lived credential: it is returned to the
+  // signed-in user and nothing else. Never log it, store it or put it in a URL.
+  async function signableCall(method, path, body) {
+    const auth = signableAuth();
+    if (!auth) return { status: 503, data: { error: 'Signable API key not configured' } };
+    const headers = { Authorization: auth, Accept: 'application/json' };
+    if (body) headers['Content-Type'] = 'application/json';
+    const resp = await fetch(`${SIGNABLE_BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    return { status: resp.status, data: await signableJson(resp) };
+  }
+  const signableMsg = (data, status) => (data && (data.message || data.error || data.detail)) || `Signable returned ${status}`;
+
+  // Only Signable's own embed host may be framed, and only over https (Signable's
+  // docs show the URL as http://; the app is https, so http would be blocked).
+  function safeSessionUrl(raw) {
+    try {
+      const u = new URL(String(raw || ''));
+      if (!/(^|\.)signable\.(app|co\.uk)$/i.test(u.hostname)) return null;
+      u.protocol = 'https:';
+      return u.toString();
+    } catch (e) { return null; }
+  }
+
+  router.post('/signable/envelopes/:fingerprint/embed-session', requireAuth, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const fp = req.params.fingerprint;
+      if (!validFingerprint(fp)) return res.status(400).json({ error: 'Bad envelope reference' });
+      const env = await readEnvelope(req);
+      if (env.status === 401 || env.status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      if (env.status === 503) return res.status(503).json(env.data);
+      if (env.status === 404) return res.status(404).json({ error: 'Signable cannot find this draft' });
+      if (env.status !== 200) return res.status(502).json({ error: signableMsg(env.data, env.status) });
+      const st = env.data.envelope_status;
+      // Signable processes the uploaded PDF before the draft can be edited.
+      if (st === 'processing') return res.status(409).json({ processing: true, envelope_status: st, error: 'Signable is still processing the document' });
+      if (st !== 'draft') return res.status(409).json({ envelope_status: st, error: `This envelope is ${st || 'not a draft'}` });
+      const r = await signableCall('POST', '/embed-sessions', {
+        type: 'envelope', fingerprint: fp,
+        config: { components: [{ type: 'document_setup', version: '1' }] },
+      });
+      // The key has just worked for the read above, so a refusal here is about
+      // the embedded editor itself (for example not enabled on the account).
+      if (r.status === 401 || r.status === 403) {
+        return res.status(502).json({ embed_refused: true, error: 'Signable refused to open the field editor (' + r.status + '): ' + signableMsg(r.data, r.status) });
+      }
+      if (r.status < 200 || r.status >= 300) return res.status(r.status >= 500 ? 502 : r.status).json({ error: signableMsg(r.data, r.status) });
+      const url = safeSessionUrl(r.data.session_url);
+      if (!url) return res.status(502).json({ error: 'Signable returned no usable editor link' });
+      res.json({ session_url: url, expires_at: r.data.expires_at || null });
+    } catch (err) {
+      console.error('[signable] embed-session error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
+    }
+  });
+
+  router.post('/signable/envelopes/:fingerprint/send', requireAuth, async (req, res) => {
+    try {
+      const fp = req.params.fingerprint;
+      if (!validFingerprint(fp)) return res.status(400).json({ error: 'Bad envelope reference' });
+      const r = await signableCall('POST', `/envelopes/${encodeURIComponent(fp)}/send`);
+      if (r.status === 401 || r.status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      if (r.status === 503) return res.status(503).json(r.data);
+      // 400 = Signable's final validation failed; the envelope stays a draft.
+      if (r.status < 200 || r.status >= 300) return res.status(r.status === 400 || r.status === 404 || r.status === 409 ? r.status : 502).json({ ...r.data, error: signableMsg(r.data, r.status) });
+      res.json(r.data);
+    } catch (err) {
+      console.error('[signable] send-draft error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
+    }
+  });
+
+  router.delete('/signable/envelopes/:fingerprint', requireAuth, async (req, res) => {
+    try {
+      const fp = req.params.fingerprint;
+      if (!validFingerprint(fp)) return res.status(400).json({ error: 'Bad envelope reference' });
+      const env = await readEnvelope(req);
+      if (env.status === 401 || env.status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      if (env.status === 503) return res.status(503).json(env.data);
+      if (env.status === 404) return res.json({ deleted: false, gone: true });
+      if (env.status !== 200) return res.status(502).json({ error: signableMsg(env.data, env.status) });
+      // From the app, only an unsent draft may be deleted.
+      if (env.data.envelope_status !== 'draft') return res.status(409).json({ envelope_status: env.data.envelope_status, error: 'Only a draft can be discarded' });
+      const r = await signableCall('DELETE', `/envelopes/${encodeURIComponent(fp)}`);
+      if (r.status === 401 || r.status === 403) return res.status(502).json({ error: KEY_REFUSED });
+      if (r.status < 200 || r.status >= 300) return res.status(502).json({ error: signableMsg(r.data, r.status) });
+      res.json({ deleted: true });
+    } catch (err) {
+      console.error('[signable] delete-draft error:', err.message);
+      res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
+    }
+  });
+
   // Streams the executed PDF (or the document as sent, while still unsigned).
+  // Uses Signable's download endpoint (GET /envelopes/{fp}/download) first; the
+  // envelope_signed_pdf / envelope_pdf link fields were deprecated on 30 Sep 2026
+  // and are kept only as a fallback.
   router.get('/signable/envelopes/:fingerprint/pdf', requireAuth, async (req, res) => {
     try {
       if (!validFingerprint(req.params.fingerprint)) return res.status(400).json({ error: 'Bad envelope reference' });
@@ -740,6 +841,22 @@ function apiRouter(pool) {
       if (status === 401 || status === 403) return res.status(502).json({ error: KEY_REFUSED });
       if (status === 503) return res.status(503).json(data);
       if (status !== 200) return res.status(status === 404 ? 404 : 502).json({ error: data.message || data.error || `Signable returned ${status}` });
+      const sendPdf = (buf) => {
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="contract-${req.params.fingerprint}.pdf"`);
+        res.set('Cache-Control', 'private, no-store');
+        res.set('X-Envelope-Status', String(data.envelope_status || ''));
+        res.send(buf);
+      };
+      try {
+        const dl = await fetch(`${SIGNABLE_BASE}/envelopes/${encodeURIComponent(req.params.fingerprint)}/download`, {
+          headers: { Authorization: auth, Accept: 'application/pdf' },
+        });
+        if (dl.ok && /pdf/i.test(dl.headers.get('content-type') || '')) {
+          const buf = Buffer.from(await dl.arrayBuffer());
+          if (buf.length) return sendPdf(buf);
+        }
+      } catch (e) { /* fall through to the older link fields */ }
       const pdfUrl = data.envelope_signed_pdf || data.envelope_pdf;
       if (!pdfUrl) return res.status(409).json({ error: 'Signable has no PDF for this envelope yet', envelope_status: data.envelope_status });
       // The PDF link is normally pre-signed storage: send no credentials to it.
@@ -751,11 +868,7 @@ function apiRouter(pool) {
       if (!pdf.ok) return res.status(502).json({ error: `PDF download failed (${pdf.status})` });
       const buf = Buffer.from(await pdf.arrayBuffer());
       if (!buf.length) return res.status(502).json({ error: 'Signable returned an empty PDF' });
-      res.set('Content-Type', 'application/pdf');
-      res.set('Content-Disposition', `inline; filename="contract-${req.params.fingerprint}.pdf"`);
-      res.set('Cache-Control', 'private, no-store');
-      res.set('X-Envelope-Status', String(data.envelope_status || ''));
-      res.send(buf);
+      sendPdf(buf);
     } catch (err) {
       console.error('[signable] pdf error:', err.message);
       res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
