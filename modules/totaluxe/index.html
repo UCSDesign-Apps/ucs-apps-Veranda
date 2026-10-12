@@ -82,6 +82,11 @@ button{font-family:inherit;} .muted{color:var(--muted);} .hidden{display:none !i
 .wiz-num.done{background:var(--brand);color:#fff;}
 .wiz-num.active{background:var(--gold);color:#fff;}
 .wiz-num.idle{background:#eef1f3;color:#7a8a90;}
+/* Guided configurator: a step can't be opened until the ones before it are done */
+.wiz-step.wiz-locked .wiz-hdr{cursor:not-allowed;opacity:.5;}
+.wiz-step.wiz-locked .wiz-hdr:hover{background:transparent;}
+.wiz-miss{font-size:12.5px;color:#8a5200;text-align:center;margin-top:6px;min-height:1em;}
+#view-build .btn:disabled{opacity:.5;cursor:not-allowed;}
 .wiz-title{font-weight:700;font-size:15px;color:var(--brand-d);}
 .wiz-summary{font-size:12.5px;color:#7a8a90;margin-left:auto;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .wiz-chevron{font-size:18px;color:#aab4b8;margin-left:8px;transition:transform .2s;flex-shrink:0;}
@@ -329,14 +334,14 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .drawbar .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #bbb;cursor:pointer;display:inline-block;}
 .drawbar .sw.on{box-shadow:0 0 0 2px var(--gold);}
 /* Survey corrections (2026-10): tap printed text, type the correct value. */
-body.correctmode #docwrap .sheet:not(.sv-gen) .pg *{cursor:text;}
-body.correctmode #docwrap .sheet:not(.sv-gen) .pg *:hover{outline:1px dashed #1769d0;outline-offset:1px;}
 .sv-old{text-decoration:line-through;color:#8a969a;font-weight:inherit;}
 .sv-new{color:#c81e1e;font-weight:700;}
-.sv-pop{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.22);padding:12px;width:300px;max-width:calc(100vw - 24px);font-size:13px;}
-.sv-pop .was{font-size:11.5px;color:#6a777c;margin-bottom:6px;word-break:break-word;}
-.sv-pop input{width:100%;box-sizing:border-box;font-size:15px;padding:8px 10px;border:1.5px solid #1769d0;border-radius:7px;}
-.sv-pop .row{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
+.sv-dd{position:relative;display:inline-flex;align-items:center;gap:4px;border-bottom:1px dashed #9fb3b8;cursor:pointer;max-width:100%;}
+.sv-dd select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;}
+.sv-dd .sv-dd-arrow{font-size:10px;color:#6a777c;}
+.sv-dd.chg .sv-dd-txt{color:#c81e1e;font-weight:800;}
+@media print{.sv-dd{border-bottom:0;}}
+.pdfcap .sv-dd{border-bottom:0;} .pdfcap .sv-dd-arrow,.pdfcap .no-print{display:none !important;}
 .sv-corrtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
 .sv-corrtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#6a777c;border-bottom:1.5px solid var(--line);padding:5px 6px;}
 .sv-corrtbl td{border-bottom:1px solid #eef1f2;padding:5px 6px;vertical-align:top;}
@@ -514,7 +519,6 @@ body.print-internal .internal-notes-only{display:block !important;}
   <!-- Draw toolbar — sticky below topnav, only visible on Survey doc -->
   <div class="drawbar no-print" id="drawBar" style="display:none">
     <button class="btn sm" id="drawToggle" onclick="toggleDraw()">✏️ Draw: Off</button>
-    <button class="btn sm" id="correctToggle" onclick="toggleCorrect()" title="Tap any printed text on the survey, then type the correct value">🔤 Correct: Off</button>
     <span style="font-size:11px;color:#8a969a;align-self:center">1 finger draws · 2 fingers scroll</span>
     <span class="muted" style="font-size:12px">Pen:</span>
     <span class="sw on" style="background:#e02424" onclick="setPen('#e02424',this)"></span>
@@ -524,7 +528,7 @@ body.print-internal .internal-notes-only{display:block !important;}
     <select id="penW" onchange="penWidth=+this.value"><option value="2">Thin</option><option value="3" selected>Medium</option><option value="5">Thick</option></select>
     <button class="btn sm" onclick="undoDraw()">↶ Undo</button>
     <button class="btn sm danger" onclick="clearDraw()">Clear</button>
-    <span id="svSaveNote" style="font-size:11px;color:#8a969a;margin-left:auto">Drawings and corrections save as you go and print with the survey.</span>
+    <span id="svSaveNote" style="font-size:11px;color:#8a969a;margin-left:auto">Tap a finish or site answer to change it. Drawings and changes save as you go.</span>
   </div>
 
   <div class="main">
@@ -608,7 +612,7 @@ body.print-internal .internal-notes-only{display:block !important;}
                 <div class="mount-chip" id="mchip_free" onclick="setMount('Free Standing')">🏛 Free Standing</div>
               </div>
             </div>
-            <button class="btn" style="margin-top:14px;width:100%" onclick="wizNext(1)">Next — Choose finish ›</button>
+            <button class="btn" id="wnext1" style="margin-top:14px;width:100%" onclick="wizNext(1)">Next — Choose finish ›</button><div class="wiz-miss" id="wmiss1"></div>
           </div>
         </div>
 
@@ -642,7 +646,7 @@ body.print-internal .internal-notes-only{display:block !important;}
               <select id="wiz_gutter" onchange="V('c_gutter',this.value);applyConfig();wizRefreshSummaries()"></select>
               <select id="wiz_post" onchange="V('c_post',this.value);applyConfig();wizRefreshSummaries()"></select>
             </div>
-            <button class="btn" style="margin-top:14px;width:100%" onclick="wizNext(2)">Next — Choose dimensions ›</button>
+            <button class="btn" id="wnext2" style="margin-top:14px;width:100%" onclick="wizNext(2)">Next — Choose dimensions ›</button><div class="wiz-miss" id="wmiss2"></div>
           </div>
         </div>
 
@@ -666,7 +670,7 @@ body.print-internal .internal-notes-only{display:block !important;}
               <div class="field" id="bwiz_w_wrap" style="display:none"><label>Bespoke width (mm)</label><input type="number" min="500" max="20000" step="1" placeholder="e.g. 4250" oninput="state.config.bespokeWidth=+this.value;V('c_bespoke_w',this.value);applyConfig();drawDimSvg();wizRefreshSummaries()"></div>
               <div class="field" id="bwiz_p_wrap" style="display:none"><label>Bespoke projection (mm)</label><input type="number" min="500" max="10000" step="1" placeholder="e.g. 3250" oninput="state.config.bespokeProj=+this.value;V('c_bespoke_p',this.value);applyConfig();drawDimSvg();wizRefreshSummaries()"></div>
             </div>
-            <button class="btn" style="margin-top:14px;width:100%" onclick="wizNext(3)">Next — Configure sides ›</button>
+            <button class="btn" id="wnext3" style="margin-top:14px;width:100%" onclick="wizNext(3)">Next — Configure sides ›</button><div class="wiz-miss" id="wmiss3"></div>
           </div>
         </div>
 
@@ -675,12 +679,12 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="wiz-hdr" onclick="wizToggle(4)">
             <div class="wiz-num idle" id="wnum4">4</div>
             <div class="wiz-title">Sides &amp; Infills</div>
-            <div class="wiz-summary" id="wsumm4">Optional side options</div>
+            <div class="wiz-summary" id="wsumm4">Choose each side (None is fine)</div>
             <span class="wiz-chevron" id="wchev4">&#8964;</span>
           </div>
           <div class="wiz-body" id="wbody4">
             <div class="grid g4" id="sidesWrap"></div>
-            <button class="btn" style="margin-top:14px;width:100%" onclick="showView('pricing')">Next — Pricing &amp; Fitting ›</button>
+            <button class="btn" id="wnext4" style="margin-top:14px;width:100%" onclick="wizNext(4)">Confirm sides — Pricing &amp; Fitting ›</button><div class="wiz-miss" id="wmiss4"></div>
           </div>
         </div>
 
@@ -699,6 +703,7 @@ body.print-internal .internal-notes-only{display:block !important;}
             <button class="btn primary" onclick="addFitting()">＋ Add fitting line</button>
           </div>
           <!-- Fitting table: unit prices and totals are admin-only -->
+          <div id="fitWarn" style="display:none;margin:0 0 10px;padding:9px 12px;border:1px solid #f0d6a8;background:#fff8ec;border-radius:8px;font-size:13px;color:#6b4400"></div>
           <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Fitting work</th><th class="r admin-only" style="width:110px">Unit price</th><th class="r" style="width:70px">Qty</th><th class="r admin-only" style="width:110px">Total</th><th style="width:30px"></th></tr></thead><tbody id="fitRows"></tbody></table></div>
           <div class="totbar big admin-only"><span>Fitting &amp; Survey total</span><span>£<span id="p_fittot">0.00</span></span></div>
         </div>
@@ -2142,6 +2147,11 @@ async function resumeSession(){
 /* Everything that follows a successful sign-in (fresh, or a resumed session). */
 async function afterLogin(u){
   currentUser=u;
+  /* Qualify is always on for anyone who can configure (Richard, 2026-10-12): the
+     per-user switch is gone. A saved permission list without it is corrected here
+     as well as on the server, so no route leads to the Configurator unqualified. */
+  if(Array.isArray(u.sections)&&u.sections.includes('build')&&!u.sections.includes('qualify'))
+    u.sections.splice(u.sections.indexOf('build'),0,'qualify');
   /* merge any admin-saved config from the server before rendering the UI */
   await loadAdminFromServer();
   /* Now that the session cookie exists, load the quote list. Without this the
@@ -2349,6 +2359,8 @@ function renderNextBtn(){
   if(dkNav)dkNav.classList.toggle('hidden',!can('decking')||deckingAnswer()==='No');
   NEXT_FLOW.forEach((view,idx)=>{
     if(!currentUser.sections.includes(view))return;
+    /* no Next out of the Configurator until it is complete (Draft quotes) */
+    if(view==='build'&&(!state.status||state.status==='Draft')&&!configComplete())return;
     /* Skip PAST any stage this user cannot reach rather than giving up: a user with
        Qualify switched off still needs a Customer → Configurator button, or the
        flow dead-ends on the customer page. */
@@ -2378,6 +2390,15 @@ function qualifyBlocksView(v){
   if(state.status&&state.status!=='Draft')return false;
   return !qualifyComplete();
 }
+/* Pricing & Fitting (and everything after it) waits for a complete configuration on
+   a Draft quote — no jumping to the price early. */
+function configBlocksView(v){
+  if(typeof can!=='function'||!currentUser||!can('build'))return false;
+  var at=NEXT_FLOW.indexOf(v), b=NEXT_FLOW.indexOf('build');
+  if(at<0||at<=b)return false;
+  if(state.status&&state.status!=='Draft')return false;
+  return !configComplete();
+}
 function showView(v,btn){
   if(!can(v))return;
   if(qualifyBlocksView(v)){
@@ -2385,6 +2406,9 @@ function showView(v,btn){
     if(fi>=0){qStep=fi;qStepFor=qualifyStepKey();}
     toast('Answer every Qualify question first — question '+(fi+1)+' of '+qualifyQuestions().length);
     v='qualify';btn=null;
+  }else if(configBlocksView(v)){
+    toast('Finish the Configurator first — step '+wizFirstIncomplete()+' of '+WIZ_STEPS);
+    v='build';btn=null;
   }
   renderNextBtn();
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
@@ -2402,7 +2426,7 @@ function showView(v,btn){
     if(bar)bar.style.display=(state.doc==='survey')?'flex':'none';
   }
   if(v==='qualify')renderQualify();
-  if(v==='build')renderModelGrid();
+  if(v==='build'){renderModelGrid();wizResume();}
   if(v==='quotes')renderQuotes();
   if(v==='pricing')renderPricing();
   if(v==='decking')renderDecking();
@@ -2612,7 +2636,7 @@ function qualifySurveyRows(){
         if(t)v+=' — '+t;
       }
     }
-    out.push({label:q.text,value:v||SITE_DASH});
+    out.push({label:q.text,value:v||SITE_DASH,qid:q.id});
   });
   return out;
 }
@@ -2687,19 +2711,59 @@ function initSiteFields(){
   V('c_roofNotch',cf.roofNotch||'No');
   syncSiteReveals();
 }
-function wizToggle(n){
-  for(let i=1;i<=WIZ_STEPS;i++){
-    const body=document.getElementById('wbody'+i);
-    const chev=document.getElementById('wchev'+i);
-    const step=document.getElementById('wstep'+i);
-    if(!body)continue;
-    if(i===n){
-      const open=body.classList.contains('open');
-      body.classList.toggle('open',!open);
-      chev.classList.toggle('open',!open);
-      step.classList.toggle('wiz-active',!open);
-    }
+/* ═══ GUIDED CONFIGURATOR (Richard, 2026-10-12) ═══════════════════════════════
+   One step open at a time; each must be complete before the next opens, and
+   Pricing & Fitting waits for all four on a Draft quote (stageGate). Choosing a
+   model fills colour, roof and size with the first option behind the scenes, so
+   "complete" means the rep actually PICKED each one: picks are recorded in
+   config.wizPicked. A field with a single option counts as picked (it is shown as
+   "Auto-selected"). A quote saved before this existed has no wizPicked and counts
+   as complete as long as it has a model and size — until its model is changed. */
+function wizPicks(){
+  const cf=state.config;
+  if(!cf.wizPicked){
+    if(state.id&&cf.model&&cf.width&&cf.proj)return {legacy:true};
+    cf.wizPicked={};
   }
+  return cf.wizPicked;
+}
+function wizMark(k){const p=wizPicks();if(!p.legacy)p[k]=true;}
+function wizResetPicks(){state.config.wizPicked={};}
+function wizStepMissing(n){
+  const cf=state.config,m=MODELS[cf.model],p=wizPicks(),L=!!p.legacy;
+  const got=(k,arr)=>L||p[k]||(Array.isArray(arr)&&arr.length===1);
+  if(n===1)return (cf.model&&m)?'':'Choose a model to continue';
+  if(!m)return 'Choose a model first';
+  if(n===2){
+    const need=[];
+    if(!cf.colour||!got('colour',m.colours))need.push('a colour');
+    if(!cf.roof||!got('roof',m.roofs))need.push('a roof');
+    if(Array.isArray(m.gutters)&&m.gutters.length&&(!cf.gutter||!got('gutter',m.gutters)))need.push('a gutter');
+    if(Array.isArray(m.posts)&&m.posts.length&&(!cf.post||!got('post',m.posts)))need.push('a post');
+    return need.length?('Choose '+need.join(', ').replace(/, ([^,]*)$/,' and $1')+' to continue'):'';
+  }
+  if(n===3){
+    if(!(cf.width>0)||!(L||p.width))return 'Choose a width to continue';
+    if(!(cf.proj>0)||!(L||p.proj))return 'Choose a projection to continue';
+    return '';
+  }
+  if(n===4)return (L||p.sides)?'':'Check each side, then confirm';
+  return '';
+}
+function wizFirstIncomplete(){for(let n=1;n<=WIZ_STEPS;n++)if(wizStepMissing(n))return n;return 0;}
+function configComplete(){return wizFirstIncomplete()===0;}
+/* Open the first step that still needs something (or keep the open one if it is reachable). */
+function wizResume(){
+  const fi=wizFirstIncomplete();
+  let open=0;for(let i=1;i<=WIZ_STEPS;i++){const b=document.getElementById('wbody'+i);if(b&&b.classList.contains('open'))open=i;}
+  if(fi&&(!open||open>fi))wizOpen(fi);
+  else if(!open)wizOpen(fi||WIZ_STEPS);
+  wizRefreshSummaries();
+}
+function wizToggle(n){
+  const fi=wizFirstIncomplete();
+  if(fi&&n>fi){toast('Finish step '+fi+' first');return;}
+  wizOpen(n);wizRefreshSummaries();
 }
 function wizOpen(n){
   for(let i=1;i<=WIZ_STEPS;i++){
@@ -2714,13 +2778,12 @@ function wizOpen(n){
   }
 }
 function wizNext(n){
-  /* validate current step before advancing */
-  const cf=state.config;
-  if(n===1&&!cf.model){wizError(1,'Please select a model first.');return;}
-  if(n===2&&(!cf.colour||!cf.roof)){wizError(2,'Please select a colour and glazing option.');return;}
-  if(n===3&&(!cf.width||!cf.proj)){wizError(3,'Please select width and projection.');return;}
+  if(n===4&&!wizStepMissing(3))wizMark('sides');
+  const miss=wizStepMissing(n);
+  if(miss){wizError(n,miss);return;}
   wizClearError(n);
-  wizOpen(n+1);
+  if(n>=WIZ_STEPS){wizRefreshSummaries();showView('pricing');window.scrollTo(0,0);return;}
+  wizOpen(n+1);wizRefreshSummaries();
 }
 function wizError(n,msg){
   let el=document.getElementById('wiz_err_'+n);
@@ -3369,11 +3432,11 @@ function setMount(v){
   const isWall=!isFree;
   if(v==='Free Standing'&&isWall){/* switching to free — pick first free model */
     const firstFree=Object.keys(MODELS).find(m=>ALWAYS_FREE.includes(m));
-    if(firstFree){V('c_model',firstFree);state.config.model=firstFree;}
+    if(firstFree){V('c_model',firstFree);state.config.model=firstFree;wizResetPicks();}
   }
   if(v==='Wall Mounted'&&isFree){/* switching to wall — pick first wall model */
     const firstWall=Object.keys(MODELS).find(m=>!ALWAYS_FREE.includes(m));
-    if(firstWall){V('c_model',firstWall);state.config.model=firstWall;}
+    if(firstWall){V('c_model',firstWall);state.config.model=firstWall;wizResetPicks();}
   }
   V('c_mount',v);
   state.config.mount=v;
@@ -3390,6 +3453,7 @@ function pickModel(model){
     toast('“'+displayName(model)+'” is ruled out by your answer to: '+(f.reasons[model]||'the qualification questions')+'. Change your answers on the Qualify stage to enable it.');
     return;
   }
+  if(model!==state.config.model)wizResetPicks(); /* new model: its options start over */
   V('c_model',model);
   onModel(false); /* sets state.config.mount correctly via ALWAYS_FREE */
   renderModelGrid();
@@ -3424,7 +3488,7 @@ function renderColourChips(){
     </div>`;
   }).join('');
 }
-function pickColour(c){state.config.colour=c;V('c_colour',c);applyConfig();renderColourChips();wizRefreshSummaries();}
+function pickColour(c){wizMark('colour');state.config.colour=c;V('c_colour',c);applyConfig();renderColourChips();wizRefreshSummaries();}
 function renderRoofChips(){
   const g=document.getElementById('roofChips');if(!g)return;
   const m=MODELS[state.config.model];if(!m)return;
@@ -3446,7 +3510,7 @@ function renderRoofChips(){
     </div>`;
   }).join('');
 }
-function pickRoof(r){state.config.roof=r;V('c_roof',r);applyConfig();renderRoofChips();wizRefreshSummaries();}
+function pickRoof(r){wizMark('roof');state.config.roof=r;V('c_roof',r);applyConfig();renderRoofChips();wizRefreshSummaries();}
 function renderGutterChips(){
   const m=MODELS[state.config.model];if(!m)return;
   const wrap=document.getElementById('gutterChipWrap');if(!wrap)return;
@@ -3487,8 +3551,8 @@ function renderPostChips(){
     </div>`;
   }).join('');
 }
-function pickGutter(v){state.config.gutter=v;V('c_gutter',v);applyConfig();renderGutterChips();wizRefreshSummaries();}
-function pickPost(v){state.config.post=v;V('c_post',v);applyConfig();renderPostChips();wizRefreshSummaries();}
+function pickGutter(v){wizMark('gutter');state.config.gutter=v;V('c_gutter',v);applyConfig();renderGutterChips();wizRefreshSummaries();}
+function pickPost(v){wizMark('post');state.config.post=v;V('c_post',v);applyConfig();renderPostChips();wizRefreshSummaries();}
 function wireChipDelegate(wrapId,attr,pickFn){
   const wrap=document.getElementById(wrapId);if(!wrap)return;
   wrap.onclick=e=>{const chip=e.target.closest('['+attr+']');if(chip){pickFn(chip.getAttribute(attr));}};
@@ -3523,6 +3587,7 @@ function renderWizWidths(){
 }
 function onWizWidth(){
   const v=document.getElementById('wiz_width').value;
+  wizMark('width');{const p=wizPicks();if(!p.legacy)delete p.proj;} /* a new width resets its projections */
   V('c_width',v);
   document.getElementById('bwiz_w_wrap').style.display=(v==='Bespoke')?'':'none';
   if(v!=='Bespoke'){
@@ -3537,6 +3602,7 @@ function onWizWidth(){
 }
 function onWizProj(){
   const v=document.getElementById('wiz_proj').value;
+  wizMark('proj');
   V('c_proj',v);
   document.getElementById('bwiz_p_wrap').style.display=(v==='Bespoke')?'':'none';
   if(v!=='Bespoke')state.config.bespokeProj=null;
@@ -3592,12 +3658,23 @@ function wizRefreshSummaries(){
   const W=cf.bespoke&&cf.bespokeWidth?cf.bespokeWidth:cf.width;
   const P=cf.bespoke&&cf.bespokeProj?cf.bespokeProj:cf.proj;
   if(T3)T3.textContent=(W||'—')+' × '+(P||'—')+' mm'+(cf.bespoke?' ★':'');
-  /* step number badges */
+  /* step badges, locks and Next buttons — a step is reachable once every step
+     before it is complete */
+  const fi=wizFirstIncomplete();
   for(let i=1;i<=WIZ_STEPS;i++){
     const num=document.getElementById('wnum'+i);if(!num)continue;
     const isOpen=document.getElementById('wbody'+i)?.classList.contains('open');
-    num.className='wiz-num '+(isOpen?'active':'done');
+    const miss=wizStepMissing(i), locked=!!(fi&&i>fi);
+    num.className='wiz-num '+(isOpen?'active':(!miss?'done':'idle'));
+    const st=document.getElementById('wstep'+i);if(st)st.classList.toggle('wiz-locked',locked);
+    const nb=document.getElementById('wnext'+i);
+    /* step 4's button IS the confirmation, so it only waits for the earlier steps */
+    if(nb)nb.disabled=(i===4)?!!(fi&&fi<4):!!miss;
+    const hint=document.getElementById('wmiss'+i);
+    if(hint)hint.textContent=(i===4)?((fi&&fi<4)?'Finish step '+fi+' first':''):miss;
+    if(!miss)wizClearError(i);
   }
+  if(typeof renderNextBtn==='function'&&currentUser)renderNextBtn();
   /* sides summary */
   if(T4){
     const mount=cf.mount||'Wall Mounted';
@@ -3810,21 +3887,54 @@ function pushOrIncrement(arr,item){
    applyConfig). That path MUST be idempotent: the old code bumped qty on every
    matching line, so simply opening a saved quote four times charged the customer
    four times the install. */
+/* ═══ FITTING FROM THE CONFIGURATION (fixed 2026-10-12) ══════════════════════════
+   The fitting list now MIRRORS the configuration. It used to only ever add lines,
+   so every earlier choice stayed: 4m clear → glass → 5m left Veranda 4m, Veranda 4m
+   Glass Roof AND Veranda 5m Glass Roof on the quote. Lines the rules produce are
+   "automatic": they are re-made from the current configuration on every change,
+   and removed when no longer chosen. Lines added from the fitting list or typed in
+   are the rep's own (manual:true) and are never touched. A quote that has been
+   sent or signed is never re-synced, so a contract's fitting does not move.
+
+   Base install:
+   - GLASS ROOF, any model (wall or free standing, e.g. Mizen Glass): the "Veranda
+     Xm - Glass Roof" line for its width (Richard, 2026-10-12). Free-standing glass
+     used to fall to the pergola table and, for most sizes, got no line at all.
+   - other free-standing / pergola: the smallest "Freestanding Pergola A x B" that
+     covers both dimensions, either way round, after the 60 mm set-size tolerance.
+     It used to round each size to a whole metre and need an exact name, so 3.5 m
+     became 4 m and most sizes (4060 × 3000, 5060 × 3500) matched nothing.
+   - other wall-mounted: "Veranda Xm" by width, as before.
+   If nothing in the fitting list fits, Pricing says so instead of staying silent. */
+const AUTO_FIT_RE=/^TL - (Veranda \d+m( - Glass Roof)?|Freestanding Pergola [\d.]+m x [\d.]+m|Aura Glass Doors - \d+ Track|Aura Doors Heritage Kit \(Per Glass Unit\)|Keyframe \((Poly|Glass|Aluminium)\)|Full Aluminium Sidewall|Half Alu \/ Half Glass Sidewall)$/;
+function isAutoFitLine(f){return !!f&&!f.manual&&(f.auto===true||AUTO_FIT_RE.test(String(f.desc||'')));}
+function isGlassRoof(cf){const r=String((cf&&cf.roof)||'');return /glass/i.test(r)&&!/prepared|slat/i.test(r);}
+function pergolaFit(cf){
+  const tol=WIDTH_TOLERANCE/1000;
+  const a=Math.max(0,(+cf.width||0)/1000-tol), b=Math.max(0,(+cf.proj||0)/1000-tol);
+  const lo=Math.min(a,b), hi=Math.max(a,b);
+  let best=null;
+  admin.fitting.forEach(f=>{
+    const m=String(f.desc||'').match(/^TL - Freestanding Pergola ([\d.]+)m x ([\d.]+)m$/);if(!m)return;
+    const x=Math.min(+m[1],+m[2]), y=Math.max(+m[1],+m[2]);
+    if(x+1e-9<lo||y+1e-9<hi)return;
+    if(!best||x*y<best.area||(x*y===best.area&&y<best.y))best={f,area:x*y,y};
+  });
+  return best&&best.f;
+}
+let _fitWarn='';
 function autoFitting(manual){
   if(!state.config.model)return;
   const cf=state.config;
   const suggested=[];
-  const proj=cf.proj||0;
-  const isGlass=cf.roof&&cf.roof.toLowerCase().includes('glass');
+  _fitWarn='';
+  const isGlass=isGlassRoof(cf);
   const isPergola=['Verdeca','Pinela','Pinela Glass','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus'].includes(cf.model);
   /* Veranda / Pergola base install */
-  if(isPergola||cf.mount==='Free Standing'){
-    /* Free Standing / Pergola — use closest freestanding match by size */
-    const wm=Math.round(cf.width/1000);
-    const pm=Math.round(proj/1000);
-    const key=`TL - Freestanding Pergola ${wm}m x ${pm}m`;
-    const f=admin.fitting.find(x=>x.desc===key);
+  if(!isGlass&&(isPergola||cf.mount==='Free Standing')){
+    const f=pergolaFit(cf);
     if(f)suggested.push({desc:f.desc,price:payPrice(f),qty:1});
+    else _fitWarn=`No free-standing fitting line covers ${cf.width} × ${cf.proj} mm — add the installation from the fitting list.`;
   } else {
     /* Veranda — band by width. Set sizes carry up to 60mm of manufacturing
        tolerance (4060 = the 4m product, 5060 = the 5m product), so anything
@@ -3838,6 +3948,7 @@ function autoFitting(manual){
     splitBands(metres).forEach(band=>{
       const f=admin.fitting.find(x=>x.desc===`TL - Veranda ${band}m${glassStr}`);
       if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
+      else _fitWarn=`No "TL - Veranda ${band}m${glassStr}" line in the fitting list — add the installation by hand, or add that line in Admin.`;
     });
   }
   /* Sides */
@@ -3886,35 +3997,34 @@ function autoFitting(manual){
     if(!dkRemoved)dkAdded=1;
   }
 
-  let added=dkAdded,bumped=0;
-  if(manual){
-    /* Explicit press: an existing line gains qty — the rep is stacking a second
-       side, a second set of doors, and so on. */
-    suggested.forEach(s=>{
-      const ex=state.fitting.find(f=>f.desc===s.desc);
-      if(ex){ex.qty=(ex.qty||1)+1;bumped++;}
-      else{state.fitting.push(s);added++;}
-    });
-  }else{
-    /* Background sync: add only what is genuinely missing and never touch an
-       existing line's qty. Suggested quantities are summed per description first
-       (splitBands can suggest the same band twice, e.g. 7m = 3m + 4m), so a line
-       that has to be created starts at the right qty rather than at 1. */
-    const target={};
-    suggested.forEach(s=>{target[s.desc]=(target[s.desc]||0)+(s.qty||1);});
-    Object.keys(target).forEach(desc=>{
-      if(state.fitting.some(f=>f.desc===desc))return;
-      const s=suggested.find(x=>x.desc===desc);
-      state.fitting.push({desc,price:s.price,qty:target[desc]});
-      added++;
-    });
-  }
-  if(added||bumped||dkRemoved)renderPricing();
+  /* Mirror the configuration: automatic lines are made to match what the rules
+     suggest now (quantities summed per line — 7m = 3m + 4m — and stale lines
+     dropped). The rep's own lines are left exactly as they are. */
+  const target={};
+  suggested.forEach(x=>{target[x.desc]=(target[x.desc]||0)+(x.qty||1);});
+  let added=dkAdded,bumped=0,removed=0;
+  const kept=[];
+  state.fitting.forEach(f=>{
+    if(!isAutoFitLine(f)){kept.push(f);return;}
+    if(!(f.desc in target)){removed++;return;}          /* no longer chosen */
+    if(kept.some(k=>k.desc===f.desc&&isAutoFitLine(k))){removed++;return;} /* duplicate */
+    const sg=suggested.find(x=>x.desc===f.desc);
+    if((f.qty||1)!==target[f.desc]||f.price!==sg.price)bumped++;
+    f.qty=target[f.desc];f.price=sg.price;f.auto=true;kept.push(f);
+  });
+  Object.keys(target).forEach(desc=>{
+    if(kept.some(k=>k.desc===desc&&isAutoFitLine(k)))return;
+    const sg=suggested.find(x=>x.desc===desc);
+    kept.push({desc,price:sg.price,qty:target[desc],auto:true});added++;
+  });
+  state.fitting=kept;
+  if(added||bumped||removed||dkRemoved)renderPricing();
+  renderFitWarn();
   /* Only the button talks back. The auto path re-writes the decking line on every
      run by design, so toasting here would pop "Fitting costs updated" every time
      a quote is opened. */
-  if(manual&&(added||bumped||dkRemoved)){
-    toast('Fitting costs updated ('+added+' line'+(added===1?'':'s')+' added'+(bumped?', '+bumped+' qty increased':'')+')');
+  if(manual&&(added||bumped||removed||dkRemoved)){
+    toast('Fitting matched to the configuration ('+added+' added, '+removed+' removed'+(bumped?', '+bumped+' changed':'')+')');
   }
 }
 function setDoorKF(s,f,v){const d=state.config.doors[s]||defaultDoor();if(!d.keyframe)d.keyframe={req:false,type:"Aluminium"};d.keyframe[f]=v;state.config.doors[s]=d;renderSides();applyConfig();}
@@ -3941,8 +4051,9 @@ function applyConfig(){
   T('c_sides_cost',sidesNett?('£'+sidesNett.toLocaleString('en-GB',{minimumFractionDigits:2})+' nett'):'£0.00');
   T('c_total_cost',totalNett?('£'+totalNett.toLocaleString('en-GB',{minimumFractionDigits:2})+' nett'):'—');
   recalc();
-  /* Auto-populate fitting lines when config changes */
-  if(state.config.model)autoFitting();
+  /* Fitting follows the configuration — Draft quotes only, so a sent or signed
+     contract's fitting never moves when it is opened */
+  if(state.config.model&&(!state.status||state.status==='Draft'))autoFitting();
   scheduleAutoSave();
 }
 
@@ -3955,7 +4066,7 @@ function onPayChange(){state.job.pay=val('p_pay');refreshPickers();
   state.fitting.forEach(reprice);state.surveyLabour.forEach(reprice);
   renderPricing();renderSurvey();}
 function reprice(line){const f=admin.fitting.find(x=>x.desc===line.desc);if(f)line.price=payPrice(f);}
-function addFitting(){const f=admin.fitting[+val('p_fitpick')];if(!f)return;state.fitting.push({desc:f.desc,price:payPrice(f),qty:1});renderPricing();}
+function addFitting(){const f=admin.fitting[+val('p_fitpick')];if(!f)return;state.fitting.push({desc:f.desc,price:payPrice(f),qty:1,manual:true});renderPricing();}
 /* Pricing-view extras — materials feed surveyParts (materials cost), labour feeds state.fitting (install cost). Separate from on-site survey extras. */
 function addPricingMaterial(){
   const desc=(val('pr_mat_desc')||'').trim();const cost=+val('pr_mat_cost')||0;
@@ -3967,7 +4078,7 @@ function addPricingMaterial(){
 function addPricingLabour(){
   const desc=(val('pr_lab_desc')||'').trim();const cost=+val('pr_lab_cost')||0;
   if(!desc){toast('Enter a labour description');return;}
-  state.fitting.push({desc,price:cost,qty:1});
+  state.fitting.push({desc,price:cost,qty:1,manual:true});
   V('pr_lab_desc','');V('pr_lab_cost','');
   renderPricing();toast('Labour added');
 }
@@ -4128,7 +4239,9 @@ function rowsTable(tbody,list,priceKey,fn){
 }function editFit(i,f,v){if(f==='del')state.fitting.splice(i,1);else state.fitting[i][f]=(f==='desc')?v:(+v||0);renderPricing();}
 function editLab(i,f,v){if(f==='del')state.surveyLabour.splice(i,1);else state.surveyLabour[i][f]=(f==='desc')?v:(+v||0);renderSurvey();recalc();}
 function editPart(i,f,v){if(f==='del')state.surveyParts.splice(i,1);else state.surveyParts[i][f]=(f==='desc')?v:(+v||0);renderSurvey();recalc();}
+function renderFitWarn(){const el=document.getElementById('fitWarn');if(!el)return;el.style.display=_fitWarn?'':'none';el.textContent=_fitWarn?'\u26a0 '+_fitWarn:'';}
 function renderPricing(){
+  renderFitWarn();
   V('p_pay',state.job.pay);refreshPickers();V('p_deppct',admin.depPct);V('p_disc',state.pricing.discount);
   rowsTable(document.getElementById('fitRows'),state.fitting,'price','editFit');
   renderPricingExtras();
@@ -6329,7 +6442,9 @@ function renderUsers(){
   const w=document.getElementById('usersWrap');w.innerHTML='';
   admin.users.forEach((u,i)=>{
     const card=document.createElement('div');card.className='card';card.style.marginBottom='12px';
-    const secs=ALL_SECTIONS.map(s=>`<label><input type="checkbox" ${u.sections.includes(s)?'checked':''} onchange="togglePerm(${i},'sections','${s}',this.checked)">${s}</label>`).join('');
+    /* qualify cannot be switched off for anyone who can configure */
+    const secs=ALL_SECTIONS.map(s=>{const fixed=(s==='qualify'&&u.sections.includes('build'));
+      return `<label${fixed?' title="Always on for anyone who can configure"':''}><input type="checkbox" ${(u.sections.includes(s)||fixed)?'checked':''}${fixed?' disabled':''} onchange="togglePerm(${i},'sections','${s}',this.checked)">${s}</label>`;}).join('');
     const docs=ALL_DOCS.map(d=>`<label><input type="checkbox" ${u.docs.includes(d)?'checked':''} onchange="togglePerm(${i},'docs','${d}',this.checked)">${d}</label>`).join('');
     card.innerHTML=`<div class="grid g4">
       <div class="field"><label>Name</label><input value="${esc(u.name)}" oninput="admin.users[${i}].name=this.value"></div>
@@ -6533,7 +6648,9 @@ function setMapImg(cat,opt,input){
 }
 function togglePerm(i,kind,key,on){
   const arr=admin.users[i][kind];const ix=arr.indexOf(key);
+  if(kind==='sections'&&key==='qualify'&&!on&&arr.includes('build')){toast('Qualify is always on for anyone who can configure');renderAdmin();return;}
   if(on&&ix<0)arr.push(key);if(!on&&ix>=0)arr.splice(ix,1);
+  if(kind==='sections'&&key==='build'&&on&&!arr.includes('qualify'))arr.splice(arr.indexOf('build'),0,'qualify');
   /* Repaint immediately. Without this a tick only takes effect on the next
      login, because applyPerms is what hides nav buttons and nothing re-ran it. */
   if(currentUser&&admin.users[i]&&admin.users[i].u===currentUser.u){currentUser=admin.users[i];applyPerms();renderNextBtn();}
@@ -7331,92 +7448,101 @@ function scheduleSurveySave(){
     const n2=document.getElementById('svSaveNote');if(n2)n2.textContent='Survey mark-up saved '+t;
   },1500);
 }
-/* ── Corrections: tap printed text, type the right value. The page shows the
-   original struck through and the new value in red; a summary page lists every
-   change for the office. Survey record only — the job, price and contract are
-   never changed. ─────────────────────────────────────────────────────────── */
-let correctMode=false;
+/* ── Corrections ──────────────────────────────────────────────────────────────
+   The tap-anywhere Correct button was replaced on 2026-10-12 by dropdowns on
+   Confirmation of Finishes and Confirm on Site (Richard). Typed corrections already
+   saved on a job are still shown in place and listed on Survey Corrections; no new
+   ones can be made. Survey record only — the job, price and contract never change. */
 const _svOrigHtml=new WeakMap();
 const _svNorm=s=>String(s||'').replace(/\s+/g,' ').trim();
-function toggleCorrect(){
-  correctMode=!correctMode;
-  document.body.classList.toggle('correctmode',correctMode);
-  const b=document.getElementById('correctToggle');
-  if(b){b.textContent='\ud83d\udd24 Correct: '+(correctMode?'On':'Off');b.classList.toggle('primary',correctMode);}
-  if(correctMode&&drawMode)toggleDraw();
-  if(!correctMode)closeCorrPop();
-}
 function _ownText(n){return [...n.childNodes].some(c=>c.nodeType===3&&c.textContent.trim());}
 function _svPath(sh,el){const p=[];let n=el;while(n&&n!==sh){const par=n.parentElement;if(!par)return null;p.unshift([...par.children].indexOf(n));n=par;}return p.join('.');}
 function _svAt(sh,path){let n=sh;for(const i of String(path).split('.')){n=n&&n.children[+i];}return n||null;}
-function correctTarget(el){
-  const sh=el&&el.closest&&el.closest('#docwrap .sheet');
-  if(!sh||sh.classList.contains('sv-gen')||!el.closest('.pg'))return null;
-  /* svg: the elevation drawings' labels (W = 5060…) are SVG text, which HTML
-     markup would blank out — use the pen there. */
-  if(el.closest('.drawlayer,button,input,select,textarea,[contenteditable="true"],.ph,.ck,.tickwrap,img,svg,.no-print'))return null;
-  const corr=el.closest('.sv-corr');if(corr)return {sh,el:corr};
-  let n=el;
-  while(n&&n!==sh){if(_ownText(n))break;n=n.parentElement;}
-  if(!n||n===sh)return null;
-  if(n.querySelector('.sv-corr'))return {sh,el:n,blocked:true};
-  return {sh,el:n};
-}
-function _svList(key){if(!state.job.surveyEdits)state.job.surveyEdits={};if(!state.job.surveyEdits[key])state.job.surveyEdits[key]=[];return state.job.surveyEdits[key];}
 function _svPaint(el,c){
   if(!_svOrigHtml.has(el))_svOrigHtml.set(el,el.innerHTML);
   el.classList.add('sv-corr');
   el.innerHTML=`<s class="sv-old">${esc(c.orig)}</s>${c.val?` <span class="sv-new">${esc(c.val)}</span>`:''}`;
 }
-function _svUnpaint(el){if(_svOrigHtml.has(el)){el.innerHTML=_svOrigHtml.get(el);_svOrigHtml.delete(el);}el.classList.remove('sv-corr');}
-function closeCorrPop(){const p=document.getElementById('svPop');if(p)p.remove();}
-function openCorrPop(t){
-  closeCorrPop();
-  const pages=surveySheets();const pg=pages.find(x=>x.sh===t.sh);if(!pg)return;
-  const path=_svPath(t.sh,t.el);if(path==null)return;
-  const list=_svList(pg.key);const cur=list.find(c=>c.path===path);
-  const orig=cur?cur.orig:_svNorm(t.el.textContent);
-  if(!orig)return;
-  const pop=document.createElement('div');pop.id='svPop';pop.className='sv-pop no-print';
-  pop.innerHTML=`<div style="font-weight:700;margin-bottom:4px">Correct this</div>
-    <div class="was">Printed: <b>${esc(orig)}</b> \u00b7 ${esc(pg.key)}</div>
-    <input id="svPopIn" value="${esc(cur?cur.val:'')}" placeholder="Correct value (leave empty to strike out)">
-    <div class="row">${cur?'<button class="btn sm danger" id="svPopDel">Remove correction</button>':''}
-      <button class="btn sm" id="svPopCancel">Cancel</button><button class="btn primary sm" id="svPopSave">Save</button></div>`;
-  document.body.appendChild(pop);
-  const r=t.el.getBoundingClientRect();
-  const top=Math.min(window.innerHeight-pop.offsetHeight-12,r.bottom+8);
-  pop.style.top=Math.max(12,top)+'px';
-  pop.style.left=Math.max(12,Math.min(window.innerWidth-pop.offsetWidth-12,r.left))+'px';
-  const inp=document.getElementById('svPopIn');inp.focus();inp.select();
-  const save=()=>{
-    const val=_svNorm(inp.value);
-    if(cur){cur.val=val;cur.by=currentUser?currentUser.name:'';cur.at=new Date().toISOString();}
-    else list.push({path,orig,val,by:currentUser?currentUser.name:'',at:new Date().toISOString()});
-    _svPaint(t.el,cur||list[list.length-1]);
-    closeCorrPop();renderCorrSummary();scheduleSurveySave();
-    toast(val?'Correction saved':'Struck out');
-  };
-  document.getElementById('svPopSave').onclick=save;
-  document.getElementById('svPopCancel').onclick=closeCorrPop;
-  const del=document.getElementById('svPopDel');
-  if(del)del.onclick=()=>{list.splice(list.indexOf(cur),1);if(!list.length)delete state.job.surveyEdits[pg.key];
-    _svUnpaint(t.el);closeCorrPop();renderCorrSummary();scheduleSurveySave();toast('Correction removed');};
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape')closeCorrPop();});
-}
-document.addEventListener('click',e=>{
-  if(!correctMode||state.doc!=='survey')return;
-  if(e.target.closest&&e.target.closest('#svPop'))return;
-  const t=correctTarget(e.target);
-  if(!t){closeCorrPop();return;}
-  e.preventDefault();e.stopPropagation();
-  if(t.blocked){toast('Part of this is already corrected \u2014 tap the smaller parts separately');return;}
-  openCorrPop(t);
-},true);
 /* Re-apply saved corrections after every render. A correction is found by its
    place on the page; if that place no longer shows the printed text it was made
    on, the same text is looked for elsewhere on the page; failing that it is
    listed on the summary as "not found" rather than silently dropped. */
+/* ═══ SURVEY DROPDOWNS (Richard, 2026-10-12) ══════════════════════════════════════
+   On the survey, each Confirmation of Finishes value (model, size, finish, gutter,
+   post, glazing) and each Confirm on Site answer is a dropdown. A changed value turns
+   red and is listed on Survey Corrections; choosing the ordered value again clears
+   it. The text is what prints; an invisible select over it opens the list. Stored
+   in job.surveyFinish / job.surveySite — survey record only. */
+function svFinishVal(k){const e=(state.job.surveyFinish||{})[k];return e?e.val:state.config[k];}
+function svDD(kind,key,label,options,cur,orig){
+  const changed=String(cur)!==String(orig);
+  return `<span class="sv-dd${changed?' chg':''}"><span class="sv-dd-txt">${esc(label)}</span><span class="sv-dd-arrow no-print">\u25be</span>`
+    +`<select class="no-print" aria-label="Change" onchange="svSet('${kind}','${String(key).replace(/'/g,'')}',this.value)">`
+    +options.map(o=>`<option value="${esc(String(o.v))}"${String(o.v)===String(cur)?' selected':''}>${esc(o.label)}${String(o.v)===String(orig)?' (as ordered)':''}</option>`).join('')
+    +`</select></span>`;
+}
+/* An option list that always contains the ordered value and the current one. */
+function svOpts(list,orig,cur,lab){
+  const out=[];const seen={};
+  [orig,cur].concat(list||[]).forEach(v=>{if(v==null||v===''||seen[v])return;seen[v]=1;out.push({v,label:lab?lab(v):String(v)});});
+  return out;
+}
+function svSet(kind,key,v){
+  const by=currentUser?currentUser.name:'',at=new Date().toISOString();
+  if(kind==='finish'){
+    if(!state.job.surveyFinish)state.job.surveyFinish={};
+    const F=state.job.surveyFinish, orig=state.config[key];
+    const val=(key==='width'||key==='proj')?+v:v;
+    if(String(val)===String(orig))delete F[key];else F[key]={val,by,at};
+  }else{
+    if(!state.job.surveySite)state.job.surveySite={};
+    const S=state.job.surveySite, orig=qualifyPicks((state.qualify||{})[key])[0];
+    if(String(v)===String(orig))delete S[key];else S[key]={val:+v,by,at};
+  }
+  renderDocuments();scheduleSurveySave();
+}
+/* The finish rows the survey shows, as dropdowns. */
+function svFinishCell(key,cw){
+  const cf=state.config, mdl=svFinishVal('model'), M=MODELS[mdl]||{};
+  /* the colour word on model / gutter / post follows the surveyed finish */
+  if(svFinishVal('colour'))cw=cword(svFinishVal('colour'));
+  const cur=svFinishVal(key), orig=cf[key];
+  if(key==='model')return svDD('finish','model',displayName(cur)+' Veranda'+(cw?' '+cw:''),svOpts(Object.keys(MODELS),orig,cur,m=>displayName(m)),cur,orig);
+  if(key==='colour')return svDD('finish','colour',ralLabel(cur),svOpts(M.colours,orig,cur,ralLabel),cur,orig);
+  if(key==='gutter')return svDD('finish','gutter',displayName(mdl)+' '+cur+' Gutter '+cw,svOpts(M.gutters,orig,cur),cur,orig);
+  if(key==='post')return svDD('finish','post',cur+' '+cw,svOpts(M.posts,orig,cur),cur,orig);
+  if(key==='roof')return svDD('finish','roof',displayName(mdl)+' \u2014 '+cur,svOpts(M.roofs,orig,cur),cur,orig);
+  if(key==='dims'){
+    const w=svFinishVal('width'), p=svFinishVal('proj');
+    return svDD('finish','width',w+' mm',svOpts(M.widths,cf.width,w,v=>v+' mm'),w,cf.width)
+      +' \u00d7 '+svDD('finish','proj',p+' mm',svOpts(getProjs(mdl,w),cf.proj,p,v=>v+' mm'),p,cf.proj)
+      +(cf.bespoke?' \u00b7 Bespoke':'');
+  }
+  return '';
+}
+/* A Confirm on Site answer as a dropdown of its question's answers. */
+function svSiteCell(r){
+  const q=qualifyQuestions().find(x=>x.id===r.qid);
+  if(!q||q.type==='number'||q.multi||!Array.isArray(q.options)||!q.options.length)return `<b>${esc(r.value)}</b>`;
+  const orig=qualifyPicks((state.qualify||{})[q.id])[0];
+  const e=(state.job.surveySite||{})[q.id], cur=e?e.val:orig;
+  const label=e?(q.options[cur]&&q.options[cur].label||''):r.value;
+  const opts=q.options.map((o,i)=>({v:i,label:o.label}));
+  if(orig==null||orig==='')opts.unshift({v:'',label:'\u2014'});
+  return '<b>'+svDD('site',q.id,label,opts,cur==null?'':cur,orig==null?'':orig)+'</b>';
+}
+/* Dropdown changes as Survey Corrections rows. */
+function svChangeRows(){
+  const out=[], cf=state.config, F=state.job.surveyFinish||{}, S=state.job.surveySite||{};
+  const NAMES={model:'Veranda Model',width:'Width',proj:'Projection',colour:'Finish / RAL',gutter:'Gutter',post:'Post',roof:'Glazing'};
+  const fmt=(k,v)=>k==='model'?displayName(v):k==='colour'?ralLabel(v):(k==='width'||k==='proj')?v+' mm':String(v);
+  Object.keys(NAMES).forEach(k=>{const e=F[k];if(!e)return;
+    out.push({key:'Specification \u2014 '+NAMES[k],c:{orig:fmt(k,cf[k]),val:fmt(k,e.val),by:e.by,at:e.at}});});
+  qualifyQuestions().forEach(q=>{const e=S[q.id];if(!e)return;
+    const o=q.options&&q.options[qualifyPicks((state.qualify||{})[q.id])[0]], n=q.options&&q.options[e.val];
+    out.push({key:'Site & Install \u2014 '+q.text,c:{orig:o?o.label:'\u2014',val:n?n.label:'',by:e.by,at:e.at}});});
+  return out;
+}
 let _svOrphans=[];
 function applySurveyEdits(){
   document.querySelectorAll('#docwrap .sv-gen').forEach(n=>n.remove());
@@ -7446,6 +7572,7 @@ function renderCorrSummary(){
   const rows=[];
   surveySheets().forEach(({key})=>(E[key]||[]).forEach(c=>{if(!_svOrphans.some(o=>o.c===c))rows.push({key,c,lost:false});}));
   _svOrphans.forEach(o=>rows.push({key:o.key,c:o.c,lost:true}));
+  rows.unshift(...svChangeRows().map(r=>({key:r.key,c:r.c,lost:false}))); /* in page order, before typed ones */
   if(!rows.length)return;
   const pages=surveySheets();if(!pages.length)return;
   const ref=pages[0].sh;
@@ -7488,7 +7615,7 @@ function renderCorrSummary(){
   });
 }
 const undoStacks={};
-function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}if(drawMode&&correctMode)toggleCorrect();}
+function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}}
 function setPen(c,el){penColour=c;document.querySelectorAll('.drawbar .sw').forEach(s=>s.classList.remove('on'));el.classList.add('on');if(!drawMode)toggleDraw();}
 function setupDraw(){
   const bar=document.getElementById('drawBar');
@@ -7626,7 +7753,6 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   /* draw toolbar — always visible on survey, hidden otherwise */
   const bar=document.getElementById('drawBar');
   if(bar)bar.style.display=(d==='survey')?'flex':'none';
-  if(d!=='survey'&&correctMode)toggleCorrect();
   if(d!=='survey'&&drawMode){drawMode=false;document.body.classList.remove('drawmode');const bt=document.getElementById('drawToggle');if(bt){bt.textContent='✏️ Draw: Off';bt.classList.remove('primary');}}
   updateSentButtons();
   renderDocuments();
@@ -7941,12 +8067,12 @@ function renderDocuments(){
       </div>`}
       <div class="sh">Confirmation of Finishes</div>
       <table class="mt tall${state.doc==='survey'?' conf-survey':''}"><thead><tr><th>Item</th><th>Detail</th><th class="c" style="width:${state.doc==='survey'?'80px':'120px'}">Image</th><th class="c tickwrap" style="width:90px">Confirmed</th></tr></thead><tbody>
-        ${state.doc==='survey'?confirmRow('Veranda Model',`${displayName(cf.model)} Veranda${cw?' '+cw:''}`,docImg('model',cf.model,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
-        ${state.doc==='survey'?confirmRow('Dimensions (W×P)',`${cf.width} × ${cf.proj} mm${cf.bespoke?' · Bespoke':''}`,`<div style="font-size:11px;font-weight:700;color:var(--brand-d);text-align:center;line-height:1.3">${esc(displayName(cf.model))}</div>`,false):''}
-        ${confirmRow('Finish / RAL',ralLabel(cf.colour),docImg('finish',cf.colour,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto',RAL_HEX[cf.colour]),true)}
-        ${confirmRow('Gutter',displayName(cf.model)+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
-        ${confirmRow('Post',cf.post+' '+cw,docImg('postStyle',cf.post,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
-        ${confirmRow('Glazing',glaze,docImg('roof',cf.roof,'GLAZING',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false)}
+        ${state.doc==='survey'?confirmRow('Veranda Model',svFinishCell('model',cw),docImg('model',cf.model,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false):''}
+        ${state.doc==='survey'?confirmRow('Dimensions (W×P)',svFinishCell('dims',cw),`<div style="font-size:11px;font-weight:700;color:var(--brand-d);text-align:center;line-height:1.3">${esc(displayName(cf.model))}</div>`,false):''}
+        ${confirmRow('Finish / RAL',state.doc==='survey'?svFinishCell('colour',cw):ralLabel(cf.colour),docImg('finish',cf.colour,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto',RAL_HEX[cf.colour]),true)}
+        ${confirmRow('Gutter',state.doc==='survey'?svFinishCell('gutter',cw):displayName(cf.model)+' '+cf.gutter+' Gutter '+cw,docImg('gutterStyle',cf.gutter,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
+        ${confirmRow('Post',state.doc==='survey'?svFinishCell('post',cw):cf.post+' '+cw,docImg('postStyle',cf.post,'',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),true)}
+        ${confirmRow('Glazing',state.doc==='survey'?svFinishCell('roof',cw):glaze,docImg('roof',cf.roof,'GLAZING',CONF_IMG_W,CONF_IMG_H,'margin:0 auto;object-fit:contain;background:#f6f7f8'),false)}
       </tbody></table>
     </div></div>${pfoot()}
   </section>
@@ -7974,7 +8100,7 @@ function renderDocuments(){
         <th style="width:${state.doc==='survey'?'30%':'55%'}">Answer</th>
         ${state.doc==='survey'?`<th>Notes / actual</th><th class="c tickwrap" style="width:72px">Confirmed</th>`:''}
       </tr></thead><tbody>
-        ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td><b>${esc(r.value)}</b></td>${state.doc==='survey'?`<td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td>`:''}</tr>`).join('')}
+        ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td>${state.doc==='survey'?svSiteCell(r):`<b>${esc(r.value)}</b>`}</td>${state.doc==='survey'?`<td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td>`:''}</tr>`).join('')}
       </tbody></table>
 `:''}
       <!-- SITE PHOTOS — always rendered, and OUTSIDE the answers conditional above: the general
@@ -8668,6 +8794,9 @@ async function captureSheetForPDF(sh){
   if(pg){ pg.style.transform='none'; pg.style.transformOrigin='top left'; }
   /* Fix 2 — force A4 print dimensions */
   sh.style.width='794px'; sh.style.minHeight='1123px'; sh.style.maxHeight='1123px'; sh.style.overflow='hidden';
+  /* the PDF is drawn from the screen view, so screen-only marks (dropdown arrows
+     and underlines on the survey) are hidden for the capture too */
+  sh.classList.add('pdfcap');
   try{
     /* Measure signable cards in the SAME (forced, unscaled) coordinate system as the
        capture, so the invisible Signable overlay tags land exactly on the boxes. */
@@ -8691,6 +8820,7 @@ async function captureSheetForPDF(sh){
     });
     return {canvas,signableCards};
   }finally{
+    sh.classList.remove('pdfcap');
     sh.style.transform=prev.shTransform; sh.style.marginBottom=prev.shMargin;
     if(pg){ pg.style.transform=prev.pgTransform; pg.style.transformOrigin=prev.pgOrigin; }
     sh.style.width=prev.width; sh.style.minHeight=prev.minHeight; sh.style.maxHeight=prev.maxHeight; sh.style.overflow=prev.overflow;
