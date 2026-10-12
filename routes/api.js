@@ -369,6 +369,13 @@ function apiRouter(pool) {
             const match = savedUsers.find((su) => su && su.u === user.u);
             if (match) {
               if (Array.isArray(match.sections)) req.session.user.sections = match.sections;
+              // Qualify is always on for anyone who can configure (Richard,
+              // 2026-10-12): a saved list that dropped it is corrected here.
+              const secs = req.session.user.sections;
+              if (Array.isArray(secs) && secs.includes('build') && !secs.includes('qualify')) {
+                req.session.user.sections = secs.slice();
+                req.session.user.sections.splice(secs.indexOf('build'), 0, 'qualify');
+              }
               if (Array.isArray(match.docs)) req.session.user.docs = match.docs;
               if (typeof match.signedOnly === 'boolean') req.session.user.signedOnly = match.signedOnly;
             }
