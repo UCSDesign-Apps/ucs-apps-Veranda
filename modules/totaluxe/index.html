@@ -328,6 +328,18 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .drawbar{position:sticky;top:var(--topnav-h);z-index:35;display:flex;gap:8px;align-items:center;background:#fff;border-bottom:1px solid var(--line);padding:8px 24px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.07);}
 .drawbar .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #bbb;cursor:pointer;display:inline-block;}
 .drawbar .sw.on{box-shadow:0 0 0 2px var(--gold);}
+/* Survey corrections (2026-10): tap printed text, type the correct value. */
+body.correctmode #docwrap .sheet:not(.sv-gen) .pg *{cursor:text;}
+body.correctmode #docwrap .sheet:not(.sv-gen) .pg *:hover{outline:1px dashed #1769d0;outline-offset:1px;}
+.sv-old{text-decoration:line-through;color:#8a969a;font-weight:inherit;}
+.sv-new{color:#c81e1e;font-weight:700;}
+.sv-pop{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.22);padding:12px;width:300px;max-width:calc(100vw - 24px);font-size:13px;}
+.sv-pop .was{font-size:11.5px;color:#6a777c;margin-bottom:6px;word-break:break-word;}
+.sv-pop input{width:100%;box-sizing:border-box;font-size:15px;padding:8px 10px;border:1.5px solid #1769d0;border-radius:7px;}
+.sv-pop .row{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
+.sv-corrtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
+.sv-corrtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#6a777c;border-bottom:1.5px solid var(--line);padding:5px 6px;}
+.sv-corrtbl td{border-bottom:1px solid #eef1f2;padding:5px 6px;vertical-align:top;}
 .terms2 h4{margin:7px 0 2px;font-size:9px;color:var(--brand-d);break-after:avoid;}
 .terms2 p{margin:0 0 4px;break-inside:avoid;}
 .dl{display:grid;grid-template-columns:1fr 1fr;gap:0 30px;}
@@ -502,6 +514,7 @@ body.print-internal .internal-notes-only{display:block !important;}
   <!-- Draw toolbar — sticky below topnav, only visible on Survey doc -->
   <div class="drawbar no-print" id="drawBar" style="display:none">
     <button class="btn sm" id="drawToggle" onclick="toggleDraw()">✏️ Draw: Off</button>
+    <button class="btn sm" id="correctToggle" onclick="toggleCorrect()" title="Tap any printed text on the survey, then type the correct value">🔤 Correct: Off</button>
     <span style="font-size:11px;color:#8a969a;align-self:center">1 finger draws · 2 fingers scroll</span>
     <span class="muted" style="font-size:12px">Pen:</span>
     <span class="sw on" style="background:#e02424" onclick="setPen('#e02424',this)"></span>
@@ -511,7 +524,7 @@ body.print-internal .internal-notes-only{display:block !important;}
     <select id="penW" onchange="penWidth=+this.value"><option value="2">Thin</option><option value="3" selected>Medium</option><option value="5">Thick</option></select>
     <button class="btn sm" onclick="undoDraw()">↶ Undo</button>
     <button class="btn sm danger" onclick="clearDraw()">Clear</button>
-    <span style="font-size:11px;color:#8a969a;margin-left:auto">Annotations saved with quote &amp; printed.</span>
+    <span id="svSaveNote" style="font-size:11px;color:#8a969a;margin-left:auto">Drawings and corrections save as you go and print with the survey.</span>
   </div>
 
   <div class="main">
@@ -2867,7 +2880,9 @@ function toggleForceSection(key){
   }else{
     state.job[flag]=!state.job[flag];
     toast((key==='boxout'?'Box Out':'Notch Out')+' page '+(state.job[flag]?'added':'removed'));
-    if(typeof scheduleAutoSave==='function')scheduleAutoSave();
+    /* Survey save, not scheduleAutoSave: auto-save is off for surveyors, so the
+       page they added here was lost unless they pressed Survey Completed. */
+    if(typeof scheduleSurveySave==='function')scheduleSurveySave();
   }
   updateForceButtons();
   renderDocuments();
@@ -7136,18 +7151,207 @@ function _drawMove(e){if(!drawMode)return;if(_dpts.has(e.pointerId))_dpts.set(e.
   if(_dpts.size>=2&&_scroll){const dy=_scroll.my-_avg([..._dpts.values()].map(p=>p.y));if(_scroll.el===document.scrollingElement||_scroll.el===document.documentElement)window.scrollTo(0,_scroll.top+dy);else _scroll.el.scrollTop=_scroll.top+dy;e.preventDefault();return;}
   if(!drawing||!_activeCv)return;const p=_pos(_activeCv,e);_activeCtx.strokeStyle=penColour;_activeCtx.lineWidth=penWidth;_activeCtx.beginPath();_activeCtx.moveTo(_last.x,_last.y);_activeCtx.lineTo(p.x,p.y);_activeCtx.stroke();_last=p;e.preventDefault();}
 function _drawUp(e){if(e&&e.pointerId!=null)_dpts.delete(e.pointerId);if(_dpts.size<2)_scroll=null;if(drawing&&_activeCv&&_dpts.size===0){drawing=false;saveDraw(_activeIdx,_activeCv);_activeCv=null;}}
+/* ═══ SURVEY MARK-UP — page keys, corrections, saving (2026-10) ═══════════════
+   Drawings and corrections used to be filed by page POSITION (0, 1, 2…). Any page
+   added or removed afterwards — the Box Out page from the surveyor's button,
+   decking switched on — slid every later drawing onto the wrong page. Both are
+   now filed by page NAME, taken from the page header ("Specification",
+   "Terms & Conditions · 2 of 5"), which stays put when other pages come and go. */
+function surveyPageName(sh){
+  const m=sh.querySelector('.phead .meta');if(!m)return 'Page';
+  const last=m.innerText.trim().split('\n').pop();
+  const i=last.indexOf(' \u00b7 ');
+  return i<0?'Cover':last.slice(i+3).trim();
+}
+/* Visible, real survey pages with a unique key each (a repeated name gets #2, #3). */
+function surveySheets(){
+  const seen={};const out=[];
+  document.querySelectorAll('#docwrap .sheet').forEach(sh=>{
+    if(sh.classList.contains('sv-gen'))return;
+    if(sh.offsetParent===null||getComputedStyle(sh).display==='none')return;
+    const n=surveyPageName(sh);seen[n]=(seen[n]||0)+1;
+    out.push({sh,key:seen[n]>1?n+' #'+seen[n]:n});
+  });
+  return out;
+}
+/* Surveyors never auto-saved, so a whole survey's markings were lost if the tab
+   closed before Survey Completed. Survey mark-up now saves itself, for every
+   role, a moment after the last stroke or correction. */
+let _svSaveTimer=null;
+function scheduleSurveySave(){
+  if(!currentUser)return;
+  if(_svSaveTimer)clearTimeout(_svSaveTimer);
+  const n=document.getElementById('svSaveNote');if(n)n.textContent='Saving\u2026';
+  _svSaveTimer=setTimeout(()=>{
+    saveQuote(true);
+    const t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    const n2=document.getElementById('svSaveNote');if(n2)n2.textContent='Survey mark-up saved '+t;
+  },1500);
+}
+/* ── Corrections: tap printed text, type the right value. The page shows the
+   original struck through and the new value in red; a summary page lists every
+   change for the office. Survey record only — the job, price and contract are
+   never changed. ─────────────────────────────────────────────────────────── */
+let correctMode=false;
+const _svOrigHtml=new WeakMap();
+const _svNorm=s=>String(s||'').replace(/\s+/g,' ').trim();
+function toggleCorrect(){
+  correctMode=!correctMode;
+  document.body.classList.toggle('correctmode',correctMode);
+  const b=document.getElementById('correctToggle');
+  if(b){b.textContent='\ud83d\udd24 Correct: '+(correctMode?'On':'Off');b.classList.toggle('primary',correctMode);}
+  if(correctMode&&drawMode)toggleDraw();
+  if(!correctMode)closeCorrPop();
+}
+function _ownText(n){return [...n.childNodes].some(c=>c.nodeType===3&&c.textContent.trim());}
+function _svPath(sh,el){const p=[];let n=el;while(n&&n!==sh){const par=n.parentElement;if(!par)return null;p.unshift([...par.children].indexOf(n));n=par;}return p.join('.');}
+function _svAt(sh,path){let n=sh;for(const i of String(path).split('.')){n=n&&n.children[+i];}return n||null;}
+function correctTarget(el){
+  const sh=el&&el.closest&&el.closest('#docwrap .sheet');
+  if(!sh||sh.classList.contains('sv-gen')||!el.closest('.pg'))return null;
+  /* svg: the elevation drawings' labels (W = 5060…) are SVG text, which HTML
+     markup would blank out — use the pen there. */
+  if(el.closest('.drawlayer,button,input,select,textarea,[contenteditable="true"],.ph,.ck,.tickwrap,img,svg,.no-print'))return null;
+  const corr=el.closest('.sv-corr');if(corr)return {sh,el:corr};
+  let n=el;
+  while(n&&n!==sh){if(_ownText(n))break;n=n.parentElement;}
+  if(!n||n===sh)return null;
+  if(n.querySelector('.sv-corr'))return {sh,el:n,blocked:true};
+  return {sh,el:n};
+}
+function _svList(key){if(!state.job.surveyEdits)state.job.surveyEdits={};if(!state.job.surveyEdits[key])state.job.surveyEdits[key]=[];return state.job.surveyEdits[key];}
+function _svPaint(el,c){
+  if(!_svOrigHtml.has(el))_svOrigHtml.set(el,el.innerHTML);
+  el.classList.add('sv-corr');
+  el.innerHTML=`<s class="sv-old">${esc(c.orig)}</s>${c.val?` <span class="sv-new">${esc(c.val)}</span>`:''}`;
+}
+function _svUnpaint(el){if(_svOrigHtml.has(el)){el.innerHTML=_svOrigHtml.get(el);_svOrigHtml.delete(el);}el.classList.remove('sv-corr');}
+function closeCorrPop(){const p=document.getElementById('svPop');if(p)p.remove();}
+function openCorrPop(t){
+  closeCorrPop();
+  const pages=surveySheets();const pg=pages.find(x=>x.sh===t.sh);if(!pg)return;
+  const path=_svPath(t.sh,t.el);if(path==null)return;
+  const list=_svList(pg.key);const cur=list.find(c=>c.path===path);
+  const orig=cur?cur.orig:_svNorm(t.el.textContent);
+  if(!orig)return;
+  const pop=document.createElement('div');pop.id='svPop';pop.className='sv-pop no-print';
+  pop.innerHTML=`<div style="font-weight:700;margin-bottom:4px">Correct this</div>
+    <div class="was">Printed: <b>${esc(orig)}</b> \u00b7 ${esc(pg.key)}</div>
+    <input id="svPopIn" value="${esc(cur?cur.val:'')}" placeholder="Correct value (leave empty to strike out)">
+    <div class="row">${cur?'<button class="btn sm danger" id="svPopDel">Remove correction</button>':''}
+      <button class="btn sm" id="svPopCancel">Cancel</button><button class="btn primary sm" id="svPopSave">Save</button></div>`;
+  document.body.appendChild(pop);
+  const r=t.el.getBoundingClientRect();
+  const top=Math.min(window.innerHeight-pop.offsetHeight-12,r.bottom+8);
+  pop.style.top=Math.max(12,top)+'px';
+  pop.style.left=Math.max(12,Math.min(window.innerWidth-pop.offsetWidth-12,r.left))+'px';
+  const inp=document.getElementById('svPopIn');inp.focus();inp.select();
+  const save=()=>{
+    const val=_svNorm(inp.value);
+    if(cur){cur.val=val;cur.by=currentUser?currentUser.name:'';cur.at=new Date().toISOString();}
+    else list.push({path,orig,val,by:currentUser?currentUser.name:'',at:new Date().toISOString()});
+    _svPaint(t.el,cur||list[list.length-1]);
+    closeCorrPop();renderCorrSummary();scheduleSurveySave();
+    toast(val?'Correction saved':'Struck out');
+  };
+  document.getElementById('svPopSave').onclick=save;
+  document.getElementById('svPopCancel').onclick=closeCorrPop;
+  const del=document.getElementById('svPopDel');
+  if(del)del.onclick=()=>{list.splice(list.indexOf(cur),1);if(!list.length)delete state.job.surveyEdits[pg.key];
+    _svUnpaint(t.el);closeCorrPop();renderCorrSummary();scheduleSurveySave();toast('Correction removed');};
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape')closeCorrPop();});
+}
+document.addEventListener('click',e=>{
+  if(!correctMode||state.doc!=='survey')return;
+  if(e.target.closest&&e.target.closest('#svPop'))return;
+  const t=correctTarget(e.target);
+  if(!t){closeCorrPop();return;}
+  e.preventDefault();e.stopPropagation();
+  if(t.blocked){toast('Part of this is already corrected \u2014 tap the smaller parts separately');return;}
+  openCorrPop(t);
+},true);
+/* Re-apply saved corrections after every render. A correction is found by its
+   place on the page; if that place no longer shows the printed text it was made
+   on, the same text is looked for elsewhere on the page; failing that it is
+   listed on the summary as "not found" rather than silently dropped. */
+let _svOrphans=[];
+function applySurveyEdits(){
+  document.querySelectorAll('#docwrap .sv-gen').forEach(n=>n.remove());
+  _svOrphans=[];
+  if(state.doc!=='survey')return;
+  const E=state.job.surveyEdits||{};
+  const pages=surveySheets();
+  const todo=[];
+  pages.forEach(({sh,key})=>{
+    (E[key]||[]).forEach(c=>{
+      let el=_svAt(sh,c.path);
+      if(!el||_svNorm(el.textContent)!==c.orig){
+        el=[...sh.querySelectorAll('.pg *')].find(n=>_ownText(n)&&_svNorm(n.textContent)===c.orig&&!todo.some(t=>t[0]===n))||null;
+        if(el){const np=_svPath(sh,el);if(np)c.path=np;}
+      }
+      if(el)todo.push([el,c]);else _svOrphans.push({key,c});
+    });
+  });
+  Object.keys(E).forEach(k=>{if(!pages.some(p=>p.key===k))(E[k]||[]).forEach(c=>_svOrphans.push({key:k,c}));});
+  todo.forEach(([el,c])=>_svPaint(el,c));
+  renderCorrSummary();
+}
+function renderCorrSummary(){
+  document.querySelectorAll('#docwrap .sv-gen').forEach(n=>n.remove());
+  if(state.doc!=='survey')return;
+  const E=state.job.surveyEdits||{};
+  const rows=[];
+  surveySheets().forEach(({key})=>(E[key]||[]).forEach(c=>{if(!_svOrphans.some(o=>o.c===c))rows.push({key,c,lost:false});}));
+  _svOrphans.forEach(o=>rows.push({key:o.key,c:o.c,lost:true}));
+  if(!rows.length)return;
+  const pages=surveySheets();if(!pages.length)return;
+  const ref=pages[0].sh;
+  const sec=document.createElement('section');
+  /* A long list runs onto further pages (as the picking list does) instead of being cut off at the A4 edge. */
+  sec.className='sheet sv-gen'+(rows.length>22?' flow-page':'');
+  const ph=ref.querySelector('.phead');
+  if(ph){const c=ph.cloneNode(true);const m=c.querySelector('.meta');
+    if(m){const lines=m.innerHTML.split('<br>');const last=lines.pop().split(' \u00b7 ')[0];lines.push(last+' \u00b7 Survey Corrections');m.innerHTML=lines.join('<br>');}
+    sec.appendChild(c);}
+  const when=iso=>{try{return new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
+  const pg=document.createElement('div');pg.className='pg';
+  pg.innerHTML=`<div class="sh">Survey Corrections</div>
+    <p style="font-size:10px;color:#6a777c;margin:0 0 8px">Changes the surveyor made to the printed survey. These are a record for the office \u2014 the order and contract are not changed by them.</p>
+    <table class="sv-corrtbl"><thead><tr><th>Page</th><th>Printed</th><th>Corrected to</th><th>By</th><th>When</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${esc(r.key)}${r.lost?'<br><span style="color:#a51b1b;font-size:9px">not found on the page now</span>':''}</td>
+      <td><s class="sv-old">${esc(r.c.orig)}</s></td><td>${r.c.val?`<span class="sv-new">${esc(r.c.val)}</span>`:'<i style="color:#6a777c">struck out</i>'}</td>
+      <td>${esc(r.c.by||'')}</td><td>${esc(when(r.c.at))}</td></tr>`).join('')}
+    </tbody></table>`;
+  sec.appendChild(pg);
+  const ft=ref.querySelector('.pfoot');if(ft)sec.appendChild(ft.cloneNode(true));
+  const after=pages.find(p=>p.key==='Survey Notes')||pages[pages.length-1];
+  after.sh.insertAdjacentElement('afterend',sec);
+}
 const undoStacks={};
-function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}}
+function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}if(drawMode&&correctMode)toggleCorrect();}
 function setPen(c,el){penColour=c;document.querySelectorAll('.drawbar .sw').forEach(s=>s.classList.remove('on'));el.classList.add('on');if(!drawMode)toggleDraw();}
 function setupDraw(){
   const bar=document.getElementById('drawBar');
   if(state.doc!=='survey'){if(bar)bar.style.display='none';return;}
   if(bar)bar.style.display='flex'; /* flex keeps items aligned */
   if(!window._drawBound){window._drawBound=true;document.addEventListener('pointermove',_drawMove,{passive:false});document.addEventListener('pointerup',_drawUp);document.addEventListener('pointercancel',_drawUp);}
-  const sheets=document.querySelectorAll('#docwrap .sheet');
-  sheets.forEach((sh,idx)=>{
-    if(sh.offsetParent===null) return;            // skip hidden sheets
-    const cv=document.createElement('canvas');cv.className='drawlayer';
+  /* One-off: drawings saved before 2026-10 are keyed by page position (counted
+     over every sheet, hidden ones included). Move each to its page's name, using
+     the layout as it renders now — right as long as the pages are unchanged
+     since it was drawn. */
+  if(state.surveyDraw&&Object.keys(state.surveyDraw).some(k=>/^\d+$/.test(k))){
+    const all=[...document.querySelectorAll('#docwrap .sheet:not(.sv-gen)')];
+    const keyed=new Map(surveySheets().map(p=>[p.sh,p.key]));
+    Object.keys(state.surveyDraw).filter(k=>/^\d+$/.test(k)).forEach(k=>{
+      const sh=all[+k];const nk=sh&&keyed.get(sh);
+      if(nk&&!state.surveyDraw[nk])state.surveyDraw[nk]=state.surveyDraw[k];
+      delete state.surveyDraw[k];
+    });
+  }
+  window._svCanvas={};
+  surveySheets().forEach(({sh,key})=>{
+    const idx=key;
+    const cv=document.createElement('canvas');cv.className='drawlayer';window._svCanvas[key]=cv;
     const w=sh.clientWidth,hh=sh.clientHeight;cv.width=w;cv.height=hh;
     sh.appendChild(cv);
     const ctx=cv.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';
@@ -7161,9 +7365,9 @@ function setupDraw(){
   });
 }
 function pushUndo(idx,cv){lastDrawIdx=idx;if(!undoStacks[idx])undoStacks[idx]=[];undoStacks[idx].push(cv.toDataURL());if(undoStacks[idx].length>25)undoStacks[idx].shift();}
-function saveDraw(idx,cv){if(!state.surveyDraw)state.surveyDraw={};state.surveyDraw[idx]=cv.toDataURL();}
-function undoDraw(){const idx=lastDrawIdx;if(idx==null)return;const st=undoStacks[idx];if(!st||!st.length)return;const data=st.pop();const sh=document.querySelectorAll('#docwrap .sheet')[idx];const cv=sh&&sh.querySelector('.drawlayer');if(!cv)return;const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);const im=new Image();im.onload=()=>{ctx.drawImage(im,0,0,cv.width,cv.height);saveDraw(idx,cv);};im.src=data;}
-function clearDraw(){if(!confirm('Clear all drawing on the survey pages?'))return;document.querySelectorAll('#docwrap .drawlayer').forEach(cv=>{cv.getContext('2d').clearRect(0,0,cv.width,cv.height);});state.surveyDraw={};Object.keys(undoStacks).forEach(k=>delete undoStacks[k]);}
+function saveDraw(idx,cv){if(!state.surveyDraw)state.surveyDraw={};state.surveyDraw[idx]=cv.toDataURL();scheduleSurveySave();}
+function undoDraw(){const idx=lastDrawIdx;if(idx==null)return;const st=undoStacks[idx];if(!st||!st.length)return;const data=st.pop();const cv=window._svCanvas&&window._svCanvas[idx];if(!cv)return;const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);const im=new Image();im.onload=()=>{ctx.drawImage(im,0,0,cv.width,cv.height);saveDraw(idx,cv);};im.src=data;}
+function clearDraw(){if(!confirm('Clear all drawing on the survey pages?'))return;document.querySelectorAll('#docwrap .drawlayer').forEach(cv=>{cv.getContext('2d').clearRect(0,0,cv.width,cv.height);});state.surveyDraw={};Object.keys(undoStacks).forEach(k=>delete undoStacks[k]);scheduleSurveySave();}
 
 const COMP_TYPES=['Polycarb Sheet','Posts','Wall Profile','Gutter Profile','Gutter Cover','Side Beams','In Between Beam','Side Gutter Cover','Wall Plate Cover','Downpipe','Leaf Catcher','90\u00b0 Gutter Bend','Sealant','Screws \u2014 4.2 x 19','Screws \u2014 4.2 x 40','Post U Bracket','Glass Carrier','Rail System','U-Profile','Lock','Glass Panel','Glass Panels','Weather Brush','Tracking System','Side infill'];
 function compKey(name){
@@ -7262,6 +7466,7 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   /* draw toolbar — always visible on survey, hidden otherwise */
   const bar=document.getElementById('drawBar');
   if(bar)bar.style.display=(d==='survey')?'flex':'none';
+  if(d!=='survey'&&correctMode)toggleCorrect();
   if(d!=='survey'&&drawMode){drawMode=false;document.body.classList.remove('drawmode');const bt=document.getElementById('drawToggle');if(bt){bt.textContent='✏️ Draw: Off';bt.classList.remove('primary');}}
   updateSentButtons();
   renderDocuments();
@@ -7904,7 +8109,7 @@ function renderDocuments(){
       <p style="font-size:8.5px;color:#8a969a;margin-top:8px">* By signing, the customer acknowledges all goods listed above have been received in good condition. Any damage, shortage or defect reported after signing will not be accepted as a claim against UCS Design Group. *</p>
     </div>${pfoot()}
   </section>`;
-  document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();setupDraw();fitPages();setTimeout(fitPages,160);
+  document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();applySurveyEdits();setupDraw();fitPages();setTimeout(fitPages,160);
 }
 /* ===== SIGNED CONTRACT TAB =====
    Shows the executed PDF from Signable. It shares nothing with the quote /
