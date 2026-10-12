@@ -1025,8 +1025,11 @@ body.print-internal .internal-notes-only{display:block !important;}
           <div class="sub">Deponti 2026 dealer prices — <strong>ex-VAT, ex-works</strong>. Edit any cell and click <em>Save Admin</em> to persist. Blank cells (—) mean that size is not available. These prices feed the Pricing &amp; Fitting calculator directly.</div>
           <div style="margin:10px 0 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button class="btn sm" onclick="resetPriceMatrix()">↺ Reset to 2026 defaults</button>
+            <button class="btn sm" onclick="adminPMExportCSV()">⬇ Export CSV</button>
+            <label class="btn sm" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="adminPMImportCSV(this)"></label>
             <span class="muted" style="font-size:11px">Source: Deponti UK Dealer Pricelist 2026 (23 Apr 2026)</span>
           </div>
+          <div style="font-size:11px;color:#8a969a;margin-bottom:8px">CSV columns: <code>table,description,width,projection,price</code> — one row per price. Export first to get the right table names. A blank price means that size is not available. Import replaces only the tables named in the file; the <b>Side Options</b> and <b>Roof Uplifts</b> rows update those prices (description = the option). Remember to <b>Save Admin</b> afterwards.</div>
           <div id="pmWrap"></div>
         </div></div>
 
@@ -1061,13 +1064,23 @@ body.print-internal .internal-notes-only{display:block !important;}
         <div class="apane" id="ap-fitting"><div class="card">
           <div class="sub">Direct &amp; Finance install prices. Used by Pricing and Survey labour pickers.</div>
           <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Description</th><th class="r" style="width:120px">Direct £</th><th class="r" style="width:120px">Finance £</th><th style="width:30px"></th></tr></thead><tbody id="adminFitRows"></tbody></table></div>
-          <button class="btn sm" style="margin-top:10px" onclick="adminAddFit()">＋ Add item</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn sm" onclick="adminAddFit()">＋ Add item</button>
+            <label class="btn sm" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="adminFitImportCSV(this)"></label>
+            <button class="btn sm" onclick="adminFitExportCSV()">⬇ Export CSV</button>
+          </div>
+          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>description,direct,finance</code> — a header row is optional. Import replaces the whole list. Remember to <b>Save Admin</b> afterwards.</div>
         </div></div>
 
         <div class="apane" id="ap-parts"><div class="card">
           <div class="sub">Additional-parts catalogue used in Pricing &amp; at survey. Set real costs here. <b>Materials</b> are subject to the customer discount; <b>Fitting</b> is never discounted.</div>
           <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Description</th><th class="r" style="width:160px">Materials £ <span style="font-weight:400;font-size:11px">(discounted)</span></th><th class="r" style="width:160px">Fitting £ <span style="font-weight:400;font-size:11px">(not discounted)</span></th><th style="width:30px"></th></tr></thead><tbody id="adminPartRows"></tbody></table></div>
-          <button class="btn sm" style="margin-top:10px" onclick="adminAddPart()">＋ Add part</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn sm" onclick="adminAddPart()">＋ Add part</button>
+            <label class="btn sm" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="adminPartsImportCSV(this)"></label>
+            <button class="btn sm" onclick="adminPartsExportCSV()">⬇ Export CSV</button>
+          </div>
+          <div style="font-size:11px;color:#8a969a;margin-top:8px">CSV columns: <code>description,materials,fitting</code> — a header row is optional; a blank price counts as £0. Import replaces the whole catalogue. Remember to <b>Save Admin</b> afterwards.</div>
         </div></div>
 
         <div class="apane" id="ap-qualify"><div class="card">
@@ -6180,31 +6193,32 @@ function resetPriceMatrix(){
   persistAdmin();renderPriceMatrix();recalc();
   toast('Price matrix reset to 2026 defaults');
 }
+/* ── Price matrix table groups: [label, tableKey(s), note] — Admin view & CSV ── */
+const PM_GROUPS=[
+  {label:'Moher — Polycarbonate',keys:['Nebbiolo'],note:'Width = metre+45mm (4045, 5045, 6045). Max projection 3500mm.'},
+  {label:'Cobh — Polycarbonate',keys:['Ribolla'],note:'Freestanding. Incl. Grillo panels & posts.'},
+  {label:'Voya — Polycarbonate',keys:['Bosco'],note:'Width = metre+60mm. No 6000mm projection above 7060mm.'},
+  {label:'Cashel — Polycarbonate',keys:['Pigato-Poly'],note:'7060mm not available RAL9001.'},
+  {label:'Cashel — Glass (8.8mm)',keys:['Pigato-Glass'],note:'Glass length = projection +20mm.'},
+  {label:'Cashel Plus — Polycarbonate',keys:['PigatoPlus-Poly'],note:'Starts at 5060mm. 7060mm rounded trim only.'},
+  {label:'Cashel Plus — Glass (8.8mm)',keys:['PigatoPlus-Glass'],note:'150×150mm posts.'},
+  {label:'Burren — Polycarbonate',keys:['Giallo-Poly'],note:'6000mm projection polycarbonate only.'},
+  {label:'Burren — Glass (8.8mm)',keys:['Giallo-Glass'],note:'Glass length = projection +20mm.'},
+  {label:'Burren Plus — Polycarbonate',keys:['GialloPlus-Poly'],note:'Starts at 5060mm.'},
+  {label:'Burren Plus — Glass (8.8mm)',keys:['GialloPlus-Glass'],note:''},
+  {label:'Dunluce — Glass only (8.8mm)',keys:['Trebbiano'],note:'Glass roof only. LED standard. Note unusual projection sizes (mm).'},
+  {label:'Aran — Fabric Canopy',keys:['Verdeca'],note:'Somfy remote. White fabric only.'},
+  {label:'Mizen — Adjustable Slats',keys:['Pinela'],note:'Not all W×P combinations available.'},
+  {label:'Mizen Glass — Glass Slats',keys:['Pinela-Glass'],note:'840mm glass panels. LED standard.'},
+  {label:'Mizen Delight',keys:['Pinela-Delight'],note:'Cubist frame. RAL9016/7024/9005.'},
+  {label:'Mizen Tilt',keys:['Pinela-Tilt'],note:'RAL9016/7024/9005. Teleco control.'},
+  {label:'Mizen Deluxe — Retractable',keys:['Pinela-Deluxe'],note:'Not all W×P combinations available.'},
+  {label:'Mizen Deluxe Plus — Retractable',keys:['Pinela-DeluxePlus'],note:'LED standard in gutter.'},
+];
 function renderPriceMatrix(){
   const w=document.getElementById('pmWrap');if(!w)return;w.innerHTML='';
   const pm=admin.priceMatrix||PRICE_LIST_2026_DEFAULT;
-  /* ── table groups: [label, tableKey(s), note] ── */
-  const GROUPS=[
-    {label:'Moher — Polycarbonate',keys:['Nebbiolo'],note:'Width = metre+45mm (4045, 5045, 6045). Max projection 3500mm.'},
-    {label:'Cobh — Polycarbonate',keys:['Ribolla'],note:'Freestanding. Incl. Grillo panels & posts.'},
-    {label:'Voya — Polycarbonate',keys:['Bosco'],note:'Width = metre+60mm. No 6000mm projection above 7060mm.'},
-    {label:'Cashel — Polycarbonate',keys:['Pigato-Poly'],note:'7060mm not available RAL9001.'},
-    {label:'Cashel — Glass (8.8mm)',keys:['Pigato-Glass'],note:'Glass length = projection +20mm.'},
-    {label:'Cashel Plus — Polycarbonate',keys:['PigatoPlus-Poly'],note:'Starts at 5060mm. 7060mm rounded trim only.'},
-    {label:'Cashel Plus — Glass (8.8mm)',keys:['PigatoPlus-Glass'],note:'150×150mm posts.'},
-    {label:'Burren — Polycarbonate',keys:['Giallo-Poly'],note:'6000mm projection polycarbonate only.'},
-    {label:'Burren — Glass (8.8mm)',keys:['Giallo-Glass'],note:'Glass length = projection +20mm.'},
-    {label:'Burren Plus — Polycarbonate',keys:['GialloPlus-Poly'],note:'Starts at 5060mm.'},
-    {label:'Burren Plus — Glass (8.8mm)',keys:['GialloPlus-Glass'],note:''},
-    {label:'Dunluce — Glass only (8.8mm)',keys:['Trebbiano'],note:'Glass roof only. LED standard. Note unusual projection sizes (mm).'},
-    {label:'Aran — Fabric Canopy',keys:['Verdeca'],note:'Somfy remote. White fabric only.'},
-    {label:'Mizen — Adjustable Slats',keys:['Pinela'],note:'Not all W×P combinations available.'},
-    {label:'Mizen Glass — Glass Slats',keys:['Pinela-Glass'],note:'840mm glass panels. LED standard.'},
-    {label:'Mizen Delight',keys:['Pinela-Delight'],note:'Cubist frame. RAL9016/7024/9005.'},
-    {label:'Mizen Tilt',keys:['Pinela-Tilt'],note:'RAL9016/7024/9005. Teleco control.'},
-    {label:'Mizen Deluxe — Retractable',keys:['Pinela-Deluxe'],note:'Not all W×P combinations available.'},
-    {label:'Mizen Deluxe Plus — Retractable',keys:['Pinela-DeluxePlus'],note:'LED standard in gutter.'},
-  ];
+  const GROUPS=PM_GROUPS;
   /* ── Side options pricing ── */
   const sidesDiv=document.createElement('div');sidesDiv.style.marginBottom='20px';
   const sp=pm._sidePrices||SIDE_PRICES_DEFAULT;
@@ -6449,6 +6463,174 @@ function adminDeckExportCSV(){
   a.download='totaluxe_decking.csv';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+/* ── CSV import/export: Parts, Fitting costs, Price Matrix ───────────────────
+   Export what is in Admin now, edit in Excel, import it back, then Save Admin.
+   Parts and fitting imports replace the whole list; a price-matrix import
+   replaces only the tables named in the file. Nothing is live for other users
+   until Save Admin, so a bad import can be undone by reloading the page. */
+function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+/* null = blank cell, NaN = not a usable price (text or negative) */
+function csvNum(v){
+  const t=String(v==null?'':v).replace(/[£,\s]/g,'');
+  if(t==='')return null;
+  const n=Number(t);
+  return (isFinite(n)&&n>=0)?Math.round(n*100)/100:NaN;
+}
+function csvStamp(){return new Date().toISOString().slice(0,10);}
+function downloadCSV(name,header,rows){
+  /* BOM so Excel reads the £ and — characters as UTF-8 */
+  const csv='﻿'+[header].concat(rows).map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+/* Reads the chosen file and hands its rows to fn(body, firstLine) — the header
+   row is dropped when its first cell is one of headNames, and firstLine is the
+   file line number of body[0] for error messages. fn throws to abort. */
+function readCSVInput(input,headNames,fn){
+  const f=input.files&&input.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const rows=parseCSV(reader.result);
+      if(!rows.length)throw new Error('The file is empty.');
+      const hasHead=headNames.includes(String(rows[0][0]||'').trim().toLowerCase());
+      fn(hasHead?rows.slice(1):rows,hasHead?2:1);
+    }catch(e){ alert('CSV import failed: '+e.message); }
+    input.value='';
+  };
+  reader.onerror=()=>{alert('Could not read that file.');input.value='';};
+  reader.readAsText(f);
+}
+function csvSkipNote(bad){
+  if(!bad.length)return '';
+  return ' — skipped '+bad.length+' invalid row'+(bad.length===1?'':'s')+' (line'+(bad.length===1?' ':'s ')+bad.slice(0,8).join(', ')+(bad.length>8?'…':'')+')';
+}
+function csvConfirm(msg,bad){return confirm(msg+(bad.length?'\n\nNote:'+csvSkipNote(bad).slice(2):''));}
+
+/* Parts catalogue: description,materials,fitting */
+function adminPartsExportCSV(){
+  downloadCSV('totaluxe_parts_'+csvStamp()+'.csv',['description','materials','fitting'],
+    (admin.parts||[]).map(p=>[p.desc,partMat(p),+p.fitCost||0]));
+}
+function adminPartsImportCSV(input){
+  readCSVInput(input,['description','desc'],(body,first)=>{
+    const out=[],bad=[];
+    body.forEach((r,ix)=>{
+      const desc=String(r[0]||'').trim(),mat=csvNum(r[1]),fit=csvNum(r[2]);
+      if(!desc||Number.isNaN(mat)||Number.isNaN(fit)){bad.push(ix+first);return;}
+      out.push({desc,matCost:mat||0,fitCost:fit||0});
+    });
+    if(!out.length)throw new Error('No valid rows found. Expected columns: description,materials,fitting');
+    if(!csvConfirm('Replace the '+admin.parts.length+' parts in the catalogue with the '+out.length+' in this file?',bad))return;
+    admin.parts=out;
+    renderAdmin();
+    [renderPricing,renderSurvey].forEach(fn=>{try{fn();}catch(e){}});
+    toast('Imported '+out.length+' part'+(out.length===1?'':'s')+csvSkipNote(bad)+' — Save Admin to publish');
+  });
+}
+
+/* Fitting costs: description,direct,finance */
+function adminFitExportCSV(){
+  downloadCSV('totaluxe_fitting_'+csvStamp()+'.csv',['description','direct','finance'],
+    (admin.fitting||[]).map(f=>[f.desc,+f.direct||0,+f.finance||0]));
+}
+function adminFitImportCSV(input){
+  readCSVInput(input,['description','desc'],(body,first)=>{
+    const out=[],bad=[],seen=new Set();
+    body.forEach((r,ix)=>{
+      const desc=String(r[0]||'').trim(),direct=csvNum(r[1]),finance=csvNum(r[2]);
+      /* quotes find their fitting price by description, so a repeated name is skipped */
+      if(!desc||direct===null||finance===null||Number.isNaN(direct)||Number.isNaN(finance)||seen.has(desc.toLowerCase())){bad.push(ix+first);return;}
+      seen.add(desc.toLowerCase());
+      out.push({desc,direct,finance});
+    });
+    if(!out.length)throw new Error('No valid rows found. Expected columns: description,direct,finance (both prices required)');
+    if(!csvConfirm('Replace the '+admin.fitting.length+' fitting items with the '+out.length+' in this file?',bad))return;
+    admin.fitting=out;
+    renderAdmin();
+    [refreshPickers,renderPricing,renderSurvey].forEach(fn=>{try{fn();}catch(e){}});
+    toast('Imported '+out.length+' fitting item'+(out.length===1?'':'s')+csvSkipNote(bad)+' — Save Admin to publish');
+  });
+}
+
+/* Price matrix: table,description,width,projection,price
+   Model tables: one row per W×P size; a blank price = size not available.
+   "Side Options" rows: description = the side option.
+   "Roof Uplifts" rows: description = Ultra-Clear / Solar Control Polycarbonate (£/m²). */
+const PM_UPLIFT_ROWS=[['ultraClear','Ultra-Clear Polycarbonate'],['solarControl','Solar Control Polycarbonate']];
+function pmTableKeys(pm){
+  const keys=PM_GROUPS.map(g=>g.keys[0]);
+  Object.keys(pm).forEach(k=>{if(!k.startsWith('_')&&!keys.includes(k))keys.push(k);});
+  return keys.filter(k=>pm[k]&&typeof pm[k]==='object');
+}
+function pmSortedKeys(tbl){
+  return Object.keys(tbl).map(ck=>ck.split('x').map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(([w,p])=>w+'x'+p);
+}
+function adminPMExportCSV(){
+  const pm=admin.priceMatrix||PRICE_LIST_2026_DEFAULT,rows=[];
+  pmTableKeys(pm).forEach(k=>{
+    const g=PM_GROUPS.find(x=>x.keys[0]===k);
+    pmSortedKeys(pm[k]).forEach(ck=>{const [w,p]=ck.split('x'),v=pm[k][ck];rows.push([k,g?g.label:k,w,p,v==null?'':v]);});
+  });
+  const sp=pm._sidePrices||SIDE_PRICES_DEFAULT;
+  Object.keys(sp).forEach(opt=>rows.push(['Side Options',opt,'','',+sp[opt]||0]));
+  const up=pm._uplifts||PRICE_LIST_2026_DEFAULT._uplifts;
+  PM_UPLIFT_ROWS.forEach(([key,label])=>rows.push(['Roof Uplifts',label,'','',up[key]==null?'':up[key]]));
+  downloadCSV('totaluxe_price_matrix_'+csvStamp()+'.csv',['table','description','width','projection','price'],rows);
+}
+function adminPMImportCSV(input){
+  readCSVInput(input,['table'],(body,first)=>{
+    if(!admin.priceMatrix)admin.priceMatrix=clone(PRICE_LIST_2026_DEFAULT);
+    const pm=admin.priceMatrix;
+    const known=pmTableKeys(pm).concat(Object.keys(PRICE_LIST_2026_DEFAULT).filter(k=>!k.startsWith('_')));
+    /* a row may name its table by key (Pigato-Glass) or by its Admin label (Cashel — Glass (8.8mm)) */
+    const findTable=t=>{t=t.toLowerCase();
+      return known.find(k=>k.toLowerCase()===t)||(PM_GROUPS.find(g=>g.label.toLowerCase()===t)||{keys:[]}).keys[0];};
+    const sideNames=Object.keys(Object.assign({},SIDE_PRICES_DEFAULT,pm._sidePrices||{}));
+    const tables={},sides={},uplifts={},bad=[];
+    body.forEach((r,ix)=>{
+      const [t,desc,w,p,price]=[0,1,2,3,4].map(i=>String(r[i]==null?'':r[i]).trim());
+      const v=csvNum(price),line=ix+first,d=desc.toLowerCase();
+      if(/^side options?$/i.test(t)){
+        const opt=sideNames.find(n=>n.toLowerCase()===d);
+        if(!opt||v===null||Number.isNaN(v)){bad.push(line);return;}
+        sides[opt]=v;return;
+      }
+      if(/^roof uplifts?$/i.test(t)){
+        const u=PM_UPLIFT_ROWS.find(([key,label])=>key.toLowerCase()===d||label.toLowerCase()===d);
+        if(!u||v===null||Number.isNaN(v)){bad.push(line);return;}
+        uplifts[u[0]]=v;return;
+      }
+      const key=findTable(t),wn=Number(w),pn=Number(p);
+      if(!key||!Number.isInteger(wn)||!Number.isInteger(pn)||wn<=0||pn<=0||Number.isNaN(v)){bad.push(line);return;}
+      (tables[key]=tables[key]||{})[wn+'x'+pn]=v;   /* null = size not available */
+    });
+    const tKeys=Object.keys(tables),nSides=Object.keys(sides).length,nUp=Object.keys(uplifts).length;
+    if(!tKeys.length&&!nSides&&!nUp)throw new Error('No valid rows found. Expected columns: table,description,width,projection,price — export first to see the format.');
+    const cells=tKeys.reduce((n,k)=>n+Object.keys(tables[k]).length,0);
+    const what=[];
+    if(tKeys.length)what.push('Replace '+tKeys.length+' price table'+(tKeys.length===1?'':'s')+' ('+cells+' sizes)');
+    if(nSides)what.push('Update '+nSides+' side option price'+(nSides===1?'':'s'));
+    if(nUp)what.push('Update '+nUp+' roof uplift'+(nUp===1?'':'s'));
+    if(!csvConfirm('Import price matrix?\n\n• '+what.join('\n• '),bad))return;
+    tKeys.forEach(k=>{
+      const sorted={};
+      pmSortedKeys(tables[k]).forEach(ck=>{sorted[ck]=tables[k][ck];});
+      pm[k]=sorted;
+    });
+    if(nSides)pm._sidePrices=Object.assign({},pm._sidePrices||SIDE_PRICES_DEFAULT,sides);
+    if(nUp){
+      pm._uplifts=Object.assign({},pm._uplifts||PRICE_LIST_2026_DEFAULT._uplifts,uplifts);
+      ROOF_UPLIFT.ultra=pm._uplifts.ultraClear||0;ROOF_UPLIFT.solar=pm._uplifts.solarControl||0;
+    }
+    renderPriceMatrix();
+    try{applyConfig();}catch(e){}
+    toast('Price matrix imported'+csvSkipNote(bad)+' — Save Admin to publish');
+  });
 }
 function addBankImg(input){
   const f=input.files[0];if(!f)return;
