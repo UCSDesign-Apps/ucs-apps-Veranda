@@ -7306,26 +7306,43 @@ function renderCorrSummary(){
   if(!rows.length)return;
   const pages=surveySheets();if(!pages.length)return;
   const ref=pages[0].sh;
-  const sec=document.createElement('section');
-  /* A long list runs onto further pages (as the picking list does) instead of being cut off at the A4 edge. */
-  sec.className='sheet sv-gen'+(rows.length>22?' flow-page':'');
-  const ph=ref.querySelector('.phead');
-  if(ph){const c=ph.cloneNode(true);const m=c.querySelector('.meta');
-    if(m){const lines=m.innerHTML.split('<br>');const last=lines.pop().split(' \u00b7 ')[0];lines.push(last+' \u00b7 Survey Corrections');m.innerHTML=lines.join('<br>');}
-    sec.appendChild(c);}
   const when=iso=>{try{return new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
-  const pg=document.createElement('div');pg.className='pg';
-  pg.innerHTML=`<div class="sh">Survey Corrections</div>
-    <p style="font-size:10px;color:#6a777c;margin:0 0 8px">Changes the surveyor made to the printed survey. These are a record for the office \u2014 the order and contract are not changed by them.</p>
-    <table class="sv-corrtbl"><thead><tr><th>Page</th><th>Printed</th><th>Corrected to</th><th>By</th><th>When</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${esc(r.key)}${r.lost?'<br><span style="color:#a51b1b;font-size:9px">not found on the page now</span>':''}</td>
+  /* Separate A4 pages, filled row by row: a row that does not fit starts the next
+     page. Not one page that runs on, because the survey email captures every page
+     at exactly one A4 sheet, so overflow would be cut off in the customer's PDF.
+     Each page is held at A4 height while it fills, so the fit can be measured. */
+  const rowHtml=r=>`<td>${esc(r.key)}${r.lost?'<br><span style="color:#a51b1b;font-size:9px">not found on the page now</span>':''}</td>
       <td><s class="sv-old">${esc(r.c.orig)}</s></td><td>${r.c.val?`<span class="sv-new">${esc(r.c.val)}</span>`:'<i style="color:#6a777c">struck out</i>'}</td>
-      <td>${esc(r.c.by||'')}</td><td>${esc(when(r.c.at))}</td></tr>`).join('')}
-    </tbody></table>`;
-  sec.appendChild(pg);
-  const ft=ref.querySelector('.pfoot');if(ft)sec.appendChild(ft.cloneNode(true));
-  const after=pages.find(p=>p.key==='Survey Notes')||pages[pages.length-1];
-  after.sh.insertAdjacentElement('afterend',sec);
+      <td>${esc(r.c.by||'')}</td><td>${esc(when(r.c.at))}</td>`;
+  let anchor=(pages.find(p=>p.key==='Survey Notes')||pages[pages.length-1]).sh;
+  const made=[];
+  const newPage=()=>{
+    const sec=document.createElement('section');sec.className='sheet sv-gen';
+    const ph=ref.querySelector('.phead');if(ph)sec.appendChild(ph.cloneNode(true));
+    const pg=document.createElement('div');pg.className='pg';
+    pg.innerHTML=`<div class="sh">Survey Corrections <span class="sv-of" style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c"></span></div>
+      ${made.length?'':'<p style="font-size:10px;color:#6a777c;margin:0 0 8px">What the surveyor found on site that differs from the printed survey. These record the survey; they do not change your order or contract.</p>'}
+      <table class="sv-corrtbl"><thead><tr><th>Page</th><th>Printed</th><th>Corrected to</th><th>By</th><th>When</th></tr></thead><tbody></tbody></table>`;
+    sec.appendChild(pg);
+    const ft=ref.querySelector('.pfoot');if(ft)sec.appendChild(ft.cloneNode(true));
+    anchor.insertAdjacentElement('afterend',sec);anchor=sec;
+    sec.style.height='296mm';sec.style.overflow='hidden';
+    const page={sec,pg,tbody:pg.querySelector('tbody')};made.push(page);return page;
+  };
+  let cur=newPage();
+  const measurable=cur.pg.clientHeight>0; /* hidden view: fall back to a safe fixed count */
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');tr.innerHTML=rowHtml(r);cur.tbody.appendChild(tr);
+    const over=measurable?cur.pg.scrollHeight>cur.pg.clientHeight+1:cur.tbody.rows.length>8;
+    if(over&&cur.tbody.rows.length>1){tr.remove();cur=newPage();cur.tbody.appendChild(tr);}
+  });
+  made.forEach((m,i)=>{
+    m.sec.style.height='';m.sec.style.overflow='';
+    const label='Survey Corrections'+(made.length>1?` \u00b7 ${i+1} of ${made.length}`:'');
+    const meta=m.sec.querySelector('.phead .meta');
+    if(meta){const lines=meta.innerHTML.split('<br>');const last=lines.pop().split(' \u00b7 ')[0];lines.push(last+' \u00b7 '+label);meta.innerHTML=lines.join('<br>');}
+    const of=m.sec.querySelector('.sv-of');if(of)of.textContent=made.length>1?`(${i+1} of ${made.length})`:'';
+  });
 }
 const undoStacks={};
 function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}if(drawMode&&correctMode)toggleCorrect();}
