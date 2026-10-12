@@ -175,6 +175,7 @@ async function ensureSchema(pool) {
 
   await backfillDeckingSection(pool);
   await migrateQualifyGuided(pool);
+  await migrateQualifyOct12(pool);
 }
 
 // Guided Qualify (2026-10-05): Roof Type takes several answers and Mounting Type
@@ -204,6 +205,67 @@ async function migrateQualifyGuided(pool) {
   } catch (e) {
     // Never block boot; the page still works, the two defaults just stay as saved.
     console.warn('[migration] guided qualify skipped:', e.message);
+  }
+}
+
+// Qualify changes (Richard, 2026-10-12), applied once to saved config for the same
+// reason as migrateQualifyGuided: the live question list has been edited in Admin,
+// so the page will not reseed it. Every other admin edit is left alone.
+//   - Soffit Clearance (q_soffit, a number) becomes Height Restriction (q_height):
+//     Yes — Roofline (mm required) / Yes — Other (photo required) / No. It takes
+//     q_soffit's place in the list; old quotes' soffit figures are carried across
+//     by the page (backfillQualifyFromConfig) as "Yes — Roofline" + the value.
+//   - Roof Type gains "Not decided yet" (lists no products, so it narrows nothing).
+//   - Decking Required (Yes / No) is added after the last Product question.
+const Q_HEIGHT = {
+  id: 'q_height', text: 'Height Restriction', section: 'Site & Install', type: 'select',
+  options: [
+    { label: 'Yes — Roofline', specify: true, number: true, unit: 'mm', required: true },
+    { label: 'Yes — Other', photo: true, required: true },
+    { label: 'No' },
+  ],
+};
+const Q_DECKING = {
+  id: 'q_decking', text: 'Decking Required', section: 'Product', type: 'select',
+  options: [{ label: 'Yes' }, { label: 'No' }],
+};
+async function migrateQualifyOct12(pool) {
+  try {
+    const { rows } = await pool.query('SELECT module, config FROM admin_config');
+    for (const row of rows) {
+      const cfg = row.config;
+      if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.qualifyQuestions)) continue;
+      if (cfg._migrations && cfg._migrations.qualifyOct12) continue;
+      const qs = cfg.qualifyQuestions;
+      const done = [];
+      if (!qs.some((q) => q && q.id === 'q_height')) {
+        const si = qs.findIndex((q) => q && q.id === 'q_soffit');
+        const copy = JSON.parse(JSON.stringify(Q_HEIGHT));
+        if (si >= 0) { qs.splice(si, 1, copy); done.push('Soffit Clearance -> Height Restriction'); }
+        else {
+          const gi = qs.findIndex((q) => q && q.id === 'q_ground');
+          qs.splice(gi >= 0 ? gi + 1 : qs.length, 0, copy);
+          done.push('Height Restriction added');
+        }
+      }
+      const roof = qs.find((q) => q && q.id === 'q_rooftype');
+      if (roof && Array.isArray(roof.options) && !roof.options.some((o) => o && /not decided/i.test(o.label || ''))) {
+        roof.options.push({ label: 'Not decided yet', models: [] });
+        done.push('Roof Type "Not decided yet"');
+      }
+      if (!qs.some((q) => q && q.id === 'q_decking')) {
+        let at = -1;
+        qs.forEach((q, i) => { if (q && q.section === 'Product') at = i; });
+        qs.splice(at >= 0 ? at + 1 : qs.length, 0, JSON.parse(JSON.stringify(Q_DECKING)));
+        done.push('Decking Required added');
+      }
+      cfg._migrations = Object.assign({}, cfg._migrations, { qualifyOct12: true });
+      await pool.query('UPDATE admin_config SET config = $2 WHERE module = $1', [row.module, cfg]);
+      console.log(`[migration] qualify oct12 — module=${row.module}: ${done.join(', ') || '(nothing to change)'}`);
+    }
+  } catch (e) {
+    // Never block boot; the questions simply stay as saved.
+    console.warn('[migration] qualify oct12 skipped:', e.message);
   }
 }
 

@@ -1916,7 +1916,14 @@ const ADMIN_DEFAULT={
      options:[{label:'Ground level'},{label:'First floor'},{label:'Second floor'},{label:'Other',specify:true}]},
     {id:'q_ground',text:'Ground Type',section:'Site & Install',type:'select',
      options:[{label:'Grass'},{label:'Patio slabs'},{label:'Porcelain slabs'},{label:'Decking'},{label:'Concrete'},{label:'Tarmac'},{label:'Other',specify:true}]},
-    {id:'q_soffit',text:'Soffit Clearance',section:'Site & Install',type:'number',unit:'mm',placeholder:'Enter value in mm'},
+    /* Replaced Soffit Clearance (q_soffit, a bare number) 2026-10-12. An answer can
+       now insist on its extra detail: required:true means the text/number box (and
+       the photo, if the answer has one) must be filled before the rep can move on.
+       number:true makes the text box a number in the answer's unit. */
+    {id:'q_height',text:'Height Restriction',section:'Site & Install',type:'select',
+     options:[{label:'Yes — Roofline',specify:true,number:true,unit:'mm',required:true},
+              {label:'Yes — Other',photo:true,required:true},
+              {label:'No'}]},
     {id:'q_drainage',text:'Drainage',section:'Site & Install',type:'select',
      options:[{label:'Existing gutter'},{label:'Natural soakaway'},{label:'Submerged block'},{label:'Other',specify:true,photo:true}]},
     {id:'q_boxout',text:'Box Out required? (pipework, etc.)',section:'Site & Install',type:'select',
@@ -1961,10 +1968,17 @@ const ADMIN_DEFAULT={
           data names them separately but they are one choice to a customer. Split
           into a fifth answer if retractable needs asking about on its own. */
        {label:'Adjustable slats',models:['Pinela','Pinela Delight','Pinela Tilt','Pinela Deluxe','Pinela Deluxe Plus']},
-       {label:'Fabric canopy',models:['Verdeca']}
+       {label:'Fabric canopy',models:['Verdeca']},
+       /* No products listed = narrows nothing. Ticking it clears the other ticks
+          (and the reverse) — "undecided" and "glass" together mean nothing. */
+       {label:'Not decided yet',models:[]}
      ]},
     {id:'q_lighting',text:'Lighting',section:'Product',type:'select',
-     options:[{label:'No'},{label:'Yes — please specify electrical source',specify:true}]}
+     options:[{label:'No'},{label:'Yes — please specify electrical source',specify:true}]},
+    /* Yes = the Decking stage is shown and decking is ticked on the quote; No = the
+       stage is skipped and decking is taken off. See deckingAnswer(). */
+    {id:'q_decking',text:'Decking Required',section:'Product',type:'select',
+     options:[{label:'Yes'},{label:'No'}]}
   ],
   baseCosts:{Bosco:1065,Pigato:0,Ribolla:0,Nebbiolo:0,Giallo:0},
   priceMatrix:null, /* populated from PRICE_LIST_2026_DEFAULT on first load */
@@ -2179,7 +2193,9 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    config keeps its own copy of the questions, so without a version to compare
    against, later seed edits — new answers, photo flags, corrected allow-lists —
    never reach it. */
-const QUALIFY_SEED_VERSION=5;   /* 4: added q_colour (Frame Colour, RAL families)
+const QUALIFY_SEED_VERSION=6;   /* 6: Height Restriction replaces Soffit Clearance; Roof Type
+                                     "Not decided yet"; Decking Required. Saved configs get these
+                                     once from the server (routes/api.js migrateQualifyOct12). */   /* 4: added q_colour (Frame Colour, RAL families)
                                   5: q_mount "Not decided yet"; q_rooftype multi. An admin-edited
                                      list is not reseeded — the server applies these two to saved
                                      config once (routes/api.js migrateQualifyGuided). */
@@ -2194,6 +2210,7 @@ function qualifySeedClone(){
     if(q.section)out.section=q.section;
     if(q.type)out.type=q.type;
     if(q.filter)out.filter=true;
+    if(q.multi)out.multi=true;
     if(q.unit!=null)out.unit=q.unit;
     if(q.placeholder!=null)out.placeholder=q.placeholder;
     if(Array.isArray(q.options))out.options=q.options.map(function(o){
@@ -2201,6 +2218,9 @@ function qualifySeedClone(){
       if(Array.isArray(o.models))oo.models=o.models.slice();
       if(o.specify)oo.specify=true;
       if(o.photo)oo.photo=true;
+      if(o.number)oo.number=true;
+      if(o.unit)oo.unit=o.unit;
+      if(o.required)oo.required=true;
       return oo;
     });
     return out;
@@ -2214,7 +2234,9 @@ function qualifySignature(list){
     return JSON.stringify((list||[]).map(function(q){
       return [q.id,q.text,q.section||'',q.type||'select',q.filter?1:0,q.unit||'',q.placeholder||'',
         (q.options||[]).map(function(o){
-          return [o.label,(Array.isArray(o.models)?o.models.slice().sort():[]).join(','),o.specify?1:0,o.photo?1:0];
+          var s=[o.label,(Array.isArray(o.models)?o.models.slice().sort():[]).join(','),o.specify?1:0,o.photo?1:0];
+          if(o.number||o.required||o.unit)s.push(o.number?1:0,o.required?1:0,o.unit||'');
+          return s;
         })];
     }));
   }catch(e){return '';}
@@ -2226,7 +2248,7 @@ function qualifySignature(list){
 function qualifyIsPlaceholder(list){
   if(!Array.isArray(list)||!list.length)return false;
   var ids=list.map(function(q){return q&&q.id;});
-  if(ids.indexOf('q_access')>=0||ids.indexOf('q_soffit')>=0||ids.indexOf('q_rooftype')>=0)return false;
+  if(ids.indexOf('q_access')>=0||ids.indexOf('q_soffit')>=0||ids.indexOf('q_height')>=0||ids.indexOf('q_rooftype')>=0)return false;
   var EARLIER=['q_use','q_mount','q_roof','q_size','q_ground','q_existing'];
   return ids.every(function(id){return EARLIER.indexOf(id)>=0;});
 }
@@ -2323,6 +2345,8 @@ function renderNextBtn(){
   /* Remove any existing next buttons first */
   document.querySelectorAll('.view-next-btn').forEach(b=>b.remove());
   if(!currentUser)return;
+  const dkNav=document.querySelector('#nav [data-view="decking"]');
+  if(dkNav)dkNav.classList.toggle('hidden',!can('decking')||deckingAnswer()==='No');
   NEXT_FLOW.forEach((view,idx)=>{
     if(!currentUser.sections.includes(view))return;
     /* Skip PAST any stage this user cannot reach rather than giving up: a user with
@@ -2330,6 +2354,8 @@ function renderNextBtn(){
        flow dead-ends on the customer page. */
     let nextView=null;
     for(let k=idx+1;k<NEXT_FLOW.length;k++){
+      /* Decking Required = No: the Decking stage is skipped */
+      if(NEXT_FLOW[k]==='decking'&&deckingAnswer()==='No')continue;
       if(currentUser.sections.includes(NEXT_FLOW[k])){nextView=NEXT_FLOW[k];break;}
     }
     if(!nextView)return;
@@ -2343,8 +2369,24 @@ function renderNextBtn(){
     section.appendChild(btn);
   });
 }
+/* Qualify cannot be skipped: on a Draft quote, a stage after Qualify opens only once
+   every question is answered. A quote already sent or signed is never held back. */
+function qualifyBlocksView(v){
+  if(typeof can!=='function'||!currentUser||!can('qualify'))return false;
+  var at=NEXT_FLOW.indexOf(v), q=NEXT_FLOW.indexOf('qualify');
+  if(at<0||at<=q)return false;
+  if(state.status&&state.status!=='Draft')return false;
+  return !qualifyComplete();
+}
 function showView(v,btn){
   if(!can(v))return;
+  if(qualifyBlocksView(v)){
+    var fi=qualifyFirstIncomplete();
+    if(fi>=0){qStep=fi;qStepFor=qualifyStepKey();}
+    toast('Answer every Qualify question first — question '+(fi+1)+' of '+qualifyQuestions().length);
+    v='qualify';btn=null;
+  }
+  renderNextBtn();
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
@@ -2565,6 +2607,8 @@ function qualifySurveyRows(){
       if(labels.length){
         v=labels.join(', ');
         var t=(ans[q.id]&&typeof ans[q.id]==='object')?(ans[q.id].text||''):'';
+        var po=q.options&&q.options[qualifyPicks(ans[q.id])[0]];
+        if(t&&po&&po.number&&po.unit)t+=' '+po.unit;
         if(t)v+=' — '+t;
       }
     }
@@ -2713,6 +2757,40 @@ function qualifyPicks(a){
   var p=qualifyPick(a);return (p==null||p==='')?[]:[p];
 }
 function qualifyAnswered(a){return qualifyPicks(a).length>0;}
+/* What a chosen answer still needs before the rep can move on, or '' if nothing.
+   Only answers marked required:true insist on their text/number box and photo. */
+function qualifyMissing(q,a){
+  if(!q)return '';
+  if(q.type==='number')return (a!=null&&a!=='')?'':'Enter a value to continue';
+  if(!qualifyAnswered(a))return 'Choose an answer to continue';
+  var picks=qualifyPicks(a), t=String(qualifyText(a)||'').trim();
+  for(var i=0;i<picks.length;i++){
+    var o=q.options&&q.options[picks[i]]; if(!o||!o.required)continue;
+    if(o.specify){
+      if(o.number){if(!(+t>0))return 'Enter the '+(o.unit?'height in '+o.unit:'value')+' to continue';}
+      else if(!t)return 'Add the details to continue';
+    }
+    if(o.photo&&!(state.images&&state.images[qualifyPhotoKey(q.id)]))return 'Add a photo to continue';
+  }
+  return '';
+}
+/* Every question answered, with every required detail — Qualify cannot be skipped. */
+function qualifyComplete(){
+  var ans=state.qualify||{};
+  return qualifyQuestions().every(function(q){return !qualifyMissing(q,ans[q.id]);});
+}
+function qualifyFirstIncomplete(){
+  var ans=state.qualify||{};
+  return qualifyQuestions().findIndex(function(q){return !!qualifyMissing(q,ans[q.id]);});
+}
+/* "Yes" / "No" from Decking Required, or '' when unanswered — or when this user has
+   the Qualify stage switched off (they can't reach the answer, so it must not hide
+   their Decking stage). */
+function deckingAnswer(){
+  if(typeof can==='function'&&currentUser&&!can('qualify'))return '';
+  var l=qualifyAnswerLabel('q_decking');
+  return /^yes/i.test(l)?'Yes':/^no/i.test(l)?'No':'';
+}
 /* -> {allowed:Set|null, reasons:{model->question text}}. allowed===null means
    nothing answered so far narrows anything, so every product stays available. */
 function qualifyModelFilter(){
@@ -2808,6 +2886,15 @@ function backfillQualifyFromConfig(){
   if(absent('q_soffit')&&cf.soffitHeight!=null&&cf.soffitHeight!==''&&+cf.soffitHeight>0){
     q.q_soffit=+cf.soffitHeight;
   }
+  /* Height Restriction replaced Soffit Clearance. A measured soffit height is the
+     height to the roofline, so an older quote's value becomes "Yes — Roofline" with
+     that figure (found by its number flag, in case Admin reorders the answers). */
+  var hq=qualifyQuestions().filter(function(x){return x.id==='q_height';})[0];
+  if(hq&&absent('q_height')){
+    var old=+(q.q_soffit||cf.soffitHeight||0);
+    var ri=(hq.options||[]).findIndex(function(o){return o&&o.number;});
+    if(old>0&&ri>=0)q.q_height={opt:ri,text:String(old)};
+  }
 
   /* q_boxout options: 0 No · 1 Yes — downpipe · 2 Yes — soil pipe · 3 Yes — other(specify).
      syncQualifyToConfig writes '150mm (Downpipe)' / '200mm (Waste Pipe)' / 'Other'. */
@@ -2840,6 +2927,11 @@ function syncQualifyToConfig(){
   }
   var sf=ans['q_soffit'];
   if(sf!==''&&sf!=null)cf.soffitHeight=+sf||0;
+  /* Height Restriction: the Roofline figure is the soffit height the documents print */
+  var hq=qualifyQuestions().filter(function(x){return x.id==='q_height';})[0];
+  var hp=qualifyPicks(ans['q_height']);
+  if(hq&&hp.length){var ho=hq.options&&hq.options[hp[0]];
+    cf.soffitHeight=(ho&&ho.number)?(+qualifyText(ans['q_height'])||0):0;}
   var bl=qualifyAnswerLabel('q_boxout');
   if(bl){
     if(bl==='No'){cf.boxOutReq='No';cf.boxOutSize='';cf.boxOutOther='';}
@@ -2905,6 +2997,12 @@ function setQualify(qid,optIdx){
      without guessing which answer was the neutral one */
   if(q&&q.multi){
     var picks=qualifyPicks(cur).map(Number), ix=picks.indexOf(Number(optIdx));
+    /* On a product filter, an answer listing no products ("Not decided yet") can't sit
+       beside real ones — it would quietly cancel them — so it stands alone. */
+    var open=function(i){var o=q.options&&q.options[i];return !!(q.filter&&o&&!(Array.isArray(o.models)&&o.models.length));};
+    if(ix<0&&open(Number(optIdx)))picks=[];
+    else if(ix<0)picks=picks.filter(function(i){return !open(i);});
+    ix=picks.indexOf(Number(optIdx));
     if(ix>=0)picks.splice(ix,1); else picks.push(Number(optIdx));
     picks.sort(function(a,b){return a-b;});
     state.qualify[qid]=picks.length?{opts:picks,text:qualifyText(cur)}:'';
@@ -2921,10 +3019,31 @@ function setQualify(qid,optIdx){
     var sel=document.getElementById('c_model'); if(sel)sel.value='';
     toast('“'+displayName(curModel)+'” no longer matches — selection cleared.');
   }
+  if(qid==='q_decking')applyDeckingAnswer();
   syncQualifyToConfig();
   renderQualify();
   if(typeof renderModelGrid==='function')renderModelGrid();
   scheduleAutoSave();
+}
+/* Decking Required → the quote: Yes ticks decking on, No takes it off (so a "No"
+   customer is never priced for it), and the stage buttons are rebuilt so Next skips
+   the Decking stage on a No. */
+function applyDeckingAnswer(){
+  var a=deckingAnswer();
+  if(a&&typeof deckingState==='function'){
+    var d=deckingState(), was=!!d.enabled;
+    d.enabled=(a==='Yes');
+    if(was&&!d.enabled)toast('Decking taken off this quote');
+  }
+  if(typeof renderNextBtn==='function')renderNextBtn();
+}
+/* Submit is enabled only once the shown question is complete. Typing does not re-render
+   (that would blur the box), so this updates just the button and its hint. */
+function qualifyRefreshSubmit(){
+  var qs=qualifyQuestions(), q=qs[qStep]; if(!q)return;
+  var miss=qualifyMissing(q,(state.qualify||{})[q.id]);
+  var b=document.getElementById('qSubmitBtn'); if(b)b.disabled=!!miss;
+  var h=document.getElementById('qMissHint'); if(h)h.textContent=miss;
 }
 /* Deliberately does NOT re-render: repainting on every keystroke would blur the
    box the rep is typing into. */
@@ -2935,6 +3054,7 @@ function setQualifySpecify(qid,text){
   else if(cur!=null&&cur!=='')state.qualify[qid]={opt:cur,text:text};
   syncQualifyToConfig();
   scheduleAutoSave();
+  qualifyRefreshSubmit();
 }
 function setQualifyNumber(qid,v){
   if(!state.qualify)state.qualify={};
@@ -2969,10 +3089,12 @@ function renderQualifyResult(){
    on. Submit on the last question goes straight to the next stage (the Configurator).
    No summary screen and no products panel: if the answers rule out every product, a
    one-line warning shows under the question instead, so the rep is not surprised at
-   the Configurator. Every question is still optional — Skip moves on unanswered. */
+   the Configurator. No question can be skipped (Richard, 2026-10-12): Submit waits
+   for an answer and any required detail, and the later stages wait for all of them
+   on a Draft quote (qualifyBlocksView). */
 var qStep=0, qStepFor=null;
 function qualifyStepKey(){return String(state.id||'new')+'|'+String((state.job&&state.job.quote)||'');}
-function qualifyIsAnswered(q,a){return q.type==='number'?(a!=null&&a!==''):qualifyAnswered(a);}
+function qualifyIsAnswered(q,a){return !qualifyMissing(q,a);}
 function qualifyGo(i){var n=qualifyQuestions().length;qStep=Math.max(0,Math.min(n-1,i));renderQualify();
   var v=document.getElementById('view-qualify');if(v&&v.scrollIntoView)v.scrollIntoView({block:'start'});}
 function qualifyChoose(qid,i){setQualify(qid,i);}
@@ -2982,6 +3104,8 @@ function qualifyFinish(){
   for(var k=at+1;k<NEXT_FLOW.length;k++){if(can(NEXT_FLOW[k])){showView(NEXT_FLOW[k]);return;}}
 }
 function qualifySubmit(){
+  var qs0=qualifyQuestions(), q0=qs0[qStep];
+  if(q0&&qualifyMissing(q0,(state.qualify||{})[q0.id])){qualifyRefreshSubmit();return;}
   var n=qualifyQuestions().length;
   if(qStep>=n-1)qualifyFinish(); else qualifyGo(qStep+1);
 }
@@ -3030,8 +3154,14 @@ function qualifyQuestionHtml(qs,ans,bar){
         +' style="display:flex;align-items:center;gap:14px;padding:15px 16px;min-height:54px;border:2px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'#eef4f5':'#fff')+';border-radius:12px;cursor:pointer;margin-top:9px;user-select:none">'
         +mark+'<span style="font-size:16px;font-weight:'+(on?'700':'500')+'">'+qesc(o.label)+'</span>'
         +(tag?'<span class="sub" style="margin-left:auto;font-size:11.5px">'+tag+'</span>':'')+'</div>';
-      if(on&&o.specify){
-        row+='<input type="text" value="'+qesc(qualifyText(a))+'" placeholder="Please specify…"'
+      if(on&&o.specify&&o.number){
+        row+='<div style="display:flex;align-items:center;gap:10px;margin-top:7px">'
+          +'<input type="number" inputmode="decimal" min="0" value="'+qesc(qualifyText(a))+'" placeholder="'+(o.required?'Required':'Enter value')+'"'
+          +' oninput="setQualifySpecify(&#39;'+qesc(q.id)+'&#39;,this.value)" onkeydown="if(event.key===&#39;Enter&#39;&&!document.getElementById(&#39;qSubmitBtn&#39;).disabled)qualifySubmit()"'
+          +' style="width:220px;padding:12px 13px;border:1.5px solid '+(o.required?'#1769d0':'#cfd8da')+';border-radius:10px;font-size:16px">'
+          +(o.unit?'<span class="sub" style="font-size:14px">'+qesc(o.unit)+'</span>':'')+'</div>';
+      }else if(on&&o.specify){
+        row+='<input type="text" value="'+qesc(qualifyText(a))+'" placeholder="'+(o.required?'Please specify (required)…':'Please specify…')+'"'
           +' oninput="setQualifySpecify(&#39;'+qesc(q.id)+'&#39;,this.value)"'
           +' style="width:100%;margin-top:7px;padding:12px 13px;border:1.5px solid #cfd8da;border-radius:10px;font-size:15px">';
       }
@@ -3040,7 +3170,7 @@ function qualifyQuestionHtml(qs,ans,bar){
         /* src is passed through: this stage is outside #docwrap, so restoreImages
            never reaches it and a re-render would otherwise drop the picture. */
         row+='<div style="margin-top:7px;border:1px dashed '+(has?'var(--line)':'#e0a0a0')+';border-radius:10px;padding:9px;background:'+(has?'#fbfcfc':'#fdf6f6')+'">'
-          +'<div class="sub" style="font-size:12px;margin-bottom:6px">'+(has?'Photo added — tap to replace':'Add a photo of this (required on the survey)')+'</div>'
+          +'<div class="sub" style="font-size:12px;margin-bottom:6px">'+(has?'Photo added — tap to replace':(o.required?'Add a photo of this — required to continue':'Add a photo of this (required on the survey)'))+'</div>'
           +'<div class="gimg" style="height:150px;border-radius:8px;border:1px solid var(--line)">'
           +ph(pk,'TAP TO ADD PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[pk])
           +'</div></div>';
@@ -3048,16 +3178,16 @@ function qualifyQuestionHtml(qs,ans,bar){
       return row;
     }).join('')||'<div class="sub" style="margin-top:8px">No answers configured for this question.</div>';
   }
-  var answered=qualifyIsAnswered(q,a);
+  var miss=qualifyMissing(q,a), answered=!miss;
   /* Only shown when the answers leave nothing to configure. */
   var none=qualifyMatches().length===0;
   var warn=none?'<div style="margin-top:12px;padding:10px 12px;border:1px solid #e4b4b4;background:#fdf2f2;border-radius:10px;font-size:13px;color:#a33">No product matches every answer so far. Change an answer to widen the range.</div>':'';
   var anyAns=qs.some(function(x){return qualifyIsAnswered(x,ans[x.id]);});
   var nav='<div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">'
     +'<button class="btn" onclick="qualifyGo(qStep-1)"'+(qStep===0?' disabled':'')+' style="min-width:96px;padding:11px 16px">← Back</button>'
-    +(answered?'':'<button class="btn" onclick="qualifySubmit()" style="padding:11px 16px">Skip</button>')
     +'<span style="flex:1"></span>'
-    +'<button class="btn primary" onclick="qualifySubmit()"'+(answered?'':' disabled')+' style="min-width:140px;padding:11px 18px">'+(last?'Submit &amp; configure →':'Submit')+'</button>'
+    +'<span id="qMissHint" class="sub" style="font-size:12.5px;color:#8a5200">'+qesc(miss)+'</span>'
+    +'<button class="btn primary" id="qSubmitBtn" onclick="qualifySubmit()"'+(answered?'':' disabled')+' style="min-width:140px;padding:11px 18px">'+(last?'Submit &amp; configure →':'Submit')+'</button>'
     +'</div>'
     +(anyAns?'<div style="margin-top:12px"><a href="javascript:void 0" onclick="clearQualify()" class="sub" style="font-size:12.5px">Clear all answers</a></div>':'');
   return '<div class="card" style="padding:20px 22px">'+head+inner+warn+nav+'</div>';
@@ -3117,6 +3247,12 @@ function renderQualifyAdmin(){
         +'<input value="'+qesc(o.label)+'" oninput="setQualifyOptLabel('+qi+','+oi+',this.value)" placeholder="Answer text" style="flex:1;min-width:180px;padding:7px 9px;border:1px solid #cfd8da;border-radius:8px;font-size:13px">'
         +'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="Opens a free-text box when this answer is chosen">'
         +'<input type="checkbox" '+(o.specify?'checked':'')+' onchange="toggleQualifySpecify('+qi+','+oi+',this.checked)">Text box</label>'
+        +(o.specify?'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="The box takes a number in mm">'
+          +'<input type="checkbox" '+(o.number?'checked':'')+' onchange="toggleQualifyOptFlag('+qi+','+oi+',&#39;number&#39;,this.checked)">Number (mm)</label>':'')
+        +'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="Asks for a photo when this answer is chosen">'
+        +'<input type="checkbox" '+(o.photo?'checked':'')+' onchange="toggleQualifyOptFlag('+qi+','+oi+',&#39;photo&#39;,this.checked)">Photo</label>'
+        +((o.specify||o.photo)?'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="The rep cannot move on until the text/number and photo for this answer are filled in">'
+          +'<input type="checkbox" '+(o.required?'checked':'')+' onchange="toggleQualifyOptFlag('+qi+','+oi+',&#39;required&#39;,this.checked)">Required</label>':'')
         +'<button class="btn sm" onclick="delQualifyOpt('+qi+','+oi+')">Remove</button></div>'
         +grid+'</div>';
     }).join('');
@@ -3184,7 +3320,14 @@ function delQualifyOpt(qi,oi){admin.qualifyQuestions[qi].options.splice(oi,1);pe
 function setQualifyOptLabel(qi,oi,v){admin.qualifyQuestions[qi].options[oi].label=v;persistAdmin();}
 function toggleQualifySpecify(qi,oi,on){
   var o=admin.qualifyQuestions[qi].options[oi];
-  if(on)o.specify=true; else delete o.specify;
+  if(on)o.specify=true; else{delete o.specify;delete o.number;delete o.unit;if(!o.photo)delete o.required;}
+  persistAdmin();renderQualifyAdmin();
+}
+function toggleQualifyOptFlag(qi,oi,flag,on){
+  var o=admin.qualifyQuestions[qi].options[oi];
+  if(on)o[flag]=true; else delete o[flag];
+  if(flag==='number'){if(on)o.unit=o.unit||'mm'; else delete o.unit;}
+  if(!o.specify&&!o.photo)delete o.required;
   persistAdmin();renderQualifyAdmin();
 }
 function toggleQualifyModel(qi,oi,model,on){
@@ -7489,6 +7632,15 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   renderDocuments();
 }
 function toggleAck(k,el){if(!state.job.acks)state.job.acks={};state.job.acks[k]=!state.job.acks[k];el.classList.toggle('on',state.job.acks[k]);if(typeof scheduleAutoSave==='function')scheduleAutoSave();}
+/* Glass panes on a projection over 3 m are too long and heavy for the standard crew
+   (Richard, 2026-10-12). "Glass Roof" is the only glass roof in the model data; the
+   test also covers a glass name an admin might add, but not "Prepared for Glass"
+   (no glass fitted) or glass slats. */
+function needsExtraManpower(cf){
+  if(!cf)return false;
+  var r=String(cf.roof||'');
+  return /glass/i.test(r)&&!/prepared|slat/i.test(r)&&(+cf.proj||0)>3000;
+}
 function ralLabel(c){const n=(c.match(/\d{4}/)||[''])[0];return n?('RAL '+n+' '+c.replace(n,'').trim()):c;}
 function cword(c){return (c.split(' ')[0]||'').toUpperCase();}
 const DLAB={quote:'QUOTATION',contract:'OFFICIAL CONTRACT',signed:'SIGNED CONTRACT',survey:'SURVEY DOCUMENT',picking:'PICKING LIST'};
@@ -7922,6 +8074,7 @@ function renderDocuments(){
       ${state.doc!=='survey'?`<div class="sh">Sides / Infills — ${cf.mount}</div>
       <div style="flex:0 0 auto;max-height:120mm;display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-auto-rows:minmax(0,58mm);align-content:start;overflow:hidden">${sideCardsBig}</div>
       <div class="sh" style="margin-top:10px">Installation &amp; Fitting Schedule</div>`:`<div class="sh">Installation &amp; Fitting Schedule</div>`}
+      ${needsExtraManpower(cf)?`<div style="flex:0 0 auto;margin:2px 0 6px;padding:6px 10px;border:1.5px solid #c81e1e;background:#fdecec;border-radius:7px;color:#a51b1b;font-weight:800;font-size:11px;letter-spacing:.3px">\u26a0 ADDITIONAL MANPOWER REQUIRED <span style="font-weight:600;letter-spacing:0">\u2014 glass roof with ${(+cf.proj).toLocaleString('en-GB')} mm projection (over 3,000 mm)</span></div>`:''}
       <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0">
       <table class="mt"><thead><tr><th>Fitting work to be carried out</th><th class="c" style="width:60px">Qty</th><th class="r" style="width:90px">Unit £</th><th class="r" style="width:100px">Total £</th></tr></thead>
         <tbody>${fitRows}</tbody>
@@ -8293,7 +8446,8 @@ function docImg(cat,opt,label,w,hh,extra,tint){
 function pickImg(box){box.querySelector('input[type=file]').click();}
 function setDocImg(input){
   const f=input.files[0];if(!f)return;
-  optimiseImage(f,900,900,0.82).then(data=>{const box=input.closest('.imgph');state.images[box.dataset.key]=data;putImg(box,data);});
+  optimiseImage(f,900,900,0.82).then(data=>{const box=input.closest('.imgph');state.images[box.dataset.key]=data;putImg(box,data);
+    if(/^qphoto_/.test(box.dataset.key)&&typeof qualifyRefreshSubmit==='function'){qualifyRefreshSubmit();scheduleAutoSave();}});
 }
 function putImg(box,src){
   let img=box.querySelector('img');
