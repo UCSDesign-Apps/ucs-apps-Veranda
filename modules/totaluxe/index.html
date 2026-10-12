@@ -1915,6 +1915,10 @@ const ADMIN_DEFAULT={
      else is capture-only and simply records site context. An option with
      specify:true opens a free-text box when it is chosen. */
   qualifyQuestions:[
+    /* type:'photo' — the answer IS a picture, and it is required. Site Image fills the
+       document's own site photo slot (state.images.sitephoto), so the picture the rep
+       takes here is the one printed under Site & Install. See qualifyQuestionPhotoKey. */
+    {id:'q_siteimage',text:'Site Image',section:'Site & Install',type:'photo'},
     {id:'q_access',text:'Site Access',section:'Site & Install',type:'select',
      options:[{label:'No access issues'},{label:'Limited — through house',photo:true},{label:'Limited — alley',photo:true}]},
     {id:'q_level',text:'Installation Level',section:'Site & Install',type:'select',
@@ -2203,7 +2207,8 @@ function can(sec){return currentUser&&currentUser.sections.includes(sec);}
    config keeps its own copy of the questions, so without a version to compare
    against, later seed edits — new answers, photo flags, corrected allow-lists —
    never reach it. */
-const QUALIFY_SEED_VERSION=6;   /* 6: Height Restriction replaces Soffit Clearance; Roof Type
+const QUALIFY_SEED_VERSION=7;   /* 7: Site Image (q_siteimage, type photo) is the first question.
+                                     6: Height Restriction replaces Soffit Clearance; Roof Type
                                      "Not decided yet"; Decking Required. Saved configs get these
                                      once from the server (routes/api.js migrateQualifyOct12). */   /* 4: added q_colour (Frame Colour, RAL families)
                                   5: q_mount "Not decided yet"; q_rooftype multi. An admin-edited
@@ -2584,14 +2589,20 @@ function fillSelectPH(id,arr,v,placeholder){
    answered. Slots are created on demand and keyed by question id, so ph() has to
    recognise them by prefix rather than from a fixed list. */
 function qualifyPhotoKey(qid){return 'qphoto_'+String(qid).replace(/[^a-z0-9_]/gi,'');}
+/* Where a type:'photo' question keeps its picture. Site Image shares the documents'
+   general site photo, so taking it on Qualify fills the Site & Install page and an
+   older job's existing site photo already answers it. */
+function qualifyQuestionPhotoKey(q){return (q&&q.id==='q_siteimage')?'sitephoto':qualifyPhotoKey(q&&q.id);}
 function qualifyPhotoWanted(q){
   if(!q||q.filter||(q.section||'')==='Product')return false;
+  if(q.type==='photo')return q.id!=='q_siteimage';   /* Site Image prints as the big site photo */
   return qualifyPicks((state.qualify||{})[q.id]).some(function(p){var o=q.options&&q.options[p];return !!(o&&o.photo);});
 }
 function qualifyPhotoList(){
   var out=[];
   ((typeof qualifyQuestions==='function')?qualifyQuestions():[]).forEach(function(q){
     if(!qualifyPhotoWanted(q))return;
+    if(q.type==='photo'){out.push({id:q.id,key:qualifyPhotoKey(q.id),label:q.text,answer:'Photo'});return;}
     var a=(state.qualify||{})[q.id];
     var lab=qualifyPicks(a).map(function(p){var o=q.options&&q.options[p];return o?(o.label||''):'';}).filter(Boolean).join(', ');
     var t=(a&&typeof a==='object')?(a.text||''):'';
@@ -2622,6 +2633,7 @@ function qualifySurveyRows(){
   qs.forEach(function(q){
     if(q.filter)return;                       /* product filters aren't site checks */
     if((q.section||'')==='Product')return;    /* Lighting etc. stay off the site list */
+    if(q.type==='photo')return;               /* a picture, shown under the table, not a row */
     var v='';
     if(q.type==='number'){
       var n=ans[q.id];
@@ -2825,6 +2837,7 @@ function qualifyAnswered(a){return qualifyPicks(a).length>0;}
 function qualifyMissing(q,a){
   if(!q)return '';
   if(q.type==='number')return (a!=null&&a!=='')?'':'Enter a value to continue';
+  if(q.type==='photo')return (state.images&&state.images[qualifyQuestionPhotoKey(q)])?'':'Add '+(q.id==='q_siteimage'?'a site image':'a photo')+' to continue';
   if(!qualifyAnswered(a))return 'Choose an answer to continue';
   var picks=qualifyPicks(a), t=String(qualifyText(a)||'').trim();
   for(var i=0;i<picks.length;i++){
@@ -3204,6 +3217,15 @@ function qualifyQuestionHtml(qs,ans,bar){
       +' oninput="setQualifyNumber(&#39;'+qesc(q.id)+'&#39;,this.value)" onkeydown="if(event.key===&#39;Enter&#39;)qualifySubmit()"'
       +' style="width:220px;padding:13px 14px;border:1.5px solid #cfd8da;border-radius:10px;font-size:17px">'
       +(q.unit?'<span class="sub" style="font-size:14px">'+qesc(q.unit)+'</span>':'')+'</div>';
+  }else if(q.type==='photo'){
+    /* src is passed through for the same reason as the answer photos below: this stage
+       is outside #docwrap, so restoreImages never reaches it. */
+    var qk=qualifyQuestionPhotoKey(q), qhas=!!(state.images&&state.images[qk]);
+    inner='<div style="margin-top:8px;border:1.5px dashed '+(qhas?'var(--line)':'#e0a0a0')+';border-radius:12px;padding:10px;background:'+(qhas?'#fbfcfc':'#fdf6f6')+'">'
+      +'<div class="sub" style="font-size:12.5px;margin-bottom:7px">'+(qhas?'Image added — tap to replace':'Take or choose a photo of the site — required to continue')+'</div>'
+      +'<div class="gimg" style="height:300px;border-radius:10px;border:1px solid var(--line)">'
+      +ph(qk,'TAP TO ADD SITE IMAGE',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[qk])
+      +'</div></div>';
   }else{
     var picks=qualifyPicks(a).map(String);
     inner=(q.options||[]).map(function(o,i){
@@ -3270,7 +3292,7 @@ function renderQualifyAdmin(){
   }
   var allModels=Object.keys(MODELS);
   body.innerHTML=qs.map(function(q,qi){
-    var isNum=(q.type==='number');
+    var isNum=(q.type==='number'), isPhoto=(q.type==='photo');
     var head='<div style="display:flex;gap:8px;align-items:center">'
       +'<input value="'+qesc(q.text)+'" oninput="setQualifyText('+qi+',this.value)" placeholder="Question" style="flex:1;padding:8px 10px;border:1px solid #cfd8da;border-radius:8px;font-size:14px;font-weight:600">'
       +'<button class="btn sm" onclick="delQualifyQuestion('+qi+')">Delete question</button></div>'
@@ -3279,13 +3301,19 @@ function renderQualifyAdmin(){
       +'<input value="'+qesc(q.section||'')+'" oninput="setQualifySection('+qi+',this.value)" placeholder="e.g. Site &amp; Install" style="width:170px;padding:6px 8px;border:1px solid #cfd8da;border-radius:8px;font-size:12px"></label>'
       +'<label class="sub" style="font-size:12px">Type '
       +'<select onchange="setQualifyType('+qi+',this.value)" style="padding:6px 8px;border:1px solid #cfd8da;border-radius:8px;font-size:12px">'
-      +'<option value="select"'+(isNum?'':' selected')+'>Choice</option>'
-      +'<option value="number"'+(isNum?' selected':'')+'>Number</option></select></label>'
-      +(isNum?'':'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px">'
+      +'<option value="select"'+((isNum||isPhoto)?'':' selected')+'>Choice</option>'
+      +'<option value="number"'+(isNum?' selected':'')+'>Number</option>'
+      +'<option value="photo"'+(isPhoto?' selected':'')+'>Photo</option></select></label>'
+      +((isNum||isPhoto)?'':'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px">'
         +'<input type="checkbox" '+(q.filter?'checked':'')+' onchange="toggleQualifyFilter('+qi+',this.checked)">Filters products</label>'
         +'<label class="sub" style="font-size:12px;display:flex;align-items:center;gap:6px" title="The rep can tick several answers. For a product filter, products matching ANY ticked answer stay available.">'
         +'<input type="checkbox" '+(q.multi?'checked':'')+' onchange="toggleQualifyMulti('+qi+',this.checked)">More than one answer</label>')
       +'</div>';
+    if(isPhoto){
+      return '<div class="card" style="margin-bottom:14px">'+head
+        +'<div class="sub" style="margin-top:8px;font-size:12px">A photo question asks the rep for a picture, and they cannot move on without one.'
+        +(q.id==='q_siteimage'?' This one is the documents&#39; site image: it fills the Site &amp; Install page.':' It prints with the other site photos.')+'</div></div>';
+    }
     if(isNum){
       return '<div class="card" style="margin-bottom:14px">'+head
         +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'
@@ -3347,7 +3375,10 @@ function setQualifySection(qi,v){admin.qualifyQuestions[qi].section=v;persistAdm
    filter, a Choice needs at least one answer to be usable. */
 function setQualifyType(qi,v){
   var q=admin.qualifyQuestions[qi];
-  if(v==='number'){
+  if(v==='photo'){
+    q.type='photo';
+    delete q.options; delete q.filter; delete q.multi; delete q.unit; delete q.placeholder;
+  }else if(v==='number'){
     q.type='number';
     delete q.options; delete q.filter; delete q.multi;
     if(q.unit==null)q.unit='mm';
@@ -8103,20 +8134,25 @@ function renderDocuments(){
         ${qualifySurveyRows().map(r=>`<tr><td>${esc(r.label)}</td><td>${state.doc==='survey'?svSiteCell(r):`<b>${esc(r.value)}</b>`}</td>${state.doc==='survey'?`<td style="border-bottom:1px dotted #c8d0d2"></td><td class="c">${ck(false)}</td>`:''}</tr>`).join('')}
       </tbody></table>
 `:''}
-      <!-- SITE PHOTOS — always rendered, and OUTSIDE the answers conditional above: the general
-           site photo must still appear on a job that has no Qualify answers at all. Only the
-           required entries (the flagged Qualify answers) get a red border and the PHOTO
-           REQUIRED prompt; the general site photo is optional and always has been.
+      <!-- SITE IMAGE + SITE PHOTOS — always rendered, and OUTSIDE the answers conditional above:
+           the site image must still appear on a job that has no Qualify answers at all.
+           Site Image (2026-10-12) is the first Qualify question and is required there; it is
+           the sitephoto slot, and it GROWS to fill whatever the page has left below the
+           answers. The flagged-answer photos follow in one short row. Only those get a red
+           border and the PHOTO REQUIRED prompt on the survey.
            NB: no backticks in comments inside this template literal - they would close it. -->
-      ${docPhotoList().length?`
+      ${(()=>{const extra=docPhotoList().filter(p=>p.key!=='sitephoto');return `
+      <div class="sh" style="margin-top:10px">Site Image</div>
+      <div class="gimg siteimg" style="position:relative;flex:1 1 auto;min-height:60mm;margin-top:4px;border-radius:8px;overflow:hidden;border:1px solid var(--line)">${ph('sitephoto','SITE IMAGE',0,0,'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{}).sitephoto)}</div>
+      ${extra.length?`
       <div class="sh" style="margin-top:10px">Site Photos</div>
-      <div style="display:grid;grid-template-columns:repeat(${Math.min(3,docPhotoList().length)},1fr);gap:10px;margin-top:4px">
-        ${docPhotoList().map(p=>`
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(4,extra.length)},1fr);gap:10px;margin-top:4px;flex-shrink:0">
+        ${extra.map(p=>`
         <div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid ${(state.doc==='survey'&&p.required&&!state.images[p.key])?'#ed1c2d':'var(--line)'}">
-          <div class="gimg" style="height:130px">${ph(p.key,(state.doc==='survey'&&p.required)?'PHOTO REQUIRED':'SITE PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[p.key])}</div>
+          <div class="gimg" style="height:110px">${ph(p.key,(state.doc==='survey'&&p.required)?'PHOTO REQUIRED':'SITE PHOTO',0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8',(state.images||{})[p.key])}</div>
           <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(60,70,80,0.85);color:#fff;font-size:9.5px;font-weight:600;text-align:center;padding:3px 5px;line-height:1.3">${esc(p.label)}<br><span style="font-weight:400;opacity:.85">${esc(p.answer)}</span></div>
         </div>`).join('')}
-      </div>`:''}
+      </div>`:''}`;})()}
     </div></div>${pfoot()}
   </section>`:''}
 
@@ -8253,14 +8289,9 @@ function renderDocuments(){
         <div class="chip"><div class="ct" style="display:block">Usage &amp; Benefits</div><div class="cs">An ideal outdoor living space for entertaining, dining or relaxing in shelter — effectively extending your home and linking indoors to out.</div></div>
         <div class="chip"><div class="ct" style="display:block">Weather Resistance</div><div class="cs">Weatherproof with a built-in drainage system that manages rainwater. Designed to be weatherproof but not fully waterproof; some ingress can occur in certain conditions and does not imply a fault.</div></div>
       </div>
-      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;min-height:36mm;max-height:52mm;overflow:hidden">
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;min-height:36mm;max-height:72mm;overflow:hidden">
         ${docImg('lifestyle','4','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px;object-fit:contain;background:#f0f2f3')}
         ${docImg('lifestyle','5','',0,0,'width:100%;height:100%;border:1px solid var(--line);border-radius:10px;object-fit:contain;background:#f0f2f3')}
-      </div>
-      <div style="background:linear-gradient(135deg,var(--gold),var(--gold-d));color:#fff;border-radius:14px;padding:16px 22px;margin-top:16px;display:flex;justify-content:space-between;align-items:center">
-        <div><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.95">Today's Special Offer</div>
-          <div style="font-size:24px;font-weight:800">${calc.discount}% off materials${dkSell>0?' &amp; decking':''}</div></div>
-        <div style="text-align:right;font-size:11px;opacity:.95">Valid until<br><b style="font-size:14px">${j.valid}</b></div>
       </div>
     </div></div>${pfoot()}
   </section>`:''}
@@ -8273,6 +8304,13 @@ function renderDocuments(){
        no sign-off. -->
   <section class="sheet">${phead('Payment Schedule')}
     <div class="pg" style="display:flex;flex-direction:column;overflow:hidden"><div class="fill">
+      <!-- Today's Special Offer moved here from Your Veranda or Glass Room (Richard, 2026-10-12):
+           it now sits directly above the staged payments. Quote and contract only, as before. -->
+      ${(state.doc==='quote'||state.doc==='contract')?`      <div style="background:linear-gradient(135deg,var(--gold),var(--gold-d));color:#fff;border-radius:14px;padding:16px 22px;margin:0 0 14px;flex-shrink:0;display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.95">Today's Special Offer</div>
+          <div style="font-size:24px;font-weight:800">${calc.discount}% off materials${dkSell>0?' &amp; decking':''}</div></div>
+        <div style="text-align:right;font-size:11px;opacity:.95">Valid until<br><b style="font-size:14px">${j.valid}</b></div>
+      </div>`:''}
       <div class="sh" style="margin-top:0">Staged Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6a777c">${calc.sched.tiers===4?'(order over £7,000)':'(order £7,000 or under)'}</span></div>
           <table class="mt tall paysched"><thead><tr><th>Stage</th><th class="r" style="width:140px">Amount</th><th style="width:200px">Payment Method</th></tr></thead><tbody>
             <tr><td><b>Total Price</b> (incl VAT &amp; installation)</td><td class="r"><b>£${money(calc.youpay)}</b></td><td style="color:#6a777c">Payment type: <b>${j.pay}</b></td></tr>
@@ -8572,8 +8610,10 @@ function docImg(cat,opt,label,w,hh,extra,tint){
 function pickImg(box){box.querySelector('input[type=file]').click();}
 function setDocImg(input){
   const f=input.files[0];if(!f)return;
-  optimiseImage(f,900,900,0.82).then(data=>{const box=input.closest('.imgph');state.images[box.dataset.key]=data;putImg(box,data);
-    if(/^qphoto_/.test(box.dataset.key)&&typeof qualifyRefreshSubmit==='function'){qualifyRefreshSubmit();scheduleAutoSave();}});
+  /* The site photo fills most of the Site & Install page, so it keeps more detail. */
+  const big=input.closest('.imgph').dataset.key==='sitephoto';
+  optimiseImage(f,big?1600:900,big?1600:900,0.82).then(data=>{const box=input.closest('.imgph');state.images[box.dataset.key]=data;putImg(box,data);
+    if((/^qphoto_/.test(box.dataset.key)||box.dataset.key==='sitephoto')&&typeof qualifyRefreshSubmit==='function'){qualifyRefreshSubmit();scheduleAutoSave();}});
 }
 function putImg(box,src){
   let img=box.querySelector('img');
