@@ -176,6 +176,7 @@ async function ensureSchema(pool) {
   await backfillDeckingSection(pool);
   await migrateQualifyGuided(pool);
   await migrateQualifyOct12(pool);
+  await migrateQualifySiteImage(pool);
 }
 
 // Guided Qualify (2026-10-05): Roof Type takes several answers and Mounting Type
@@ -266,6 +267,31 @@ async function migrateQualifyOct12(pool) {
   } catch (e) {
     // Never block boot; the questions simply stay as saved.
     console.warn('[migration] qualify oct12 skipped:', e.message);
+  }
+}
+
+// Site Image (Richard, 2026-10-12): a required photo becomes the FIRST Qualify question.
+// The page stores it as the documents' site photo, so it fills the Site & Install page.
+// Applied once, as above, so an admin who later moves or deletes it is not overridden.
+async function migrateQualifySiteImage(pool) {
+  try {
+    const { rows } = await pool.query('SELECT module, config FROM admin_config');
+    for (const row of rows) {
+      const cfg = row.config;
+      if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.qualifyQuestions)) continue;
+      if (cfg._migrations && cfg._migrations.qualifySiteImage) continue;
+      const qs = cfg.qualifyQuestions;
+      let done = '(nothing to change)';
+      if (!qs.some((q) => q && q.id === 'q_siteimage')) {
+        qs.unshift({ id: 'q_siteimage', text: 'Site Image', section: 'Site & Install', type: 'photo' });
+        done = 'Site Image added as question 1';
+      }
+      cfg._migrations = Object.assign({}, cfg._migrations, { qualifySiteImage: true });
+      await pool.query('UPDATE admin_config SET config = $2 WHERE module = $1', [row.module, cfg]);
+      console.log(`[migration] qualify site image — module=${row.module}: ${done}`);
+    }
+  } catch (e) {
+    console.warn('[migration] qualify site image skipped:', e.message);
   }
 }
 
