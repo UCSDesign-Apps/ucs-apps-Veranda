@@ -341,6 +341,12 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .sv-dd .sv-dd-arrow{font-size:10px;color:#6a777c;}
 .sv-dd.chg .sv-dd-txt{color:#c81e1e;font-weight:800;}
 @media print{.sv-dd{border-bottom:0;}}
+.sv-num{display:inline-flex;align-items:baseline;gap:3px;}
+.sv-num input{width:6.2em;font:inherit;font-weight:700;color:inherit;padding:1px 4px;border:1px solid #9fb3b8;border-radius:5px;background:#fff;text-align:right;}
+.sv-num.chg input,.sv-num.chg .sv-num-txt{color:#c81e1e;font-weight:800;}
+.sv-num .sv-num-txt{display:none;}
+@media print{.sv-num .sv-num-txt{display:inline;}}
+.pdfcap .sv-num .sv-num-txt{display:inline;}
 .pdfcap .sv-dd{border-bottom:0;} .pdfcap .sv-dd-arrow,.pdfcap .no-print{display:none !important;}
 .sv-corrtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
 .sv-corrtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#6a777c;border-bottom:1.5px solid var(--line);padding:5px 6px;}
@@ -1220,10 +1226,10 @@ const MODELS={
   Bosco:{colours:["Grey 7024","Cream 9001","White 9016","Black 9005"],roofs:["Clear","Opal","Solar","Ultra"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060,8060,9060,10060,11060,12060],projections:[2500,3000,3500,4000,6000],projByWidth:{8060:[2500,3000,3500,4000],9060:[2500,3000,3500,4000],10060:[2500,3000,3500,4000],11060:[2500,3000,3500,4000],12060:[2500,3000,3500,4000]}},
   Nebbiolo:{colours:["Grey 7024","Cream 9001"],roofs:["Clear","Opal","Solar","Ultra"],gutters:["Classic"],posts:["Square"],widths:[4045,5045,6045],projections:[2500,3000,3500]},
   Ribolla:{colours:["Grey 7024","Black 9005"],roofs:["Clear","Opal","Ultra"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060],projections:[2500,3000,3500,4000]},
-  Pigato:{colours:["Grey 7024","Cream 9001","Traffic White 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
-  "Pigato Plus":{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Classic","Round"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
-  Giallo:{colours:["Grey 7024","Cream 9001","Traffic white 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Straight"],posts:["2 Piece Post"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
-  "Giallo Plus":{colours:["Grey 7024","Traffic white 9016","Black 9005"],roofs:["Polycarbonate","Glass Roof"],gutters:["Straight"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
+  Pigato:{colours:["Grey 7024","Cream 9001","Traffic White 9016","Black 9005"],roofs:["Polycarbonate Clear","Polycarbonate Opal","Glass Roof"],gutters:["Classic","Round"],posts:["Round BP","Round no BP","Square BP","Square no BP"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
+  "Pigato Plus":{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Polycarbonate Clear","Polycarbonate Opal","Glass Roof"],gutters:["Classic","Round"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
+  Giallo:{colours:["Grey 7024","Cream 9001","Traffic white 9016","Black 9005"],roofs:["Polycarbonate Clear","Polycarbonate Opal","Glass Roof"],gutters:["Straight"],posts:["2 Piece Post"],widths:[4060,5060,6060,7060],projections:[2500,3000,3500,4000,6000]},
+  "Giallo Plus":{colours:["Grey 7024","Traffic white 9016","Black 9005"],roofs:["Polycarbonate Clear","Polycarbonate Opal","Glass Roof"],gutters:["Straight"],posts:["Square 150mm"],widths:[5060,6060,7060],projections:[2500,3000,3500,4000]},
   Trebbiano:{colours:["Grey 7024","Traffic White 9016","Black 9005"],roofs:["Glass Roof"],gutters:["Straight"],posts:["Square 150mm"],widths:[3914,4878,5842,6806],projections:[2982,3482,3982,4482]},
   /* ── Pergolas / Louvered roofs ── */
   Verdeca:{colours:["White (fabric)"],roofs:["Fabric canopy"],gutters:["Integrated"],posts:["Square"],widths:[4000,5000,6000],projections:[3000,3500,4000]},
@@ -2574,11 +2580,17 @@ function updateSentButtons(){
 }
 
 /* ===== CONFIGURATOR ===== */
+/* Pigato / Giallo glazing was one "Polycarbonate" option until it was split into
+   Polycarbonate Clear / Opal (Richard, 2026-10-14). A quote saved with the old
+   value keeps it in the list (so it is not blanked) until a new one is picked,
+   and the old Polycarbonate picture stands in for the Clear / Opal ones. */
+function roofList(m,cur){const l=(m&&m.roofs)||[];return (cur&&cur==='Polycarbonate'&&!l.includes(cur))?[cur].concat(l):l;}
+function roofImg(r){const im=(admin.imgmap&&admin.imgmap.roof)||{};return im[r]||(/^Polycarbonate /.test(String(r))?(im['Polycarbonate']||''):'');}
 function fillSelect(id,arr,v){const s=document.getElementById(id);if(!s)return;s.innerHTML='';arr.forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x;s.appendChild(o);});if(v!=null)s.value=v;}
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIGURATOR WIZARD
 ═══════════════════════════════════════════════════════════════════════════ */
-const ROOF_ICON={'Clear':'☀️','Opal':'🌥️','Solar':'🌤️','Ultra Clear':'💎','Ultra':'💎','Glass 8.8mm':'🪟','Glass Roof':'🪟','Polycarbonate':'☀️','Adjustable slats':'🔄','Retractable slats':'↔️','Fabric canopy':'🏕️','Glass slats 8.8mm':'🪟'};
+const ROOF_ICON={'Clear':'☀️','Opal':'🌥️','Solar':'🌤️','Ultra Clear':'💎','Ultra':'💎','Glass 8.8mm':'🪟','Glass Roof':'🪟','Polycarbonate':'☀️','Polycarbonate Clear':'☀️','Polycarbonate Opal':'🌥️','Adjustable slats':'🔄','Retractable slats':'↔️','Fabric canopy':'🏕️','Glass slats 8.8mm':'🪟'};
 /* ── SITE & GROUNDWORKS (2026-08-17) ──────────────────────────────────────────
    Four site-condition fields captured in wizard step 5 and printed on the
    Specification page of quote, contract AND survey.
@@ -3548,7 +3560,7 @@ function renderRoofChips(){
   const locked_r=opts.length===1;
   g.innerHTML=opts.map(r=>{
     const sel=state.config.roof===r;
-    const img=(admin.imgmap&&admin.imgmap.roof&&admin.imgmap.roof[r])||'';
+    const img=roofImg(r);
     const imgPart=img
       ?`<div style="width:100%;height:60px;overflow:hidden"><img src="${img}" alt="${r}" style="width:100%;height:100%;object-fit:cover"></div>`
       :`<div style="width:100%;height:60px;background:#e0e8ec;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a969a;text-align:center;padding:4px">${r.split(' ').slice(0,2).join(' ')}</div>`;
@@ -3764,7 +3776,7 @@ function onModel(keep){
   } else {
     mountSel.value='Wall Mounted';mountSel.disabled=true;state.config.mount='Wall Mounted';
   }
-  fillSelect('c_colour',m.colours,keep?cf.colour:null);fillSelect('c_roof',m.roofs,keep?cf.roof:null);
+  fillSelect('c_colour',m.colours,keep?cf.colour:null);fillSelect('c_roof',roofList(m,keep?cf.roof:null),keep?cf.roof:null);
   fillSelect('c_gutter',m.gutters,keep?cf.gutter:null);fillSelect('c_post',m.posts,keep?cf.post:null);
   fillSelect('c_width',[...m.widths.map(String),'Bespoke'],keep?String(cf.width):null);
   const initProjs=getProjs(model,keep?cf.width:(m.widths[0]||0));
@@ -7526,6 +7538,15 @@ function _svPaint(el,c){
    red and is listed on Survey Corrections; choosing the ordered value again clears
    it. The text is what prints; an invisible select over it opens the list. Stored
    in job.surveyFinish / job.surveySite — survey record only. */
+/* Dimensions are typed, not picked (Richard, 2026-10-14): Width and Projection on
+   Confirmation of Finishes, and any number-type Confirm on Site answer, are number
+   boxes. The box is screen only; the plain text beside it is what prints. A blank or
+   impossible number puts the ordered value back. */
+function svNum(kind,key,cur,orig,unit){
+  const changed=String(cur)!==String(orig);
+  return `<span class="sv-num${changed?' chg':''}"><input class="no-print" type="number" inputmode="numeric" min="1" step="1" value="${esc(String(cur==null?'':cur))}" aria-label="${esc(key)}" title="As ordered: ${esc(String(orig==null||orig===''?'\u2014':orig))}${unit?' '+unit:''}" onchange="svSet('${kind}','${String(key).replace(/'/g,'')}',this.value)">`
+    +`<span class="sv-num-txt">${esc(String(cur==null||cur===''?'\u2014':cur))}</span>${unit?' '+esc(unit):''}</span>`;
+}
 function svFinishVal(k){const e=(state.job.surveyFinish||{})[k];return e?e.val:state.config[k];}
 function svDD(kind,key,label,options,cur,orig){
   const changed=String(cur)!==String(orig);
@@ -7545,12 +7566,20 @@ function svSet(kind,key,v){
   if(kind==='finish'){
     if(!state.job.surveyFinish)state.job.surveyFinish={};
     const F=state.job.surveyFinish, orig=state.config[key];
-    const val=(key==='width'||key==='proj')?+v:v;
+    let val=v;
+    if(key==='width'||key==='proj'){val=Math.round(+v);if(!(val>0&&val<100000))val=+orig;}
     if(String(val)===String(orig))delete F[key];else F[key]={val,by,at};
   }else{
     if(!state.job.surveySite)state.job.surveySite={};
-    const S=state.job.surveySite, orig=qualifyPicks((state.qualify||{})[key])[0];
-    if(String(v)===String(orig))delete S[key];else S[key]={val:+v,by,at};
+    const S=state.job.surveySite, q=qualifyQuestions().find(x=>x.id===key);
+    if(q&&q.type==='number'){
+      const o=(state.qualify||{})[key], orig=(o==null?'':String(o).trim());
+      let n=String(v).trim();if(n!==''&&!(isFinite(+n)&&+n>=0))n=orig;
+      if(n===orig)delete S[key];else S[key]={val:n,num:true,by,at};
+    }else{
+      const orig=qualifyPicks((state.qualify||{})[key])[0];
+      if(String(v)===String(orig))delete S[key];else S[key]={val:+v,by,at};
+    }
   }
   renderDocuments();scheduleSurveySave();
 }
@@ -7567,8 +7596,7 @@ function svFinishCell(key,cw){
   if(key==='roof')return svDD('finish','roof',displayName(mdl)+' \u2014 '+cur,svOpts(M.roofs,orig,cur),cur,orig);
   if(key==='dims'){
     const w=svFinishVal('width'), p=svFinishVal('proj');
-    return svDD('finish','width',w+' mm',svOpts(M.widths,cf.width,w,v=>v+' mm'),w,cf.width)
-      +' \u00d7 '+svDD('finish','proj',p+' mm',svOpts(getProjs(mdl,w),cf.proj,p,v=>v+' mm'),p,cf.proj)
+    return svNum('finish','width',w,cf.width,'mm')+' \u00d7 '+svNum('finish','proj',p,cf.proj,'mm')
       +(cf.bespoke?' \u00b7 Bespoke':'');
   }
   return '';
@@ -7576,7 +7604,11 @@ function svFinishCell(key,cw){
 /* A Confirm on Site answer as a dropdown of its question's answers. */
 function svSiteCell(r){
   const q=qualifyQuestions().find(x=>x.id===r.qid);
-  if(!q||q.type==='number'||q.multi||!Array.isArray(q.options)||!q.options.length)return `<b>${esc(r.value)}</b>`;
+  if(q&&q.type==='number'){
+    const o=(state.qualify||{})[q.id], orig=(o==null?'':String(o).trim()), e=(state.job.surveySite||{})[q.id];
+    return '<b>'+svNum('site',q.id,e?e.val:orig,orig,q.unit||'')+'</b>';
+  }
+  if(!q||q.multi||!Array.isArray(q.options)||!q.options.length)return `<b>${esc(r.value)}</b>`;
   const orig=qualifyPicks((state.qualify||{})[q.id])[0];
   const e=(state.job.surveySite||{})[q.id], cur=e?e.val:orig;
   const label=e?(q.options[cur]&&q.options[cur].label||''):r.value;
@@ -7592,6 +7624,8 @@ function svChangeRows(){
   Object.keys(NAMES).forEach(k=>{const e=F[k];if(!e)return;
     out.push({key:'Specification \u2014 '+NAMES[k],c:{orig:fmt(k,cf[k]),val:fmt(k,e.val),by:e.by,at:e.at}});});
   qualifyQuestions().forEach(q=>{const e=S[q.id];if(!e)return;
+    if(q.type==='number'){const u=q.unit?' '+q.unit:'',o=(state.qualify||{})[q.id];
+      out.push({key:'Site & Install \u2014 '+q.text,c:{orig:(o==null||String(o).trim()==='')?'\u2014':String(o).trim()+u,val:e.val===''?'':e.val+u,by:e.by,at:e.at}});return;}
     const o=q.options&&q.options[qualifyPicks((state.qualify||{})[q.id])[0]], n=q.options&&q.options[e.val];
     out.push({key:'Site & Install \u2014 '+q.text,c:{orig:o?o.label:'\u2014',val:n?n.label:'',by:e.by,at:e.at}});});
   return out;
@@ -8623,7 +8657,7 @@ function ph(key,label,w,h,extra,src,tint){
 function docImg(cat,opt,label,w,hh,extra,tint){
   const key='map_'+cat+'_'+String(opt).replace(/[^a-z0-9]/gi,'');
   const stateImg=state.images[key];
-  const adminImg=(admin.imgmap&&admin.imgmap[cat]&&admin.imgmap[cat][opt])||'';
+  const adminImg=cat==='roof'?roofImg(opt):((admin.imgmap&&admin.imgmap[cat]&&admin.imgmap[cat][opt])||'');
   /* Per-quote override only wins if it holds a real image (data URI ≫100 chars);
      an empty/stale marker falls through to the shared admin.imgmap. */
   const src=(stateImg&&stateImg.length>100)?stateImg:adminImg;
