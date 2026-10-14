@@ -382,6 +382,10 @@ tr.pk-chg td{color:#c81e1e;font-weight:700;}
 .sv-elev-f.set input,.sv-elev-f.set .sv-elev-out{color:#c81e1e;border-color:#c81e1e;}
 .sv-elev-f.pitch{cursor:default;background:#f6f7f8;}
 .sv-elev-out{font-size:16px;font-weight:800;} .sv-elev-out i{font-size:11px;font-weight:600;color:#a33;}
+/* Survey PDF: surveyor-only items are blanked but keep their space, so the page is laid
+   out exactly as on screen and pen ink stays on the words it was written over. */
+.pdfcap .surveynote{visibility:hidden;}
+.pdfcap .sv-elev.no-print{display:flex !important;visibility:hidden;}
 .pdfcap .sv-dd{border-bottom:0;} .pdfcap .sv-dd-arrow,.pdfcap .no-print{display:none !important;}
 .sv-corrtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
 .sv-corrtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#6a777c;border-bottom:1.5px solid var(--line);padding:5px 6px;}
@@ -8094,7 +8098,9 @@ function verandaOutlineSVG(cf,sv){
   const tap=k=>sv?` onclick="svElevTap('${k}')" style="cursor:pointer"`:'';
   const red=c=>c?' style="fill:#c81e1e;font-weight:800"':'';
   const stroke=c=>c?'#c81e1e':'#c2a14e';
-  return `<svg viewBox="0 0 720 250" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" xmlns="http://www.w3.org/2000/svg">
+  /* survey: the drawing fills its box exactly (absolute), so when the page is held
+     to A4 for the emailed PDF it shrinks with the box instead of spilling over */
+  return `<svg viewBox="0 0 720 250" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block${sv?';position:absolute;inset:0':''}" xmlns="http://www.w3.org/2000/svg">
   <style>.vl{stroke:#3c4650;stroke-width:2.2;fill:none}.vd{stroke:#c2a14e;stroke-width:1.5}.vt{font:600 12px Helvetica,Arial;fill:#3c4650}.vc{font:700 10px Helvetica,Arial;fill:#9aa0a6;letter-spacing:1.5px}</style>
   <text x="185" y="26" text-anchor="middle" class="vc">FRONT ELEVATION</text>
   <line class="vl" x1="40" y1="205" x2="335" y2="205"/>
@@ -8472,7 +8478,7 @@ function renderDocuments(){
           <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>
         </div>
       </div>
-      <div class="grow" style="min-height:90px;margin-top:6px;background:#fcfcfb;border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:flex;flex-direction:column"><div id="svElevDraw" style="flex:1;min-height:80px">${verandaOutlineSVG(cf,true)}</div>${svElevStrip()}</div>`:`
+      <div class="grow" style="min-height:90px;margin-top:6px;background:#fcfcfb;border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:flex;flex-direction:column"><div id="svElevDraw" style="flex:1;min-height:150px;position:relative">${verandaOutlineSVG(cf,true)}</div>${svElevStrip()}</div>`:`
       <div class="grow" style="min-height:340px;display:flex;flex-direction:column;gap:8px">
         <!-- Render on the left, the specification beside it on the right. The site photo has
              moved out to the Site Photos block, so the render can take the full height and the
@@ -9462,32 +9468,48 @@ async function captureSheetForPDF(sh){
   if(pg){ pg.style.transform='none'; pg.style.transformOrigin='top left'; }
   /* Fix 2 — force A4 print dimensions */
   sh.style.width='794px'; sh.style.minHeight='1123px'; sh.style.maxHeight='1123px'; sh.style.overflow='hidden';
+  /* A survey page with pen ink is captured at its full on-screen height (the ink layer is
+     stretched over the whole sheet, so squeezing the sheet to A4 moved the words out
+     from under the ink) and scaled down onto the A4 page afterwards. */
+  if(sh.querySelector('.drawlayer'))sh.style.maxHeight='none';
   /* the PDF is drawn from the screen view, so screen-only marks (dropdown arrows
      and underlines on the survey) are hidden for the capture too */
   sh.classList.add('pdfcap');
+  /* html2canvas draws an SVG sized by percentage (the survey elevation drawing,
+     height:100% inside a flex box) at its natural size, so it spilled over the
+     table below. Pin each SVG to the pixel size it has on the page for the capture. */
+  const svgPins=[...sh.querySelectorAll('svg')].map(el=>{const r=el.getBoundingClientRect();
+    const p={el,w:el.style.width,h:el.style.height};if(r.width&&r.height){el.style.width=r.width+'px';el.style.height=r.height+'px';}return p;});
   try{
     /* Measure signable cards in the SAME (forced, unscaled) coordinate system as the
        capture, so the invisible Signable overlay tags land exactly on the boxes. */
     const shRect=sh.getBoundingClientRect();
+    const capH=sh.querySelector('.drawlayer')?Math.max(1123,Math.round(sh.scrollHeight)):1123;
+    const k=1123/capH, offX=(794-794*k)/2;  /* fit to A4: scale and centre */
     const signableCards=[];
     sh.querySelectorAll('[data-signable]').forEach(card=>{
       const cr=card.getBoundingClientRect();
       signableCards.push({
         tag:card.getAttribute('data-signable'),
-        x:((cr.left-shRect.left)/shRect.width)*210,
-        y:((cr.top-shRect.top)/shRect.height)*297,
-        w:(cr.width/shRect.width)*210,
-        h:(cr.height/shRect.height)*297
+        x:((offX+(cr.left-shRect.left)*k)/794)*210,
+        y:(((cr.top-shRect.top)*k)/1123)*297,
+        w:((cr.width*k)/794)*210,
+        h:((cr.height*k)/1123)*297
       });
     });
     /* Fix 3 — capture at fixed A4 pixels, desktop window width */
     const canvas=await html2canvas(sh,{
       scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',
-      width:794,height:1123,windowWidth:1200,windowHeight:1123,
+      width:794,height:capH,windowWidth:1200,windowHeight:capH,
       scrollX:0,scrollY:-window.scrollY,x:0,y:0
     });
-    return {canvas,signableCards};
+    if(capH===1123)return {canvas,signableCards};
+    const a4=document.createElement('canvas');a4.width=794*2;a4.height=1123*2;
+    const x=a4.getContext('2d');x.fillStyle='#ffffff';x.fillRect(0,0,a4.width,a4.height);
+    x.drawImage(canvas,offX*2,0,794*2*k,1123*2);
+    return {canvas:a4,signableCards};
   }finally{
+    svgPins.forEach(p=>{p.el.style.width=p.w;p.el.style.height=p.h;});
     sh.classList.remove('pdfcap');
     sh.style.transform=prev.shTransform; sh.style.marginBottom=prev.shMargin; sh.style.marginLeft=prev.shMarginL;
     if(pg){ pg.style.transform=prev.pgTransform; pg.style.transformOrigin=prev.pgOrigin; }
