@@ -8935,7 +8935,7 @@ function sgShowEditor(url){
   const rep=_sg.rep,cust=_sg.cust;
   sgEl('sgHead').textContent='Signable · Place the fields';
   sgEl('sgBar').innerHTML=`<b>Signer 1</b> ${sgH(rep.name)} &lt;${sgH(rep.email)}&gt; &nbsp;·&nbsp; <b>Signer 2</b> ${sgH(cust.name)} &lt;${sgH(cust.email)}&gt;<br>
-    Check both signature boxes are in place (they come from the contract), then add any initials, date or text fields and assign each to a signer. Changes save automatically — press <b>Review &amp; send</b> when done.`;
+    Check both signature boxes are in place (they come from the contract), then add any initials, date or text fields and assign each to a signer. Signable shows one page at a time: <b>tap the page pictures down the right-hand side</b> (scroll them for later pages) to move between pages. Changes save automatically — press <b>Review &amp; send</b> when done.`;
   const f=sgEl('sgFrame');
   f.src=url; /* never stored anywhere else */
   sgMode('setup');
