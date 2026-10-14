@@ -138,6 +138,7 @@ body.role-admin .admin-only-flex{display:flex!important;}
   .g3{grid-template-columns:1fr 1fr;}
   .g4{grid-template-columns:1fr 1fr;}
   .content{padding:16px;}
+  html .docwrap{margin:-16px;} /* match the 16px padding, or the pages poke 8px past the screen edge */
   .card{padding:16px;}
   .wiz-body{padding:14px 14px;}
   /* nav tabs: smaller padding, hide label text, show icon only */
@@ -195,7 +196,7 @@ body.role-admin .admin-only-flex{display:flex!important;}
   .atabs::-webkit-scrollbar{display:none;}
   .atabs button{flex-shrink:0;font-size:12px;padding:8px 10px;}
   /* document viewer: scale 210mm sheet to fit screen */
-  .docwrap{margin:0 0 -10px;padding:12px 0 40px;overflow-x:hidden;}
+  html .docwrap{margin:0 0 -10px;padding:12px 0 40px;overflow-x:hidden;}
   /* The -10px was applied on all four sides, which pushed the wrapper past the left
      viewport edge and produced a sliver of horizontal scroll on narrow screens. Only
      the bottom pull was wanted. */
@@ -331,10 +332,23 @@ body.role-admin .admin-only-flex{display:flex!important;}
 body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;}
 html.drawlock,html.drawlock body{overflow:hidden !important;overscroll-behavior:none;}
 body.drawmode #docwrap,body.drawmode #view-docs{touch-action:none;overscroll-behavior:none;}
-.penfab{position:fixed;right:22px;bottom:22px;z-index:300;display:flex;align-items:center;gap:8px;height:62px;min-width:62px;padding:0 18px;justify-content:center;border-radius:31px;border:0;background:#fff;color:var(--ink);box-shadow:0 6px 20px rgba(0,0,0,.28),0 0 0 2px var(--gold) inset;cursor:pointer;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+html{touch-action:manipulation;}
+.docwrap{overflow-x:hidden;}
+@media (pointer:coarse){.sv-num input,.sv-elev-in input{font-size:16px !important;}}
+.penwrap{position:fixed;right:22px;bottom:22px;z-index:300;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+.pentray{display:none;flex-direction:column;align-items:center;gap:8px;padding:10px 8px;background:#fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.22);}
+.penwrap.on .pentray{display:flex;}
+.pentray .pt-sw{width:34px;height:34px;border-radius:50%;border:3px solid #fff;background:var(--c);box-shadow:0 0 0 1px #c3cbce;cursor:pointer;padding:0;}
+.pentray .pt-sw.on{box-shadow:0 0 0 3px var(--gold);}
+.pentray .pt-btn{width:48px;border:1px solid #d7dfe1;background:#fff;border-radius:10px;padding:4px 0 3px;font-size:19px;line-height:1.1;cursor:pointer;display:flex;flex-direction:column;align-items:center;color:var(--ink);}
+.pentray .pt-btn small{font-size:9px;font-weight:700;color:#5a676b;}
+.pentray .pt-btn.on{background:#fff4d6;border-color:var(--gold);box-shadow:0 0 0 2px var(--gold);}
+.pentray .pt-btn.danger small{color:#a33;}
+.penfab{position:relative;display:flex;align-items:center;gap:8px;height:62px;min-width:62px;padding:0 18px;justify-content:center;border-radius:31px;border:0;background:#fff;color:var(--ink);box-shadow:0 6px 20px rgba(0,0,0,.28),0 0 0 2px var(--gold) inset;cursor:pointer;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .penfab .ic{font-size:26px;line-height:1;}
 .penfab .lbl:empty{display:none;}
 .penfab.on{background:#c81e1e;color:#fff;box-shadow:0 6px 20px rgba(200,30,30,.45);}
+.penfab.erasing{background:#5a676b;box-shadow:0 6px 20px rgba(0,0,0,.35);}
 @media print{.penfab{display:none !important;}}
 /* draw toolbar sticky — sits just below topnav */
 .drawbar{position:sticky;top:var(--topnav-h);z-index:35;display:flex;gap:8px;align-items:center;background:#fff;border-bottom:1px solid var(--line);padding:8px 24px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.07);}
@@ -458,6 +472,7 @@ body.print-internal .internal-notes-only{display:block !important;}
   /* Each sheet fills exactly one A4 page and clips to prevent overflow on fixed-height sheets */
   .sheet{box-shadow:none;margin:0;width:210mm;height:296mm;min-height:296mm;max-height:296mm;overflow:hidden;
     page-break-after:always;break-after:page;}
+  .sheet{transform:none !important;margin:0 !important;} /* undo the on-screen tablet fit */
   /* Picking list and survey notes can span multiple pages — remove height constraint */
   .sheet.picking-only,
   .sheet.survey-only,
@@ -551,7 +566,17 @@ body.print-internal .internal-notes-only{display:block !important;}
   </header>
 
   <!-- Pen button — always on screen while the Survey is open -->
-  <button type="button" class="penfab no-print" id="penFab" style="display:none" onclick="toggleDraw()" aria-pressed="false" title="Tap to write on the survey"><span class="ic">✏️</span><span class="lbl"></span></button>
+  <div class="penwrap no-print" id="penFab" style="display:none">
+    <div class="pentray" id="penTray" role="toolbar" aria-label="Pen tools">
+      <button type="button" class="pt-sw on" data-tool="pen" data-c="#e02424" style="--c:#e02424" onclick="setPenTool('pen','#e02424')" title="Red pen"></button>
+      <button type="button" class="pt-sw" data-tool="pen" data-c="#1769d0" style="--c:#1769d0" onclick="setPenTool('pen','#1769d0')" title="Blue pen"></button>
+      <button type="button" class="pt-sw" data-tool="pen" data-c="#111111" style="--c:#111" onclick="setPenTool('pen','#111111')" title="Black pen"></button>
+      <button type="button" class="pt-btn" data-tool="eraser" onclick="setPenTool('eraser')" title="Eraser">🧽<small>Eraser</small></button>
+      <button type="button" class="pt-btn" onclick="undoDraw()" title="Undo last stroke">↶<small>Undo</small></button>
+      <button type="button" class="pt-btn danger" onclick="clearDraw()" title="Clear all writing">🗑<small>Clear</small></button>
+    </div>
+    <button type="button" class="penfab" id="penFabBtn" onclick="toggleDraw()" aria-pressed="false" title="Tap to write on the survey"><span class="ic">✏️</span><span class="lbl"></span></button>
+  </div>
   <!-- Draw toolbar — sticky below topnav, only visible on Survey doc -->
   <div class="drawbar no-print" id="drawBar" style="display:none">
     <button class="btn sm" id="drawToggle" onclick="toggleDraw()">✏️ Draw: Off</button>
@@ -2468,8 +2493,7 @@ function showView(v,btn){
     if(bar)bar.style.display='none';
     if(drawMode)setDrawMode(false);
   } else {
-    /* entering docs — show bar only if survey is active */
-    if(bar)bar.style.display=(state.doc==='survey')?'flex':'none';
+    if(bar)bar.style.display='none'; /* replaced by the pen button */
   }
   penFabSync();
   if(v==='qualify')renderQualify();
@@ -7487,14 +7511,14 @@ function buildBOM(cf){
 }
 
 /* ===== SURVEY DRAW LAYER ===== */
-let penColour='#e02424', penWidth=3, drawing=false, drawMode=false, lastDrawIdx=null;
+let penColour='#e02424', penWidth=3, drawing=false, drawMode=false, lastDrawIdx=null, penTool='pen';
 let _activeCv=null,_activeCtx=null,_activeIdx=null,_last=null,_scroll=null;const _dpts=new Map();
 const _avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
 function _pos(cv,e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};}
 function scrollParent(el){let n=el&&el.parentElement;while(n&&n!==document.body){const s=getComputedStyle(n);if(/(auto|scroll)/.test(s.overflowY)&&n.scrollHeight>n.clientHeight+2)return n;n=n.parentElement;}return document.scrollingElement||document.documentElement;}
 function _drawMove(e){if(!drawMode)return;if(_dpts.has(e.pointerId))_dpts.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(_dpts.size>=2&&_scroll){const dy=_scroll.my-_avg([..._dpts.values()].map(p=>p.y));if(_scroll.el===document.scrollingElement||_scroll.el===document.documentElement)window.scrollTo(0,_scroll.top+dy);else _scroll.el.scrollTop=_scroll.top+dy;e.preventDefault();return;}
-  if(!drawing||!_activeCv)return;const p=_pos(_activeCv,e);_activeCtx.strokeStyle=penColour;_activeCtx.lineWidth=penWidth;_activeCtx.beginPath();_activeCtx.moveTo(_last.x,_last.y);_activeCtx.lineTo(p.x,p.y);_activeCtx.stroke();_last=p;e.preventDefault();}
+  if(!drawing||!_activeCv)return;const p=_pos(_activeCv,e);const er=penTool==='eraser';_activeCtx.globalCompositeOperation=er?'destination-out':'source-over';_activeCtx.strokeStyle=penColour;_activeCtx.lineWidth=er?24:penWidth;_activeCtx.beginPath();_activeCtx.moveTo(_last.x,_last.y);_activeCtx.lineTo(p.x,p.y);_activeCtx.stroke();_activeCtx.globalCompositeOperation='source-over';_last=p;e.preventDefault();}
 function _drawUp(e){if(e&&e.pointerId!=null)_dpts.delete(e.pointerId);if(_dpts.size<2)_scroll=null;if(drawing&&_activeCv&&_dpts.size===0){drawing=false;saveDraw(_activeIdx,_activeCv);_activeCv=null;}}
 /* ═══ SURVEY MARK-UP — page keys, corrections, saving (2026-10) ═══════════════
    Drawings and corrections used to be filed by page POSITION (0, 1, 2…). Any page
@@ -7502,6 +7526,16 @@ function _drawUp(e){if(e&&e.pointerId!=null)_dpts.delete(e.pointerId);if(_dpts.s
    decking switched on — slid every later drawing onto the wrong page. Both are
    now filed by page NAME, taken from the page header ("Specification",
    "Terms & Conditions · 2 of 5"), which stays put when other pages come and go. */
+/* On the survey, Site & Install comes before Veranda Specification (Richard,
+   2026-10-14). Drawings and corrections are keyed by page name, so they follow. */
+function surveyPageOrder(){
+  if(state.doc!=='survey')return;
+  const secs=[...document.querySelectorAll('#docwrap > section.sheet')];
+  /* read the name from the header markup: innerText is empty while the view is hidden */
+  const nm=sh=>{const m=sh.querySelector('.phead .meta');if(!m)return '';const d=document.createElement('div');d.innerHTML=m.innerHTML.split(/<br\s*\/?>/i).pop();const t=d.textContent.trim(),i=t.indexOf(' · ');return i<0?'':t.slice(i+3).trim();};
+  const spec=secs.find(sh=>nm(sh)==='Specification'),site=secs.find(sh=>nm(sh)==='Site & Install');
+  if(spec&&site&&secs.indexOf(site)>secs.indexOf(spec))spec.parentNode.insertBefore(site,spec);
+}
 function surveyPageName(sh){
   const m=sh.querySelector('.phead .meta');if(!m)return 'Page';
   const last=m.innerText.trim().split('\n').pop();
@@ -7733,9 +7767,23 @@ function setDrawMode(on){
   document.documentElement.classList.toggle('drawlock',drawMode);
   if(drawMode&&document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}
-  const f=document.getElementById('penFab');if(f){f.classList.toggle('on',drawMode);f.setAttribute('aria-pressed',drawMode?'true':'false');
-    f.title=drawMode?'Pen on — tap to stop writing and scroll again':'Tap to write on the survey';
-    const l=f.querySelector('.lbl');if(l)l.textContent=drawMode?'Writing — tap to stop':'';}
+  document.getElementById('penFab')?.classList.toggle('on',drawMode);
+  penFabLabel();
+}
+function penFabLabel(){
+  const f=document.getElementById('penFabBtn');if(!f)return;
+  const er=penTool==='eraser';
+  f.classList.toggle('on',drawMode);f.classList.toggle('erasing',drawMode&&er);f.setAttribute('aria-pressed',drawMode?'true':'false');
+  f.title=drawMode?'Tap to stop and scroll again':'Tap to write on the survey';
+  f.querySelector('.ic').textContent=drawMode&&er?'🧽':'✏️';
+  f.querySelector('.lbl').textContent=drawMode?(er?'Erasing — tap to stop':'Writing — tap to stop'):'';
+}
+/* Pen tray: a pen colour or the eraser. Picking one also turns writing on. */
+function setPenTool(tool,colour){
+  penTool=tool==='eraser'?'eraser':'pen';
+  if(colour)penColour=colour;
+  document.querySelectorAll('#penTray [data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool==='eraser'?penTool==='eraser':(penTool==='pen'&&b.dataset.c===penColour)));
+  if(!drawMode)setDrawMode(true);else penFabLabel();
 }
 function toggleDraw(){setDrawMode(!drawMode);}
 function penFabSync(){const f=document.getElementById('penFab');if(!f)return;
@@ -7744,7 +7792,7 @@ function setPen(c,el){penColour=c;document.querySelectorAll('.drawbar .sw').forE
 function setupDraw(){
   const bar=document.getElementById('drawBar');
   if(state.doc!=='survey'){if(bar)bar.style.display='none';return;}
-  if(bar)bar.style.display='flex'; /* flex keeps items aligned */
+  if(bar)bar.style.display='none'; /* replaced by the pen button and its tray */
   if(!window._drawBound){window._drawBound=true;document.addEventListener('pointermove',_drawMove,{passive:false});document.addEventListener('pointerup',_drawUp);document.addEventListener('pointercancel',_drawUp);}
   /* One-off: drawings saved before 2026-10 are keyed by page position (counted
      over every sheet, hidden ones included). Move each to its page's name, using
@@ -7887,7 +7935,7 @@ function fitPages(){
   const vw=window.innerWidth;
   document.querySelectorAll('#docwrap .sheet').forEach(sh=>{
     if(sh.offsetParent===null)return;
-    sh.style.transform='';sh.style.marginBottom='';sh.style.transformOrigin='top left';
+    sh.style.transform='';sh.style.marginBottom='';sh.style.marginLeft='';sh.style.transformOrigin='top left';
     const pg=sh.querySelector('.pg');if(!pg)return;
     pg.style.transform='';pg.style.transformOrigin='top center';
     if(vw<=640){
@@ -7901,6 +7949,16 @@ function fitPages(){
       /* Tablet/desktop: only scale inner .pg if content overflows */
       const avail=pg.clientHeight,content=pg.scrollHeight;
       if(content>avail+2){const fc=Math.max(0.55,avail/content);pg.style.transform='scale('+fc.toFixed(4)+')';}
+      /* Tablet (Richard, 2026-10-14): an A4 sheet is wider than a portrait tablet, which
+         left the page panning sideways and zoomed. Shrink the whole sheet to the width
+         there is, centred. A transformed box no longer widens the scroll area. */
+      const wrap=sh.parentElement, room=(wrap?wrap.clientWidth:vw)-24, w=sh.offsetWidth||794;
+      if(w>room&&room>200){
+        const sc=room/w;
+        sh.style.transform='scale('+sc.toFixed(4)+')';
+        sh.style.marginLeft=Math.round(((wrap?wrap.clientWidth:vw)-w*sc)/2)+'px';
+        sh.style.marginBottom=Math.round(sh.offsetHeight*(sc-1)+20*sc)+'px';
+      }
     }
   });
 }
@@ -7931,9 +7989,9 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   document.body.classList.add('dm-'+d);
   document.querySelectorAll('.doctabs button').forEach(b=>b.classList.toggle('active',b.dataset.doc===d));
   const sb=document.getElementById('signableBtn');sb.style.display=(d==='contract')?'':'none';
-  /* draw toolbar — always visible on survey, hidden otherwise */
+  /* the old draw toolbar stays hidden: the pen button and its tray replace it (2026-10-14) */
   const bar=document.getElementById('drawBar');
-  if(bar)bar.style.display=(d==='survey')?'flex':'none';
+  if(bar)bar.style.display='none';
   if(d!=='survey'&&drawMode)setDrawMode(false);
   penFabSync();
   updateSentButtons();
@@ -8594,7 +8652,7 @@ function renderDocuments(){
       <p style="font-size:8.5px;color:#8a969a;margin-top:8px">* By signing, the customer acknowledges all goods listed above have been received in good condition. Any damage, shortage or defect reported after signing will not be accepted as a claim against UCS Design Group. *</p>
     </div>${pfoot()}
   </section>`;
-  document.getElementById('docwrap').innerHTML=html;restoreImages();refreshSignToggle();applySurveyEdits();setupDraw();fitPages();setTimeout(fitPages,160);
+  document.getElementById('docwrap').innerHTML=html;surveyPageOrder();restoreImages();refreshSignToggle();applySurveyEdits();setupDraw();fitPages();setTimeout(fitPages,160);
 }
 /* ===== SIGNED CONTRACT TAB =====
    Shows the executed PDF from Signable. It shares nothing with the quote /
@@ -9209,12 +9267,12 @@ function sgFrameClear(){
 async function captureSheetForPDF(sh){
   const pg=sh.querySelector('.pg');
   const prev={
-    shTransform:sh.style.transform, shMargin:sh.style.marginBottom,
+    shTransform:sh.style.transform, shMargin:sh.style.marginBottom, shMarginL:sh.style.marginLeft,
     pgTransform:pg?pg.style.transform:'', pgOrigin:pg?pg.style.transformOrigin:'',
     width:sh.style.width, minHeight:sh.style.minHeight, maxHeight:sh.style.maxHeight, overflow:sh.style.overflow
   };
   /* Fix 1 — reset sheet + inner .pg transforms */
-  sh.style.transform='none'; sh.style.marginBottom='0';
+  sh.style.transform='none'; sh.style.marginBottom='0'; sh.style.marginLeft='';
   if(pg){ pg.style.transform='none'; pg.style.transformOrigin='top left'; }
   /* Fix 2 — force A4 print dimensions */
   sh.style.width='794px'; sh.style.minHeight='1123px'; sh.style.maxHeight='1123px'; sh.style.overflow='hidden';
@@ -9245,7 +9303,7 @@ async function captureSheetForPDF(sh){
     return {canvas,signableCards};
   }finally{
     sh.classList.remove('pdfcap');
-    sh.style.transform=prev.shTransform; sh.style.marginBottom=prev.shMargin;
+    sh.style.transform=prev.shTransform; sh.style.marginBottom=prev.shMargin; sh.style.marginLeft=prev.shMarginL;
     if(pg){ pg.style.transform=prev.pgTransform; pg.style.transformOrigin=prev.pgOrigin; }
     sh.style.width=prev.width; sh.style.minHeight=prev.minHeight; sh.style.maxHeight=prev.maxHeight; sh.style.overflow=prev.overflow;
   }
