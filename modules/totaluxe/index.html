@@ -1742,6 +1742,9 @@ function sidesCost(cf){
       const pPrice=panelPrice(d.pwidth,d.pheight);
       const heritageAdd=d.heritage?HERITAGE_UPLIFT:0;
       total+=trackP + UCHANNEL_PRICE + (d.tracks*pPrice) + (d.tracks*2*SOFTCLOSE_PRICE) + (d.heritage?d.tracks*HERITAGE_UPLIFT:0);
+      /* keyframe materials (Richard, 2026-10-14). Quotes sent before this were
+         priced without them and keep that price (cf.kfPriced===false). */
+      if(cf.kfPriced!==false)total+=kfNett(d,cf);
     } else {
       total+=(sp[opt]||0);
     }
@@ -3900,7 +3903,7 @@ function renderSides(){
     /* Door spec — expands inline when Aura Glass Doors selected */
     if(cur==='Aura Glass Doors'){
       const d=state.config.doors[s]||defaultDoor();state.config.doors[s]=d;
-      const doorCost=(()=>{const trackP=TRACK_PRICE[d.rail]||255;const pP=panelPrice(d.pwidth,d.pheight);return(trackP+UCHANNEL_PRICE+(d.tracks*pP)+(d.tracks*2*SOFTCLOSE_PRICE)+(d.heritage?d.tracks*HERITAGE_UPLIFT:0)).toLocaleString('en-GB',{minimumFractionDigits:2});})();
+      const doorCost=(()=>{const trackP=TRACK_PRICE[d.rail]||255;const pP=panelPrice(d.pwidth,d.pheight);return(trackP+UCHANNEL_PRICE+(d.tracks*pP)+(d.tracks*2*SOFTCLOSE_PRICE)+(d.heritage?d.tracks*HERITAGE_UPLIFT:0)+(state.config.kfPriced!==false?kfNett(d,state.config):0)).toLocaleString('en-GB',{minimumFractionDigits:2});})();
       inner+=`<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:8px">
         <div class="sectiontitle" style="margin:0 0 8px">Glass door specification — ${labels[s]}</div>
         <!-- Optimiser -->
@@ -6318,7 +6321,9 @@ function renderCostings(){
     relSides.forEach(s2=>{if(s2!==s)fake.sides[s2]='None';});
     const sc=sidesCost(fake)||0;
     materialCostTotal+=sc;
-    brkHTML+=`<tr><td>${sideNames[s]} side — ${hesc(opt)}</td><td class="r">${money2(sc)}</td></tr>`;
+    const kd=opt==='Aura Glass Doors'&&cf.kfPriced!==false&&cf.doors&&cf.doors[s];
+    const kfTxt=(kd&&kd.keyframe&&kd.keyframe.req)?` (incl. ${hesc(kd.keyframe.type)} keyframe ${money2(kfNett(kd,cf))})`:'';
+    brkHTML+=`<tr><td>${sideNames[s]} side — ${hesc(opt)}${kfTxt}</td><td class="r">${money2(sc)}</td></tr>`;
   });
   brkHTML+=`<tr style="font-weight:600;border-top:1px solid var(--line);color:#555"><td>Materials subtotal (ex-VAT, ex-markup)</td><td class="r">${money2(Math.round(materialCostTotal*100)/100)}</td></tr>`;
   /* Itemised, not a lump sum: state.fitting carries the veranda install bands,
@@ -7424,6 +7429,9 @@ function loadQuote(id){const q=getQuotes().find(x=>x.id===id);if(!q)return;
   if(!state.config.sides)state.config.sides={left:"None",right:"None",front:"None",back:"None"};
   if(!state.config.doors)state.config.doors={};
   if(!state.config.sideNotes)state.config.sideNotes={front:"",left:"",right:"",back:""};
+  /* Keyframe materials joined the quote price on 2026-10-14: a quote already past
+     Draft keeps the price it was sent at; Drafts pick the keyframe up. */
+  if(state.config.kfPriced===undefined)state.config.kfPriced=(!state.status||state.status==='Draft');
   /* Site & Groundworks added 2026-08-17. loadQuote uses a SHALLOW Object.assign, so a saved
      quote's `config` replaces blankState's wholesale — these come back undefined on every
      pre-existing quote unless we backfill them explicitly (same reason sides/doors/sideNotes
@@ -7723,7 +7731,8 @@ function svSideCosts(sd,opt,door,cf){
   const fit=has?sideFitLines(c,sd):[], fsum=l=>l.reduce((t,x)=>t+(+x.price||0)*(x.qty||1),0);
   const kfFit=fit.filter(x=>/Keyframe/.test(x.desc)), mainFit=fit.filter(x=>!/Keyframe/.test(x.desc));
   const dr=opt==='Aura Glass Doors'?c.doors[sd]:null;
-  return {parts:svSell(sidesCost(c)), kfParts:svSell(kfNett(dr,c)), labour:fsum(mainFit), kfLabour:fsum(kfFit)};
+  const kfN=kfNett(dr,c);
+  return {parts:svSell(sidesCost(c)-(c.kfPriced!==false?kfN:0)), kfParts:svSell(kfN), labour:fsum(mainFit), kfLabour:fsum(kfFit)};
 }
 /* A side changed on the survey adds up to four survey extras:
    parts — the infill/doors and the keyframe; labour — fitting for each.
