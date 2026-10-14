@@ -347,6 +347,16 @@ body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;
 .sv-num .sv-num-txt{display:none;}
 @media print{.sv-num .sv-num-txt{display:inline;}}
 .pdfcap .sv-num .sv-num-txt{display:inline;}
+.sv-elev{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;}
+.sv-elev-f{flex:1 1 150px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid #d7dfe1;border-radius:9px;background:#fff;font-size:12px;font-weight:700;color:#3c4650;cursor:text;}
+.sv-elev-f small{display:block;font-size:9.5px;font-weight:600;color:#7a868a;}
+.sv-elev-in{display:inline-flex;align-items:center;gap:4px;}
+.sv-elev-in input{width:5.6em;font:inherit;font-size:15px;font-weight:800;padding:5px 6px;border:1.5px solid #9fb3b8;border-radius:7px;text-align:right;}
+.sv-elev-in b{font-size:11px;color:#6a777c;}
+.sv-elev-f.set{border-color:#e6a3a3;background:#fff6f6;}
+.sv-elev-f.set input,.sv-elev-f.set .sv-elev-out{color:#c81e1e;border-color:#c81e1e;}
+.sv-elev-f.pitch{cursor:default;background:#f6f7f8;}
+.sv-elev-out{font-size:16px;font-weight:800;} .sv-elev-out i{font-size:11px;font-weight:600;color:#a33;}
 .pdfcap .sv-dd{border-bottom:0;} .pdfcap .sv-dd-arrow,.pdfcap .no-print{display:none !important;}
 .sv-corrtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
 .sv-corrtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:#6a777c;border-bottom:1.5px solid var(--line);padding:5px 6px;}
@@ -7764,36 +7774,63 @@ function compKey(name){
 function mergeRows(rows){const m=new Map(),ord=[];rows.forEach(r=>{const key=r[0]+'||'+r[1];const n=parseFloat(r[2]);if(m.has(key)){const e=m.get(key);const en=parseFloat(e[2]);if(!isNaN(n)&&!isNaN(en))e[2]=en+n;}else{ord.push(key);m.set(key,[r[0],r[1],isNaN(n)?r[2]:n]);}});return ord.map(k=>m.get(k));}
 
 /* On the survey (Richard, 2026-10-14) the drawing follows the surveyed Width and
-   Projection (red when they differ from the order), and Width, Projection, Height,
-   Rear height and Pitch can be tapped to type a figure. Height / Rear height / Pitch
-   are site measurements with nothing ordered to compare against, so they are stored
-   in job.surveyElev and printed on the drawing, not listed as corrections. */
-const SV_ELEV={height:{q:'Height (mm)',unit:'mm'},rear:{q:'Rear height (mm)',unit:'mm'},pitch:{q:'Pitch (degrees)',unit:'\u00b0'}};
-function svElevTap(k){
-  if(k==='width'||k==='proj'){
-    const cur=svFinishVal(k), v=prompt((k==='width'?'Width':'Projection')+' (mm) \u2014 as ordered '+state.config[k]+' mm',cur);
-    if(v!=null)svSet('finish',k,String(v).trim()===''?state.config[k]:v);
-    return;
-  }
-  const d=SV_ELEV[k];if(!d)return;
+   Projection (red when they differ from the order). Height (front) and Rear height
+   (at the house wall) are typed into the boxes under the drawing, or by tapping
+   them on it, and show in red once entered. Pitch is worked out from them:
+   atan((rear - front) / projection), using the surveyed projection, and shows in red.
+   Heights are site measurements with nothing ordered to compare against, so they
+   are kept in job.surveyElev and printed on the drawing, not listed as corrections. */
+function svElevVal(k){const E=state.job.surveyElev||{};return E[k]&&E[k].val!==''?E[k].val:'';}
+function svPitch(){
+  const h=+svElevVal('height'),r=+svElevVal('rear'),p=+svFinishVal('proj');
+  if(!svElevVal('height')||!svElevVal('rear')||!(p>0))return null;
+  if(!(r>h))return 'check';
+  return Math.round(Math.atan((r-h)/p)*180/Math.PI*10)/10;
+}
+function svElevSet(k,v){
   const E=state.job.surveyElev||(state.job.surveyElev={});
-  const v=prompt(d.q+' \u2014 leave blank to clear',E[k]?E[k].val:'');
-  if(v==null)return;
-  const t=String(v).trim();
+  const t=String(v==null?'':v).trim();
   if(t===''){delete E[k];}
-  else{const n=+t;if(!isFinite(n)||n<0||n>(k==='pitch'?90:100000)){toast('Enter a number');return;}
-    E[k]={val:String(Math.round(n*10)/10),by:currentUser?currentUser.name:'',at:new Date().toISOString()};}
-  renderDocuments();scheduleSurveySave();
+  else{const n=+t;if(!isFinite(n)||n<=0||n>100000){toast('Enter the height in mm');}
+    else E[k]={val:String(Math.round(n)),by:currentUser?currentUser.name:'',at:new Date().toISOString()};}
+  delete E.pitch; /* worked out now, not typed */
+  svElevRefresh();scheduleSurveySave();
+}
+/* Redraw the drawing and the Pitch in place, not the whole page, so a tap from
+   one height box straight into the next one is not lost to a re-render. */
+function svElevRefresh(){
+  const d=document.getElementById('svElevDraw');if(d)d.innerHTML=verandaOutlineSVG(state.config,true);
+  ['height','rear'].forEach(k=>{const i=document.getElementById('svElev_'+k);if(!i)return;const v=svElevVal(k);
+    if(document.activeElement!==i||i.value===''||!isFinite(+i.value))i.value=v;i.closest('.sv-elev-f').classList.toggle('set',!!v);});
+  const o=document.querySelector('#docwrap .sv-elev-f.pitch');
+  if(o){const pt=svPitch();o.classList.toggle('set',typeof pt==='number');
+    o.querySelector('.sv-elev-out').innerHTML=typeof pt==='number'?pt+'&deg;':pt==='check'?'<i>rear must be higher</i>':'&mdash;';}
+}
+/* Tapping a figure on the drawing jumps to its box. */
+function svElevTap(k){
+  const el=k==='width'?document.querySelectorAll('#docwrap .sv-num input')[0]:k==='proj'?document.querySelectorAll('#docwrap .sv-num input')[1]:document.getElementById('svElev_'+k);
+  if(!el)return;
+  el.scrollIntoView({block:'center',behavior:'smooth'});
+  setTimeout(()=>{try{el.focus();el.select();}catch(e){}},250);
+}
+function svElevStrip(){
+  const pt=svPitch();
+  const box=(k,lbl,hint)=>{const v=svElevVal(k);
+    return `<label class="sv-elev-f${v?' set':''}"><span>${lbl}<small>${hint}</small></span><span class="sv-elev-in"><input id="svElev_${k}" type="number" inputmode="numeric" min="1" step="1" placeholder="mm" value="${esc(v)}" onchange="svElevSet('${k}',this.value)"><b>mm</b></span></label>`;};
+  return `<div class="sv-elev no-print">
+    ${box('height','Height','front, ground to top of frame')}
+    ${box('rear','Rear height','at the house wall')}
+    <div class="sv-elev-f pitch${typeof pt==='number'?' set':''}"><span>Pitch<small>worked out</small></span><span class="sv-elev-out">${typeof pt==='number'?pt+'&deg;':pt==='check'?'<i>rear must be higher</i>':'&mdash;'}</span></div>
+  </div>`;
 }
 /* veranda sizing line-drawing (two elevations with dimension boxes) for the survey/spec page */
 function verandaOutlineSVG(cf,sv){
   const W=sv?svFinishVal('width'):cf.width,P=sv?svFinishVal('proj'):cf.proj;
   const wC=sv&&String(W)!==String(cf.width),pC=sv&&String(P)!==String(cf.proj);
-  const E=(sv&&state.job.surveyElev)||{};
-  const el=k=>E[k]&&E[k].val!==''?esc(E[k].val)+(k==='pitch'?'&deg;':' mm'):(k==='pitch'?'___&deg;':'___');
+  const H=sv?svElevVal('height'):'',R=sv?svElevVal('rear'):'',PT=sv?svPitch():null;
   const tap=k=>sv?` onclick="svElevTap('${k}')" style="cursor:pointer"`:'';
   const red=c=>c?' style="fill:#c81e1e;font-weight:800"':'';
-  const setH=k=>E[k]?' style="font-weight:800"':'';
+  const stroke=c=>c?'#c81e1e':'#c2a14e';
   return `<svg viewBox="0 0 720 250" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" xmlns="http://www.w3.org/2000/svg">
   <style>.vl{stroke:#3c4650;stroke-width:2.2;fill:none}.vd{stroke:#c2a14e;stroke-width:1.5}.vt{font:600 12px Helvetica,Arial;fill:#3c4650}.vc{font:700 10px Helvetica,Arial;fill:#9aa0a6;letter-spacing:1.5px}</style>
   <text x="185" y="26" text-anchor="middle" class="vc">FRONT ELEVATION</text>
@@ -7803,22 +7840,21 @@ function verandaOutlineSVG(cf,sv){
   <line class="vl" x1="60" y1="80" x2="304" y2="80"/>
   <line class="vl" x1="60" y1="72" x2="304" y2="72"/>
   <line class="vd" x1="72" y1="228" x2="292" y2="228"/><line class="vd" x1="72" y1="222" x2="72" y2="234"/><line class="vd" x1="292" y1="222" x2="292" y2="234"/>
-  <g${tap('width')}><rect x="132" y="218" width="100" height="20" rx="4" fill="#f6f3ea" stroke="${wC?'#c81e1e':'#c2a14e'}"/><text x="182" y="232" text-anchor="middle" class="vt"${red(wC)}>W = ${W}</text></g>
+  <g${tap('width')}><rect x="132" y="218" width="100" height="20" rx="4" fill="#f6f3ea" stroke="${stroke(wC)}"/><text x="182" y="232" text-anchor="middle" class="vt"${red(wC)}>W = ${W}</text></g>
   <line class="vd" x1="34" y1="80" x2="34" y2="205"/><line class="vd" x1="28" y1="80" x2="40" y2="80"/><line class="vd" x1="28" y1="205" x2="40" y2="205"/>
-  <g${tap('height')}><rect x="6" y="85" width="24" height="115" fill="transparent"/><text x="18" y="145" text-anchor="middle" class="vt" transform="rotate(-90 18 145)"${setH('height')}>Height ${el('height')}</text></g>
+  <g${tap('height')} transform="rotate(-90 18 142)"><rect x="-37" y="132" width="110" height="20" rx="4" fill="#f6f3ea" stroke="${stroke(!!H)}"/><text x="18" y="146" text-anchor="middle" class="vt"${red(!!H)}>H = ${H?esc(H):'____'}</text></g>
   <text x="550" y="26" text-anchor="middle" class="vc">SIDE ELEVATION</text>
   <line class="vl" x1="420" y1="205" x2="690" y2="205"/>
   <line class="vl" x1="420" y1="52" x2="420" y2="205"/>
   <line class="vd" x1="406" y1="68" x2="406" y2="205"/><line class="vd" x1="400" y1="68" x2="412" y2="68"/><line class="vd" x1="400" y1="205" x2="412" y2="205"/>
-  <g${tap('rear')}><rect x="383" y="75" width="22" height="125" fill="transparent"/><text x="395" y="137" text-anchor="middle" class="vt" transform="rotate(-90 395 137)" style="font-size:9.5px${E.rear?';font-weight:800':''}">Rear ht ${el('rear')}</text></g>
+  <g${tap('rear')} transform="rotate(-90 391 137)"><rect x="336" y="127" width="110" height="20" rx="4" fill="#f6f3ea" stroke="${stroke(!!R)}"/><text x="391" y="141" text-anchor="middle" class="vt" style="font-size:11px${R?';fill:#c81e1e;font-weight:800':''}">Rear = ${R?esc(R):'____'}</text></g>
   <line class="vl" x1="420" y1="68" x2="688" y2="100"/>
   <line class="vl" x1="688" y1="100" x2="688" y2="205"/>
   <text x="430" y="46" class="vt" style="font-size:10px;fill:#8a8f96">House wall</text>
-  <g${tap('pitch')}><rect x="505" y="66" width="80" height="20" fill="transparent"/><text x="545" y="80" text-anchor="middle" class="vt" style="font-size:11px${E.pitch?';font-weight:800':''}">Pitch ${el('pitch')}</text></g>
+  <g${tap('height')}><rect x="500" y="64" width="96" height="20" rx="4" fill="#fff" stroke="${stroke(typeof PT==='number')}"/><text x="548" y="78" text-anchor="middle" class="vt" style="font-size:11px${typeof PT==='number'?';fill:#c81e1e;font-weight:800':''}">Pitch ${typeof PT==='number'?PT+'&deg;':'___&deg;'}</text></g>
   <line class="vd" x1="420" y1="228" x2="688" y2="228"/><line class="vd" x1="420" y1="222" x2="420" y2="234"/><line class="vd" x1="688" y1="222" x2="688" y2="234"/>
-  <g${tap('proj')}><rect x="507" y="218" width="106" height="20" rx="4" fill="#f6f3ea" stroke="${pC?'#c81e1e':'#c2a14e'}"/><text x="560" y="232" text-anchor="middle" class="vt"${red(pC)}>P = ${P}</text></g>
+  <g${tap('proj')}><rect x="507" y="218" width="106" height="20" rx="4" fill="#f6f3ea" stroke="${stroke(pC)}"/><text x="560" y="232" text-anchor="middle" class="vt"${red(pC)}>P = ${P}</text></g>
   <text x="705" y="158" text-anchor="middle" class="vt" style="font-size:10px;fill:#8a8f96" transform="rotate(-90 705 158)">${esc(cf.post)}</text>
-  ${sv?'<text x="360" y="246" text-anchor="middle" class="no-print" style="font:600 9.5px Helvetica,Arial;fill:#6a777c">Tap a size, Height, Rear ht or Pitch to type it in</text>':''}
 </svg>`;}
 
 /* scale any over-full page DOWN so nothing clips; sparse pages already fill via .fill/.grow */
@@ -8167,7 +8203,7 @@ function renderDocuments(){
           <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>
         </div>
       </div>
-      <div class="grow" style="min-height:90px;margin-top:6px;background:#fcfcfb;border:1px solid var(--line);border-radius:12px;padding:8px 12px">${verandaOutlineSVG(cf,true)}</div>`:`
+      <div class="grow" style="min-height:90px;margin-top:6px;background:#fcfcfb;border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:flex;flex-direction:column"><div id="svElevDraw" style="flex:1;min-height:80px">${verandaOutlineSVG(cf,true)}</div>${svElevStrip()}</div>`:`
       <div class="grow" style="min-height:340px;display:flex;flex-direction:column;gap:8px">
         <!-- Render on the left, the specification beside it on the right. The site photo has
              moved out to the Site Photos block, so the render can take the full height and the
