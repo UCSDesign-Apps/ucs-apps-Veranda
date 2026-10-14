@@ -335,6 +335,9 @@ body.drawmode #docwrap,body.drawmode #view-docs{touch-action:none;overscroll-beh
 html{touch-action:manipulation;}
 .docwrap{overflow-x:hidden;}
 @media (pointer:coarse){.sv-num input,.sv-elev-in input{font-size:16px !important;}}
+.pk-banner{background:#fff4f4;border:1px solid #f0b4b4;border-radius:8px;padding:7px 11px;margin:0 0 8px;font-size:10.5px;color:#7a1414;line-height:1.5;}
+.pk-banner b{color:#c81e1e;}
+tr.pk-chg td{color:#c81e1e;font-weight:700;}
 .penwrap{position:fixed;right:22px;bottom:22px;z-index:300;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
 .pentray{display:none;flex-direction:column;align-items:center;gap:8px;padding:10px 8px;background:#fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.22);}
 .penwrap.on .pentray{display:flex;}
@@ -7484,6 +7487,68 @@ function renderQuotes(){
 }
 
 /* ===== BOM ===== */
+/* Sidewall / infill picking rows for a configuration. */
+function pickSidewallRows(cf){
+  const sidewallRows=[];
+  Object.entries(cf.sides||{}).forEach(([side,opt])=>{
+    const lbl={front:'Front',left:'Left',right:'Right',back:'Back'}[side]||side;
+    if(opt==='Full Aluminium Panel'){
+      buildAlumSidewallBOM(cf.colour).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
+    } else if(opt==='Half Glass / Half Aluminium'){
+      buildHalfAlumGlassBOM(cf.colour).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
+    } else if(opt==='Full Polycarbonate Panel'){
+      buildPolySidewallBOM(cf.proj,cf.colour,cf.roof).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
+    }
+  });
+  return sidewallRows;
+}
+/* ═══ SURVEY → PICKING LIST (Richard, 2026-10-14) ═══════════════════════════════
+   The picking list is built from the job as surveyed: Confirmation of Finishes
+   changes (model, size, colour, gutter, post, glazing) and Sides / Infills changes
+   replace the ordered values. Anything that differs from what was ordered is red,
+   and parts no longer needed are listed as removed. The order and price never change. */
+function surveyedConfig(){
+  const cf=state.config, F=(state.job&&state.job.surveyFinish)||{}, S=(state.job&&state.job.surveySides)||{};
+  const out=Object.assign({},cf,{sides:Object.assign({},cf.sides||{}),doors:Object.assign({},cf.doors||{})});
+  ['model','width','proj','colour','gutter','post','roof'].forEach(k=>{if(F[k])out[k]=F[k].val;});
+  Object.keys(S).forEach(sd=>{out.sides[sd]=S[sd].val;if(out.sides[sd]==='Aura Glass Doors'&&!out.doors[sd])out.doors[sd]=defaultDoor();});
+  try{out.sku=buildSKU(out);}catch(e){}
+  return out;
+}
+/* style attribute for a picking-list heading value that differs from the order */
+function pkRed(v,o,mono){return state.doc==='picking'&&String(v)!==String(o)?' style="color:#c81e1e;font-weight:800'+(mono?';font-family:monospace;font-size:10px':'')+'"':'';}
+function surveyChanged(){const j=state.job||{};return Object.keys(j.surveyFinish||{}).length+Object.keys(j.surveySides||{}).length>0;}
+function pickAllRows(cf){
+  const doors=[];doorSections(cf).forEach(ds=>ds.rows.forEach(r=>doors.push([r.desc,r.sku,r.qty])));
+  return mergeRows(buildBOM(cf)).concat(mergeRows(pickSidewallRows(cf)),mergeRows(doors));
+}
+const pickKey=r=>String(r[0]).trim()+'|'+String(r[1]).trim()+'|'+String(r[2]).trim();
+/* After the picking list is drawn: rows not in the ordered list go red, and
+   ordered rows that have gone are listed under the survey banner. */
+function pickingSurveyMarks(){
+  if(state.doc!=='picking'||!surveyChanged())return;
+  const ordered=pickAllRows(state.config), oKeys=new Set(ordered.map(pickKey)), seen=new Set();
+  document.querySelectorAll('#docwrap .picking-only table.mt tbody tr').forEach(tr=>{
+    const skuTd=[...tr.cells].find(td=>/monospace/.test(td.getAttribute('style')||''));if(!skuTd)return;
+    const desc=tr.cells[1]?tr.cells[1].textContent:'', qty=skuTd.nextElementSibling?skuTd.nextElementSibling.textContent:'';
+    const k=pickKey([desc,skuTd.textContent,qty]);seen.add(k);
+    if(!oKeys.has(k))tr.classList.add('pk-chg');
+  });
+  /* only parts with no replacement at all; a part that just changed colour or size
+     is already shown in red with its new code */
+  const stem=d=>compKey(String(d))+'|'+((String(d).match(/\((\w+) sidewall\)/)||[])[1]||'');
+  const nowStems=new Set();document.querySelectorAll('#docwrap .picking-only table.mt tbody tr').forEach(tr=>{if(tr.cells[1])nowStems.add(stem(tr.cells[1].textContent));});
+  const gone=ordered.filter(r=>!seen.has(pickKey(r))&&!nowStems.has(stem(r[0])));
+  const box=document.getElementById('pkRemoved');
+  if(box&&gone.length)box.innerHTML='<div style="font-weight:800;margin-top:6px">No longer needed (was on the order):</div>'+gone.map(r=>'<div><s>'+esc(r[0])+' \u00b7 '+esc(r[1])+' \u00d7 '+esc(String(r[2]))+'</s></div>').join('');
+}
+function pickSurveyBanner(){
+  if(!surveyChanged())return '';
+  const rows=svChangeRows().filter(r=>/^(Specification|Sides)/.test(r.key));
+  return '<div class="pk-banner"><b>Updated from the survey</b> \u2014 red lines differ from the order.'
+    +rows.map(r=>'<div>'+esc(r.key.replace(/^Specification \u2014 /,''))+': <s>'+esc(r.c.orig)+'</s> \u2192 <b>'+esc(r.c.val)+'</b></div>').join('')
+    +'<div id="pkRemoved"></div></div>';
+}
 function buildBOM(cf){
   const cc=CCOMP[cf.colour]||'AC',pl=PLET[cf.proj]||'a',ps=PSHORT[cf.proj]||String(cf.proj),q=WQTY[cf.width]||WQTY[4060],
     ral=CRAL[cf.colour]||'7024',trim=CTRIM[cf.colour]||'AM',rs=ROOFSHEET[cf.roof],gc=GCOVER[cf.gutter]||'02',
@@ -7601,6 +7666,10 @@ function svNum(kind,key,cur,orig,unit){
   return `<span class="sv-num${changed?' chg':''}"><input class="no-print" type="number" inputmode="numeric" min="1" step="1" value="${esc(String(cur==null?'':cur))}" aria-label="${esc(key)}" title="As ordered: ${esc(String(orig==null||orig===''?'\u2014':orig))}${unit?' '+unit:''}" onchange="svSet('${kind}','${String(key).replace(/'/g,'')}',this.value)">`
     +`<span class="sv-num-txt">${esc(String(cur==null||cur===''?'\u2014':cur))}</span>${unit?' '+esc(unit):''}</span>`;
 }
+function svSideVal(sd){const e=((state.job&&state.job.surveySides)||{})[sd];return e?e.val:(((state.config.sides)||{})[sd]||'None');}
+const svSideLbl=o=>o==='None'?'Open':o;
+function svSideCell(sd){const orig=((state.config.sides)||{})[sd]||'None', cur=svSideVal(sd);
+  return svDD('side',sd,svSideLbl(cur),svOpts(SIDE_OPTIONS,orig,cur,svSideLbl),cur,orig);}
 function svFinishVal(k){const e=(state.job.surveyFinish||{})[k];return e?e.val:state.config[k];}
 function svDD(kind,key,label,options,cur,orig,force){
   const changed=!!force||String(cur)!==String(orig);
@@ -7617,7 +7686,11 @@ function svOpts(list,orig,cur,lab){
 }
 function svSet(kind,key,v){
   const by=currentUser?currentUser.name:'',at=new Date().toISOString();
-  if(kind==='finish'){
+  if(kind==='side'){
+    if(!state.job.surveySides)state.job.surveySides={};
+    const SS=state.job.surveySides, orig=((state.config.sides)||{})[key]||'None';
+    if(String(v)===String(orig))delete SS[key];else SS[key]={val:v,by,at};
+  }else if(kind==='finish'){
     if(!state.job.surveyFinish)state.job.surveyFinish={};
     const F=state.job.surveyFinish, orig=state.config[key];
     let val=v;
@@ -7674,11 +7747,13 @@ function svSiteCell(r){
 }
 /* Dropdown changes as Survey Corrections rows. */
 function svChangeRows(){
-  const out=[], cf=state.config, F=state.job.surveyFinish||{}, S=state.job.surveySite||{};
+  const out=[], cf=state.config, F=state.job.surveyFinish||{}, S=state.job.surveySite||{}, SD=state.job.surveySides||{};
   const NAMES={model:'Veranda Model',width:'Width',proj:'Projection',colour:'Finish / RAL',gutter:'Gutter',post:'Post',roof:'Glazing'};
   const fmt=(k,v)=>k==='model'?displayName(v):k==='colour'?ralLabel(v):(k==='width'||k==='proj')?v+' mm':String(v);
   Object.keys(NAMES).forEach(k=>{const e=F[k];if(!e)return;
     out.push({key:'Specification \u2014 '+NAMES[k],c:{orig:fmt(k,cf[k]),val:fmt(k,e.val),by:e.by,at:e.at}});});
+  ['front','left','right','back'].forEach(sd=>{const e=SD[sd];if(!e)return;
+    out.push({key:'Sides \u2014 '+SIDE_LBL[sd]+' side',c:{orig:svSideLbl((cf.sides||{})[sd]||'None'),val:svSideLbl(e.val),by:e.by,at:e.at}});});
   qualifyQuestions().forEach(q=>{const e=S[q.id];if(!e)return;
     if(q.type==='number'){const u=q.unit?' '+q.unit:'',o=(state.qualify||{})[q.id];
       out.push({key:'Site & Install \u2014 '+q.text,c:{orig:(o==null||String(o).trim()==='')?'\u2014':String(o).trim()+u,val:e.val===''?'':e.val+u,by:e.by,at:e.at}});return;}
@@ -8015,7 +8090,7 @@ function setPM(k,v){if(!state.job.payMethods)state.job.payMethods={};state.job.p
 function paySelect(k){const opts=['Cash','Card','Bank Transfer','Finance'];const cur=(state.job.payMethods&&state.job.payMethods[k])||'Cash';if(state.doc==='survey')return cur;return `<select class="paysel" onchange="setPM('${k}',this.value)">`+opts.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('')+`</select>`;}
 function renderDocuments(){
   if(state.doc==='signed')return renderSignedContract();
-  const a=admin.company,c=state.customer,j=state.job,cf=state.config;recalc();const calc=state._calc;if(!j.payMethods)j.payMethods={};const _instDirect=(j.pay==='Direct'&&calc.fitting>0);let _dep=calc.sched.deposit,_stages=calc.sched.stages.map(s=>[s[0],s[1]]),_finalShown=calc.sched.final;if(_instDirect){const M=Math.round((calc.youpay-calc.fitting)*100)/100;if(_stages.length===2){const s1=Math.round(M*0.25*100)/100,s2=Math.round(M*0.25*100)/100;_stages=[[calc.sched.stages[0][0],s1],[calc.sched.stages[1][0],s2]];_finalShown=Math.round((M-_dep-s1-s2)*100)/100;}else if(_stages.length===1){const s1=Math.round(M*0.5*100)/100;_stages=[[calc.sched.stages[0][0],s1]];_finalShown=Math.round((M-_dep-s1)*100)/100;}else{_finalShown=Math.round((M-_dep)*100)/100;}}
+  const a=admin.company,c=state.customer,j=state.job,cf=(state.doc==='picking')?surveyedConfig():state.config;recalc();const calc=state._calc;if(!j.payMethods)j.payMethods={};const _instDirect=(j.pay==='Direct'&&calc.fitting>0);let _dep=calc.sched.deposit,_stages=calc.sched.stages.map(s=>[s[0],s[1]]),_finalShown=calc.sched.final;if(_instDirect){const M=Math.round((calc.youpay-calc.fitting)*100)/100;if(_stages.length===2){const s1=Math.round(M*0.25*100)/100,s2=Math.round(M*0.25*100)/100;_stages=[[calc.sched.stages[0][0],s1],[calc.sched.stages[1][0],s2]];_finalShown=Math.round((M-_dep-s1-s2)*100)/100;}else if(_stages.length===1){const s1=Math.round(M*0.5*100)/100;_stages=[[calc.sched.stages[0][0],s1]];_finalShown=Math.round((M-_dep-s1)*100)/100;}else{_finalShown=Math.round((M-_dep)*100)/100;}}
   const cw=cword(cf.colour);
   const glaze=(cf.roof==='Without Poly'||cf.roof==='No poly')?`${displayName(cf.model)} — Prepared (no polycarbonate)`:(cf.roof==='Glass Roof'||cf.roof==='Prepared for Glass')?`${displayName(cf.model)} — Glass Roof`:`${displayName(cf.model)} with ${cf.roof} roof`;
   const phead=(sheet)=>`<div class="phead">${admin.logo?`<div style="background:#fff;border-radius:9px;padding:6px 12px;display:inline-flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18)"><img src="${admin.logo}" style="max-height:56px;max-width:175px;display:block"></div>`:`<div class="wm">TotaLuxe&trade;<small>COLLECTION</small></div>`}
@@ -8037,13 +8112,18 @@ function renderDocuments(){
      <div class="cs">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div>`).join('')
      ||'<div style="color:#8a969a;font-size:10.5px">No side infills or notes.</div>';
   const sideCardsBig=relSides.filter(sideHas).map(s=>`<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column">${(cf.sides[s]&&cf.sides[s]!=='None')?`<div class="gimg grow" style="min-height:120px">${docImg('side',cf.sides[s],cf.sides[s],0,0,'width:100%;height:100%;border-radius:0;border:none;object-fit:contain;background:#f6f7f8')}</div>`:''}<div style="padding:12px 14px"><div style="font-weight:800;color:var(--brand-d);font-size:14.5px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:13.5px;margin-top:3px">${cf.sides[s]||'None'}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:5px">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div></div>`).join('')||'<div style="color:#8a969a;font-size:11px">No side infills or notes recorded.</div>';
-  const sideCount=relSides.filter(sideHas).length;
+  const sideCount=state.doc==='survey'?relSides.length:relSides.filter(sideHas).length;
   /* Card: option and any per-side note at the TOP so the surveyor reads the brief
      before the picture, then the infill image. The old render on the right is
      replaced by an open graph-paper box to sketch actual site conditions into. */
-  const sideRows=relSides.filter(sideHas).map(s=>{const opt=cf.sides[s]||'None';
-    const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8'):'<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">No infill</div>';
-    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div style="padding:9px 13px 6px"><div style="font-weight:800;color:var(--brand-d);font-size:13px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:11.5px;margin-top:2px;line-height:1.35">${opt}${doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:4px;padding:5px 8px;background:#f6f7f8;border-left:3px solid var(--brand);border-radius:0 6px 6px 0">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div><div class="gimg" style="height:120px;flex-shrink:0;margin:0 13px 6px;border-radius:8px;border:1px solid var(--line)">${infill}</div></div><div style="display:flex;flex-direction:column;min-height:0"><div style="font-size:10px;font-weight:600;color:#6a777c;margin-bottom:3px">${SIDE_LBL[s]} &mdash; site sketch</div><div style="flex:1;border-radius:12px;border:1px dashed #b8c2c5;background-color:#fff;background-image:repeating-linear-gradient(0deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px);min-height:150px;position:relative"><span style="position:absolute;top:6px;left:8px;font-size:9px;color:#aab4b7">Sketch / measurements</span></div></div>`;
+  /* Survey: every side is shown and its infill is a dropdown, 'None' reading 'Open'
+     (Richard, 2026-10-14). A change is red, goes on Survey Corrections and on the
+     picking list. */
+  const svSides=state.doc==='survey';
+  const sideOpt=s=>svSides?svSideVal(s):(cf.sides[s]||'None');
+  const sideRows=relSides.filter(s=>svSides||sideHas(s)).map(s=>{const opt=sideOpt(s);
+    const infill=(opt!=='None')?docImg('side',opt,opt,0,0,'width:100%;height:100%;object-fit:contain;background:#f6f7f8'):`<div style="display:flex;align-items:center;justify-content:center;color:#9aa6aa;font-size:11px;height:100%">${svSides?'Open':'No infill'}</div>`;
+    return `<div class="card" style="margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column"><div style="padding:9px 13px 6px"><div style="font-weight:800;color:var(--brand-d);font-size:13px">${SIDE_LBL[s]} side ${ck(true)}</div><div style="font-size:11.5px;margin-top:2px;line-height:1.35">${svSides?svSideCell(s)+(opt===(cf.sides[s]||'None')?doorTxt(s):''):opt+doorTxt(s)}</div>${(cf.sideNotes&&cf.sideNotes[s])?`<div class="cn" style="font-size:11.5px;margin-top:4px;padding:5px 8px;background:#f6f7f8;border-left:3px solid var(--brand);border-radius:0 6px 6px 0">Note: ${esc(cf.sideNotes[s])}</div>`:''}</div><div class="gimg" style="height:120px;flex-shrink:0;margin:0 13px 6px;border-radius:8px;border:1px solid var(--line)">${infill}</div></div><div style="display:flex;flex-direction:column;min-height:0"><div style="font-size:10px;font-weight:600;color:#6a777c;margin-bottom:3px">${SIDE_LBL[s]} &mdash; site sketch</div><div style="flex:1;border-radius:12px;border:1px dashed #b8c2c5;background-color:#fff;background-image:repeating-linear-gradient(0deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,#eef1f2 19px,#eef1f2 20px);min-height:150px;position:relative"><span style="position:absolute;top:6px;left:8px;font-size:9px;color:#aab4b7">Sketch / measurements</span></div></div>`;
   }).join('')||'<div style="color:#8a969a;grid-column:1/3">No side infills or notes recorded.</div>';
 
   const fitOrder=state.fitting;
@@ -8065,17 +8145,7 @@ function renderDocuments(){
   const allDoorRows=[];doorSets.forEach(ds=>ds.rows.forEach(r=>allDoorRows.push([r.desc,r.sku,r.qty])));
   const doorMerged=mergeRows(allDoorRows);
   /* sidewall BOM rows */
-  const sidewallRows=[];
-  Object.entries(cf.sides||{}).forEach(([side,opt])=>{
-    const lbl={front:'Front',left:'Left',right:'Right',back:'Back'}[side]||side;
-    if(opt==='Full Aluminium Panel'){
-      buildAlumSidewallBOM(cf.colour).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
-    } else if(opt==='Half Glass / Half Aluminium'){
-      buildHalfAlumGlassBOM(cf.colour).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
-    } else if(opt==='Full Polycarbonate Panel'){
-      buildPolySidewallBOM(cf.proj,cf.colour,cf.roof).forEach(r=>sidewallRows.push([`${r.desc} (${lbl} sidewall)`,r.sku,r.qty]));
-    }
-  });
+  const sidewallRows=pickSidewallRows(cf);
   const sidewallMerged=mergeRows(sidewallRows);
   const sidewallBlock=sidewallMerged.length?`<div class="sh" style="margin-top:14px">Sidewall / Infill Components</div>
      <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:175px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead>
@@ -8372,7 +8442,7 @@ function renderDocuments(){
       <!-- grid-auto-rows, not grid-template-rows: every side emits TWO cells (card +
            render), so an odd side count spills into an implicit row that a fixed
            template leaves auto-sized and shorter than the rest. -->
-      <div style="display:grid;grid-template-columns:${sideCount<=3?'1fr 1.15fr':'1fr 1fr'};gap:14px 16px;grid-auto-rows:240px;align-content:start">${sideRows}</div>
+      <div style="display:grid;grid-template-columns:${sideCount<=3?'1fr 1.15fr':'1fr 1fr'};gap:14px 16px;grid-auto-rows:${sideCount>3?200:240}px;align-content:start">${sideRows}</div>
       ${(()=>{const notes=relSides.filter(sideHas).map(s=>(cf.sideNotes&&cf.sideNotes[s])?`${SIDE_LBL[s]}: ${esc(cf.sideNotes[s])}`:'').filter(Boolean);return notes.length?`<div style="margin-top:12px;padding:10px 14px;background:#fff8e8;border:1px solid #ecdca0;border-radius:8px"><div style="font-weight:700;font-size:12px;color:#8a6d1a;margin-bottom:4px">Special Notes from Quote</div><div style="font-size:11.5px;line-height:1.5;color:#5a4a12">${notes.join(' · ')}</div></div>`:'';})()}
     </div></div>${pfoot()}
   </section>`:''}
@@ -8629,15 +8699,16 @@ function renderDocuments(){
   <section class="sheet picking-only flow-page">${phead('Picking List')}
     <div class="pg">
       <div class="sh">Dispatch Note — TotaLuxe Verandas</div>
+      ${state.doc==='picking'?pickSurveyBanner():''}
       <div class="dl" style="margin-bottom:6px">
         <div class="li"><span class="k">Customer</span><span class="v">${c.cname||'—'}</span></div>
         <div class="li"><span class="k">Order / HQ No</span><span class="v">${j.hq||('HQ-'+j.quote)}</span></div>
-        <div class="li"><span class="k">Model</span><span class="v">${displayName(cf.model)} (${cf.mount})</span></div>
-        <div class="li"><span class="k">Kit SKU</span><span class="v" style="font-family:monospace;font-size:10px">${cf.sku}</span></div>
-        <div class="li"><span class="k">Colour</span><span class="v">${cf.colour}</span></div>
-        <div class="li"><span class="k">Roof Type</span><span class="v">${cf.roof}</span></div>
-        <div class="li"><span class="k">Gutter / Post</span><span class="v">${cf.gutter} / ${cf.post}</span></div>
-        <div class="li"><span class="k">Width × Projection</span><span class="v">${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
+        <div class="li"><span class="k">Model</span><span class="v"${pkRed(cf.model,state.config.model)}>${displayName(cf.model)} (${cf.mount})</span></div>
+        <div class="li"><span class="k">Kit SKU</span><span class="v"${pkRed(cf.sku,state.config.sku,1)||' style="font-family:monospace;font-size:10px"'}>${cf.sku}</span></div>
+        <div class="li"><span class="k">Colour</span><span class="v"${pkRed(cf.colour,state.config.colour)}>${cf.colour}</span></div>
+        <div class="li"><span class="k">Roof Type</span><span class="v"${pkRed(cf.roof,state.config.roof)}>${cf.roof}</span></div>
+        <div class="li"><span class="k">Gutter / Post</span><span class="v"${pkRed(cf.gutter+cf.post,state.config.gutter+state.config.post)}>${cf.gutter} / ${cf.post}</span></div>
+        <div class="li"><span class="k">Width × Projection</span><span class="v"${pkRed(cf.width+'x'+cf.proj,state.config.width+'x'+state.config.proj)}>${cf.width} × ${cf.proj} mm${cf.bespoke?' <span style="color:var(--brand);font-size:10px;font-weight:700">BESPOKE</span>':''}</span></div>
       </div>
       <div class="sh">Veranda Kit Components</div>
       <table class="mt"><thead><tr><th class="c" style="width:34px">#</th><th>Component</th>${imgHead}<th style="width:165px">Part SKU</th><th class="c" style="width:46px">Qty</th><th class="c" style="width:60px">Picked</th></tr></thead><tbody>${bomRows}${pickContractRows}${pickPartRows}${pickLabRows}</tbody></table>
@@ -8652,7 +8723,7 @@ function renderDocuments(){
       <p style="font-size:8.5px;color:#8a969a;margin-top:8px">* By signing, the customer acknowledges all goods listed above have been received in good condition. Any damage, shortage or defect reported after signing will not be accepted as a claim against UCS Design Group. *</p>
     </div>${pfoot()}
   </section>`;
-  document.getElementById('docwrap').innerHTML=html;surveyPageOrder();restoreImages();refreshSignToggle();applySurveyEdits();setupDraw();fitPages();setTimeout(fitPages,160);
+  document.getElementById('docwrap').innerHTML=html;surveyPageOrder();pickingSurveyMarks();restoreImages();refreshSignToggle();applySurveyEdits();setupDraw();fitPages();setTimeout(fitPages,160);
 }
 /* ===== SIGNED CONTRACT TAB =====
    Shows the executed PDF from Signable. It shares nothing with the quote /
