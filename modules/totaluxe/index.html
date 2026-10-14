@@ -329,6 +329,13 @@ body.role-admin .admin-only-flex{display:flex!important;}
 .terms2{column-count:2;column-gap:9mm;font-size:8px;line-height:1.5;color:#3a4448;text-align:justify;}
 .drawlayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6;}
 body.drawmode .drawlayer{pointer-events:auto;cursor:crosshair;touch-action:none;}
+html.drawlock,html.drawlock body{overflow:hidden !important;overscroll-behavior:none;}
+body.drawmode #docwrap,body.drawmode #view-docs{touch-action:none;overscroll-behavior:none;}
+.penfab{position:fixed;right:22px;bottom:22px;z-index:300;display:flex;align-items:center;gap:8px;height:62px;min-width:62px;padding:0 18px;justify-content:center;border-radius:31px;border:0;background:#fff;color:var(--ink);box-shadow:0 6px 20px rgba(0,0,0,.28),0 0 0 2px var(--gold) inset;cursor:pointer;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.penfab .ic{font-size:26px;line-height:1;}
+.penfab .lbl:empty{display:none;}
+.penfab.on{background:#c81e1e;color:#fff;box-shadow:0 6px 20px rgba(200,30,30,.45);}
+@media print{.penfab{display:none !important;}}
 /* draw toolbar sticky — sits just below topnav */
 .drawbar{position:sticky;top:var(--topnav-h);z-index:35;display:flex;gap:8px;align-items:center;background:#fff;border-bottom:1px solid var(--line);padding:8px 24px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.07);}
 .drawbar .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #bbb;cursor:pointer;display:inline-block;}
@@ -543,10 +550,12 @@ body.print-internal .internal-notes-only{display:block !important;}
   </header>
   </header>
 
+  <!-- Pen button — always on screen while the Survey is open -->
+  <button type="button" class="penfab no-print" id="penFab" style="display:none" onclick="toggleDraw()" aria-pressed="false" title="Tap to write on the survey"><span class="ic">✏️</span><span class="lbl"></span></button>
   <!-- Draw toolbar — sticky below topnav, only visible on Survey doc -->
   <div class="drawbar no-print" id="drawBar" style="display:none">
     <button class="btn sm" id="drawToggle" onclick="toggleDraw()">✏️ Draw: Off</button>
-    <span style="font-size:11px;color:#8a969a;align-self:center">1 finger draws · 2 fingers scroll</span>
+    <span style="font-size:11px;color:#8a969a;align-self:center">Pen on: page stays still and you write · Pen off: scroll and tap</span>
     <span class="muted" style="font-size:12px">Pen:</span>
     <span class="sw on" style="background:#e02424" onclick="setPen('#e02424',this)"></span>
     <span class="sw" style="background:#1769d0" onclick="setPen('#1769d0',this)"></span>
@@ -2457,11 +2466,12 @@ function showView(v,btn){
   const bar=document.getElementById('drawBar');
   if(v!=='docs'){
     if(bar)bar.style.display='none';
-    if(drawMode){drawMode=false;document.body.classList.remove('drawmode');const bt=document.getElementById('drawToggle');if(bt){bt.textContent='✏️ Draw: Off';bt.classList.remove('primary');}}
+    if(drawMode)setDrawMode(false);
   } else {
     /* entering docs — show bar only if survey is active */
     if(bar)bar.style.display=(state.doc==='survey')?'flex':'none';
   }
+  penFabSync();
   if(v==='qualify')renderQualify();
   if(v==='build'){renderModelGrid();wizResume();}
   if(v==='quotes')renderQuotes();
@@ -7714,7 +7724,22 @@ function renderCorrSummary(){
   });
 }
 const undoStacks={};
-function toggleDraw(){drawMode=!drawMode;document.body.classList.toggle('drawmode',drawMode);const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}}
+/* Pen (Richard, 2026-10-14): the round pen button stays on screen whenever the
+   Survey is open. Pen on = the page is locked still and every touch writes; pen
+   off = scroll, tap and type as normal. */
+function setDrawMode(on){
+  drawMode=!!on;
+  document.body.classList.toggle('drawmode',drawMode);
+  document.documentElement.classList.toggle('drawlock',drawMode);
+  if(drawMode&&document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  const b=document.getElementById('drawToggle');if(b){b.textContent='✏️ Draw: '+(drawMode?'On':'Off');b.classList.toggle('primary',drawMode);}
+  const f=document.getElementById('penFab');if(f){f.classList.toggle('on',drawMode);f.setAttribute('aria-pressed',drawMode?'true':'false');
+    f.title=drawMode?'Pen on — tap to stop writing and scroll again':'Tap to write on the survey';
+    const l=f.querySelector('.lbl');if(l)l.textContent=drawMode?'Writing — tap to stop':'';}
+}
+function toggleDraw(){setDrawMode(!drawMode);}
+function penFabSync(){const f=document.getElementById('penFab');if(!f)return;
+  const show=state.doc==='survey'&&!!document.querySelector('#view-docs.active');f.style.display=show?'flex':'none';if(!show&&drawMode)setDrawMode(false);}
 function setPen(c,el){penColour=c;document.querySelectorAll('.drawbar .sw').forEach(s=>s.classList.remove('on'));el.classList.add('on');if(!drawMode)toggleDraw();}
 function setupDraw(){
   const bar=document.getElementById('drawBar');
@@ -7745,7 +7770,7 @@ function setupDraw(){
     cv.addEventListener('pointerdown',e=>{
       if(!drawMode)return;
       _dpts.set(e.pointerId,{x:e.clientX,y:e.clientY});
-      if(_dpts.size>=2){drawing=false;const el=scrollParent(cv);_scroll={el,my:_avg([..._dpts.values()].map(p=>p.y)),top:(el===document.scrollingElement||el===document.documentElement?window.scrollY:el.scrollTop)};e.preventDefault();return;}
+      if(_dpts.size>=2){drawing=false;e.preventDefault();return;} /* page stays still while the pen is on */
       e.preventDefault();_activeCv=cv;_activeCtx=ctx;_activeIdx=idx;pushUndo(idx,cv);drawing=true;_last=_pos(cv,e);
     });
   });
@@ -7909,7 +7934,8 @@ function setDoc(d){if(currentUser&&!currentUser.docs.includes(d)){d=currentUser.
   /* draw toolbar — always visible on survey, hidden otherwise */
   const bar=document.getElementById('drawBar');
   if(bar)bar.style.display=(d==='survey')?'flex':'none';
-  if(d!=='survey'&&drawMode){drawMode=false;document.body.classList.remove('drawmode');const bt=document.getElementById('drawToggle');if(bt){bt.textContent='✏️ Draw: Off';bt.classList.remove('primary');}}
+  if(d!=='survey'&&drawMode)setDrawMode(false);
+  penFabSync();
   updateSentButtons();
   renderDocuments();
 }
