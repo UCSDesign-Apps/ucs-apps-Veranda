@@ -4054,7 +4054,7 @@ function sideFitLines(cf,s){
       if(hhf)pushOrIncrement(out,{desc:hhf.desc,price:payPrice(hhf),qty:d.tracks||1});
     }
     if(d&&d.keyframe&&d.keyframe.req){
-      const kf=admin.fitting.find(x=>x.desc===`TL - Keyframe (${d.keyframe.type})`);
+      const kf=admin.fitting.find(x=>x.desc===`TL - Keyframe (${d.keyframe.type==='Polycarbonate'?'Poly':d.keyframe.type})`);
       if(kf)pushOrIncrement(out,{desc:kf.desc,price:payPrice(kf),qty:1});
     }
   } else if(opt==='Full Aluminium Panel'){
@@ -7708,25 +7708,43 @@ function svSideOnly(cf,sd,opt,door){
   if(opt&&opt!=='None'){c.sides[sd]=opt;if(opt==='Aura Glass Doors')c.doors[sd]=door||c.doors[sd]||defaultDoor();}
   return c;
 }
-function svSideCosts(sd,opt,door){
-  const cf=state.config, c=svSideOnly(cf,sd,opt,door);
-  const mu=1+(+admin.markup||0)/100, d=(state.pricing&&state.pricing.discount)||0;
-  const parts=Math.round(sidesCost(c)*mu*1.2*(1-d/100)*100)/100;
-  const labour=(opt&&opt!=='None')?sideFitLines(c,sd).reduce((t,x)=>t+(+x.price||0)*(x.qty||1),0):0;
-  return {parts,labour};
+/* Customer price of materials: as the quote prices them (markup, VAT, discount). */
+function svSell(nett){const mu=1+(+admin.markup||0)/100, d=(state.pricing&&state.pricing.discount)||0;return Math.round(nett*mu*1.2*(1-d/100)*100)/100;}
+/* Keyframe materials (nett) for a door set: the keyframe rows of the door BOM. */
+function kfNett(door,cf){
+  if(!door||!door.keyframe||!door.keyframe.req)return 0;
+  const k=buildDoorBOM(door,cf.colour,cf.proj).reduce((t,r)=>t+(+r.unitPrice||0)*(r.qty||0),0);
+  const n=buildDoorBOM(Object.assign({},door,{keyframe:{req:false}}),cf.colour,cf.proj).reduce((t,r)=>t+(+r.unitPrice||0)*(r.qty||0),0);
+  return Math.max(0,k-n);
 }
+/* Survey cost of one side, split into the infill/doors and the keyframe. */
+function svSideCosts(sd,opt,door,cf){
+  const c=svSideOnly(cf,sd,opt,door), has=opt&&opt!=='None';
+  const fit=has?sideFitLines(c,sd):[], fsum=l=>l.reduce((t,x)=>t+(+x.price||0)*(x.qty||1),0);
+  const kfFit=fit.filter(x=>/Keyframe/.test(x.desc)), mainFit=fit.filter(x=>!/Keyframe/.test(x.desc));
+  const dr=opt==='Aura Glass Doors'?c.doors[sd]:null;
+  return {parts:svSell(sidesCost(c)), kfParts:svSell(kfNett(dr,c)), labour:fsum(mainFit), kfLabour:fsum(kfFit)};
+}
+/* A side changed on the survey adds up to four survey extras:
+   parts — the infill/doors and the keyframe; labour — fitting for each.
+   Swaps are charged the difference over what was ordered. */
 function svSideExtras(sd){
   const tag='side:'+sd;
   state.surveyParts=(state.surveyParts||[]).filter(x=>x.auto!==tag);
   state.surveyLabour=(state.surveyLabour||[]).filter(x=>x.auto!==tag);
   const orig=((state.config.sides)||{})[sd]||'None', cur=svSideVal(sd);
   if(cur===orig&&!svDoorChanged(sd))return;
-  const dr=cur==='Aura Glass Doors'?svDoorVal(sd):null;
-  const nw=svSideCosts(sd,cur,dr), was=svSideCosts(sd,orig,svOrderedDoor(sd));
-  const what=SIDE_LBL[sd]+' side \u2014 '+((orig==='None'||orig===cur)?svSideLbl(cur):svSideLbl(orig)+' \u2192 '+svSideLbl(cur))+(dr?' ('+doorSummary(dr)+')':'');
-  const dp=Math.round((nw.parts-was.parts)*100)/100, dl=Math.round((nw.labour-was.labour)*100)/100;
-  if(dp>0)state.surveyParts.push({desc:what+' (confirmed at survey)',cost:dp,qty:1,auto:tag});
-  if(dl>0)state.surveyLabour.push({desc:what+' \u2014 fitting (confirmed at survey)',price:dl,qty:1,auto:tag});
+  const dr=cur==='Aura Glass Doors'?svDoorVal(sd):null, od=svOrderedDoor(sd);
+  const nw=svSideCosts(sd,cur,dr,surveyedConfig()), was=svSideCosts(sd,orig,od,state.config);
+  const r2=n=>Math.round(n*100)/100, C=' (confirmed at survey)';
+  const dSum=d=>`${d.tracks}-track · ${d.pwidth}×${d.pheight} · rail ${d.rail}mm`+(d.heritage?' · Heritage style':'');
+  const what=SIDE_LBL[sd]+' side \u2014 '+((orig==='None'||orig===cur)?svSideLbl(cur):svSideLbl(orig)+' \u2192 '+svSideLbl(cur))+(dr?' ('+dSum(dr)+')':'');
+  const kfWhat=dr&&dr.keyframe.req?SIDE_LBL[sd]+' side \u2014 Keyframe ('+dr.keyframe.type+')':'';
+  const dp=r2(nw.parts-was.parts), kp=r2(nw.kfParts-was.kfParts), dl=r2(nw.labour-was.labour), kl=r2(nw.kfLabour-was.kfLabour);
+  if(dp>0)state.surveyParts.push({desc:what+C,cost:dp,qty:1,auto:tag});
+  if(kp>0)state.surveyParts.push({desc:kfWhat+C,cost:kp,qty:1,auto:tag});
+  if(dl>0)state.surveyLabour.push({desc:what+' \u2014 fitting'+C,price:dl,qty:1,auto:tag});
+  if(kl>0)state.surveyLabour.push({desc:kfWhat+' \u2014 fitting'+C,price:kl,qty:1,auto:tag});
 }
 /* ═══ SURVEY DOORS (Richard, 2026-10-14) ═════════════════════════════════════════
    When a side is (or becomes) Aura Glass Doors on the survey, the door size and the
