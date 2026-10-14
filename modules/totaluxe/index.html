@@ -4032,6 +4032,34 @@ function pergolaFit(cf){
   return best&&best.f;
 }
 let _fitWarn='';
+/* Fitting lines for one side's infill (used by autoFitting and the survey). */
+function sideFitLines(cf,s){
+  const out=[];
+  const opt=cf.sides&&cf.sides[s];
+  if(!opt||opt==='None')return out;
+  if(opt==='Aura Glass Doors'){
+    const d=cf.doors&&cf.doors[s];
+    const tracks=d?d.tracks:3;
+    const hKey=`TL - Aura Glass Doors - ${tracks} Track`;
+    const hf=admin.fitting.find(x=>x.desc===hKey);
+    if(hf)pushOrIncrement(out,{desc:hf.desc,price:payPrice(hf),qty:1});
+    if(d&&d.heritage){
+      const hhf=admin.fitting.find(x=>x.desc==='TL - Aura Doors Heritage Kit (Per Glass Unit)');
+      if(hhf)pushOrIncrement(out,{desc:hhf.desc,price:payPrice(hhf),qty:d.tracks||1});
+    }
+    if(d&&d.keyframe&&d.keyframe.req){
+      const kf=admin.fitting.find(x=>x.desc===`TL - Keyframe (${d.keyframe.type})`);
+      if(kf)pushOrIncrement(out,{desc:kf.desc,price:payPrice(kf),qty:1});
+    }
+  } else if(opt==='Full Aluminium Panel'){
+    const f=admin.fitting.find(x=>x.desc==='TL - Full Aluminium Sidewall');
+    if(f)pushOrIncrement(out,{desc:f.desc,price:payPrice(f),qty:1});
+  } else if(opt==='Half Glass / Half Aluminium'){
+    const f=admin.fitting.find(x=>x.desc==='TL - Half Alu / Half Glass Sidewall');
+    if(f)pushOrIncrement(out,{desc:f.desc,price:payPrice(f),qty:1});
+  }
+  return out;
+}
 function autoFitting(manual){
   if(!state.config.model)return;
   const cf=state.config;
@@ -4062,31 +4090,7 @@ function autoFitting(manual){
   }
   /* Sides */
   const relSides=(cf.mount==='Free Standing')?['front','left','right','back']:['front','left','right'];
-  relSides.forEach(s=>{
-    const opt=cf.sides&&cf.sides[s];
-    if(!opt||opt==='None')return;
-    if(opt==='Aura Glass Doors'){
-      const d=cf.doors&&cf.doors[s];
-      const tracks=d?d.tracks:3;
-      const hKey=`TL - Aura Glass Doors - ${tracks} Track`;
-      const hf=admin.fitting.find(x=>x.desc===hKey);
-      if(hf)pushOrIncrement(suggested,{desc:hf.desc,price:payPrice(hf),qty:1});
-      if(d&&d.heritage){
-        const hhf=admin.fitting.find(x=>x.desc==='TL - Aura Doors Heritage Kit (Per Glass Unit)');
-        if(hhf)pushOrIncrement(suggested,{desc:hhf.desc,price:payPrice(hhf),qty:d.tracks||1});
-      }
-      if(d&&d.keyframe&&d.keyframe.req){
-        const kf=admin.fitting.find(x=>x.desc===`TL - Keyframe (${d.keyframe.type})`);
-        if(kf)pushOrIncrement(suggested,{desc:kf.desc,price:payPrice(kf),qty:1});
-      }
-    } else if(opt==='Full Aluminium Panel'){
-      const f=admin.fitting.find(x=>x.desc==='TL - Full Aluminium Sidewall');
-      if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
-    } else if(opt==='Half Glass / Half Aluminium'){
-      const f=admin.fitting.find(x=>x.desc==='TL - Half Alu / Half Glass Sidewall');
-      if(f)pushOrIncrement(suggested,{desc:f.desc,price:payPrice(f),qty:1});
-    }
-  });
+  relSides.forEach(s=>sideFitLines(cf,s).forEach(x=>pushOrIncrement(suggested,x)));
   /* Decking install is a single charge covering the whole area, so it is neither
      merged nor incremented: pressing the button twice must not double it, and
      resizing the deck must not leave the old area behind on a second line.
@@ -7684,12 +7688,44 @@ function svOpts(list,orig,cur,lab){
   [orig,cur].concat(list||[]).forEach(v=>{if(v==null||v===''||seen[v])return;seen[v]=1;out.push({v,label:lab?lab(v):String(v)});});
   return out;
 }
+/* ═══ SURVEY SIDE COSTS (Richard, 2026-10-14) ═══════════════════════════════════
+   When a side / infill is added or changed on the survey, its parts and labour go on
+   Survey Notes & Additional Items as additional parts and additional labour
+   "(confirmed at survey)". Parts are priced as the quote would have priced them
+   (markup, VAT, customer discount); labour from the fitting list at the job's tier.
+   A swap is charged the difference over what was ordered. The lines are kept in step
+   with the dropdown and are never added to the contract. */
+function svSideOnly(cf,sd,opt){
+  const c=Object.assign({},cf,{sides:{},doors:Object.assign({},cf.doors||{})});
+  if(opt&&opt!=='None'){c.sides[sd]=opt;if(opt==='Aura Glass Doors'&&!c.doors[sd])c.doors[sd]=defaultDoor();}
+  return c;
+}
+function svSideCosts(sd,opt){
+  const cf=state.config, c=svSideOnly(cf,sd,opt);
+  const mu=1+(+admin.markup||0)/100, d=(state.pricing&&state.pricing.discount)||0;
+  const parts=Math.round(sidesCost(c)*mu*1.2*(1-d/100)*100)/100;
+  const labour=(opt&&opt!=='None')?sideFitLines(c,sd).reduce((t,x)=>t+(+x.price||0)*(x.qty||1),0):0;
+  return {parts,labour};
+}
+function svSideExtras(sd){
+  const tag='side:'+sd;
+  state.surveyParts=(state.surveyParts||[]).filter(x=>x.auto!==tag);
+  state.surveyLabour=(state.surveyLabour||[]).filter(x=>x.auto!==tag);
+  const e=((state.job&&state.job.surveySides)||{})[sd];if(!e)return;
+  const orig=((state.config.sides)||{})[sd]||'None';
+  const nw=svSideCosts(sd,e.val), was=svSideCosts(sd,orig);
+  const what=SIDE_LBL[sd]+' side \u2014 '+(orig==='None'?svSideLbl(e.val):svSideLbl(orig)+' \u2192 '+svSideLbl(e.val));
+  const dp=Math.round((nw.parts-was.parts)*100)/100, dl=Math.round((nw.labour-was.labour)*100)/100;
+  if(dp>0)state.surveyParts.push({desc:what+' (confirmed at survey)',cost:dp,qty:1,auto:tag});
+  if(dl>0)state.surveyLabour.push({desc:what+' \u2014 fitting (confirmed at survey)',price:dl,qty:1,auto:tag});
+}
 function svSet(kind,key,v){
   const by=currentUser?currentUser.name:'',at=new Date().toISOString();
   if(kind==='side'){
     if(!state.job.surveySides)state.job.surveySides={};
     const SS=state.job.surveySides, orig=((state.config.sides)||{})[key]||'None';
     if(String(v)===String(orig))delete SS[key];else SS[key]={val:v,by,at};
+    svSideExtras(key);recalc();renderSurvey();
   }else if(kind==='finish'){
     if(!state.job.surveyFinish)state.job.surveyFinish={};
     const F=state.job.surveyFinish, orig=state.config[key];
