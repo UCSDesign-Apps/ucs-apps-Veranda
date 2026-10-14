@@ -13,6 +13,7 @@
  */
 
 const crypto = require('crypto');
+const zlib = require('zlib');
 const express = require('express');
 const msal = require('@azure/msal-node');
 
@@ -834,6 +835,37 @@ function apiRouter(pool) {
   // Uses Signable's download endpoint (GET /envelopes/{fp}/download) first; the
   // envelope_signed_pdf / envelope_pdf link fields were deprecated on 30 Sep 2026
   // and are kept only as a fallback.
+  // Signable sends some PDFs zipped: /download and envelope_signed_pdf return a
+  // .pdf.zip, while the per-document document_signed_pdf is a plain PDF. Only
+  // bytes that really are a PDF are passed on; a zip has its PDF taken out.
+  const isPdf = (buf) => buf.length > 4 && buf.subarray(0, 5).toString('latin1') === '%PDF-';
+  function pdfFromZip(buf) {
+    if (buf.length < 22 || buf.readUInt32LE(0) !== 0x04034b50) return null;
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+      if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) return null;
+    let p = buf.readUInt32LE(eocd + 16);
+    for (let n = buf.readUInt16LE(eocd + 10); n > 0 && p + 46 <= buf.length; n--) {
+      if (buf.readUInt32LE(p) !== 0x02014b50) return null;
+      const method = buf.readUInt16LE(p + 10), size = buf.readUInt32LE(p + 20);
+      const nameLen = buf.readUInt16LE(p + 28), extraLen = buf.readUInt16LE(p + 30), commentLen = buf.readUInt16LE(p + 32);
+      const local = buf.readUInt32LE(p + 42);
+      const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
+      p += 46 + nameLen + extraLen + commentLen;
+      if (!/\.pdf$/i.test(name) || local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50) continue;
+      const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+      const data = buf.subarray(start, start + size);
+      try {
+        const out = method === 0 ? data : method === 8 ? zlib.inflateRawSync(data) : null;
+        if (out && isPdf(out)) return out;
+      } catch (e) { /* try the next entry */ }
+    }
+    return null;
+  }
+  const asPdf = (buf) => (isPdf(buf) ? buf : pdfFromZip(buf));
+
   router.get('/signable/envelopes/:fingerprint/pdf', requireAuth, async (req, res) => {
     try {
       if (!validFingerprint(req.params.fingerprint)) return res.status(400).json({ error: 'Bad envelope reference' });
@@ -852,23 +884,34 @@ function apiRouter(pool) {
         const dl = await fetch(`${SIGNABLE_BASE}/envelopes/${encodeURIComponent(req.params.fingerprint)}/download`, {
           headers: { Authorization: auth, Accept: 'application/pdf' },
         });
-        if (dl.ok && /pdf/i.test(dl.headers.get('content-type') || '')) {
-          const buf = Buffer.from(await dl.arrayBuffer());
-          if (buf.length) return sendPdf(buf);
+        if (dl.ok) {
+          const pdf = asPdf(Buffer.from(await dl.arrayBuffer()));
+          if (pdf) return sendPdf(pdf);
         }
-      } catch (e) { /* fall through to the older link fields */ }
-      const pdfUrl = data.envelope_signed_pdf || data.envelope_pdf;
-      if (!pdfUrl) return res.status(409).json({ error: 'Signable has no PDF for this envelope yet', envelope_status: data.envelope_status });
-      // The PDF link is normally pre-signed storage: send no credentials to it.
-      // Only if that is refused AND it is Signable's own host, retry with the key.
-      let pdf = await fetch(pdfUrl);
-      if ((pdf.status === 401 || pdf.status === 403) && /^https:\/\/[^/]*signable\.co\.uk\//.test(pdfUrl)) {
-        pdf = await fetch(pdfUrl, { headers: { Authorization: auth } });
+      } catch (e) { /* fall through to the link fields */ }
+      // Link fields, best first: the signed contract document, the signed envelope,
+      // then the document as sent (before everyone has signed).
+      const docs = Array.isArray(data.envelope_documents) ? data.envelope_documents : [];
+      const doc = docs[0] || {};
+      const links = [doc.document_signed_pdf, data.envelope_signed_pdf, data.envelope_pdf, doc.document_pdf_url]
+        .filter((u, i, all) => typeof u === 'string' && /^https?:\/\//.test(u) && all.indexOf(u) === i);
+      if (!links.length) return res.status(409).json({ error: 'Signable has no PDF for this envelope yet', envelope_status: data.envelope_status });
+      let lastErr = 'Signable returned no PDF';
+      for (const pdfUrl of links) {
+        try {
+          // The PDF link is normally pre-signed storage: send no credentials to it.
+          // Only if that is refused AND it is Signable's own host, retry with the key.
+          let r = await fetch(pdfUrl);
+          if ((r.status === 401 || r.status === 403) && /^https:\/\/[^/]*signable\.co\.uk\//.test(pdfUrl)) {
+            r = await fetch(pdfUrl, { headers: { Authorization: auth } });
+          }
+          if (!r.ok) { lastErr = `PDF download failed (${r.status})`; continue; }
+          const pdf = asPdf(Buffer.from(await r.arrayBuffer()));
+          if (pdf) return sendPdf(pdf);
+          lastErr = 'Signable sent a file that is not a PDF';
+        } catch (e) { lastErr = 'PDF download failed: ' + e.message; }
       }
-      if (!pdf.ok) return res.status(502).json({ error: `PDF download failed (${pdf.status})` });
-      const buf = Buffer.from(await pdf.arrayBuffer());
-      if (!buf.length) return res.status(502).json({ error: 'Signable returned an empty PDF' });
-      sendPdf(buf);
+      res.status(502).json({ error: lastErr });
     } catch (err) {
       console.error('[signable] pdf error:', err.message);
       res.status(502).json({ error: 'Could not reach Signable: ' + err.message });
