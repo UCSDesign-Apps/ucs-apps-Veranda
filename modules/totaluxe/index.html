@@ -7548,8 +7548,8 @@ function svNum(kind,key,cur,orig,unit){
     +`<span class="sv-num-txt">${esc(String(cur==null||cur===''?'\u2014':cur))}</span>${unit?' '+esc(unit):''}</span>`;
 }
 function svFinishVal(k){const e=(state.job.surveyFinish||{})[k];return e?e.val:state.config[k];}
-function svDD(kind,key,label,options,cur,orig){
-  const changed=String(cur)!==String(orig);
+function svDD(kind,key,label,options,cur,orig,force){
+  const changed=!!force||String(cur)!==String(orig);
   return `<span class="sv-dd${changed?' chg':''}"><span class="sv-dd-txt">${esc(label)}</span><span class="sv-dd-arrow no-print">\u25be</span>`
     +`<select class="no-print" aria-label="Change" onchange="svSet('${kind}','${String(key).replace(/'/g,'')}',this.value)">`
     +options.map(o=>`<option value="${esc(String(o.v))}"${String(o.v)===String(cur)?' selected':''}>${esc(o.label)}${String(o.v)===String(orig)?' (as ordered)':''}</option>`).join('')
@@ -7588,11 +7588,13 @@ function svFinishCell(key,cw){
   const cf=state.config, mdl=svFinishVal('model'), M=MODELS[mdl]||{};
   /* the colour word on model / gutter / post follows the surveyed finish */
   if(svFinishVal('colour'))cw=cword(svFinishVal('colour'));
+  /* ...and when that colour word differs from the order, those rows are red too */
+  const colChg=cword(String(svFinishVal('colour')||''))!==cword(String(cf.colour||''));
   const cur=svFinishVal(key), orig=cf[key];
-  if(key==='model')return svDD('finish','model',displayName(cur)+' Veranda'+(cw?' '+cw:''),svOpts(Object.keys(MODELS),orig,cur,m=>displayName(m)),cur,orig);
+  if(key==='model')return svDD('finish','model',displayName(cur)+' Veranda'+(cw?' '+cw:''),svOpts(Object.keys(MODELS),orig,cur,m=>displayName(m)),cur,orig,colChg);
   if(key==='colour')return svDD('finish','colour',ralLabel(cur),svOpts(M.colours,orig,cur,ralLabel),cur,orig);
-  if(key==='gutter')return svDD('finish','gutter',displayName(mdl)+' '+cur+' Gutter '+cw,svOpts(M.gutters,orig,cur),cur,orig);
-  if(key==='post')return svDD('finish','post',cur+' '+cw,svOpts(M.posts,orig,cur),cur,orig);
+  if(key==='gutter')return svDD('finish','gutter',displayName(mdl)+' '+cur+' Gutter '+cw,svOpts(M.gutters,orig,cur),cur,orig,colChg);
+  if(key==='post')return svDD('finish','post',cur+' '+cw,svOpts(M.posts,orig,cur),cur,orig,colChg);
   if(key==='roof')return svDD('finish','roof',displayName(mdl)+' \u2014 '+cur,svOpts(M.roofs,orig,cur),cur,orig);
   if(key==='dims'){
     const w=svFinishVal('width'), p=svFinishVal('proj');
